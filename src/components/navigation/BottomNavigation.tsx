@@ -1,108 +1,175 @@
 "use client";
 
-import { BadgeCheck, Flame, Home, User, Plus } from "lucide-react";
+import { BadgeCheck, Flame, Home, LucideIcon, Plus, Scale, Users } from "lucide-react";
 
-type Screen = "truth" | "main" | "dares" | "profile" | "feed";
+type Screen =
+  | "truth"
+  | "main"
+  | "dares"
+  | "profile"
+  | "feed"
+  | "verdicts"
+  | "circle";
+type PrimaryScreen = Exclude<Screen, "verdicts" | "circle">;
 
 interface BottomNavigationProps {
   currentScreen: Screen;
-  onScreenChange: (screen: Screen) => void;
+  onScreenChange: (screen: PrimaryScreen) => void;
   onCreateClick: () => void;
+  onVerdictsClick?: () => void;
+  onCircleClick?: () => void;
+}
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  onClick: () => void;
+  isActive: boolean;
 }
 
 export function BottomNavigation({
   currentScreen,
   onScreenChange,
   onCreateClick,
+  onVerdictsClick,
+  onCircleClick,
 }: BottomNavigationProps) {
-  const navItems = [
-    { id: "truth" as Screen, label: "Feed", icon: BadgeCheck },
-    { id: "main" as Screen, label: "Dares", icon: Flame },
-    { id: "feed" as Screen, label: "Home", icon: Home },
+  const leftItems: NavItem[] = [
+    {
+      id: "truth",
+      label: "Feed",
+      icon: BadgeCheck,
+      onClick: () => onScreenChange("truth"),
+      isActive: currentScreen === "truth",
+    },
+    {
+      id: "main",
+      label: "Dares",
+      icon: Flame,
+      onClick: () => onScreenChange("main"),
+      isActive: currentScreen === "main",
+    },
   ];
 
+  const rightItems: NavItem[] = [
+    {
+      id: "feed",
+      label: "Home",
+      icon: Home,
+      onClick: () => onScreenChange("feed"),
+      isActive: currentScreen === "feed",
+    },
+  ];
+  if (onVerdictsClick) {
+    rightItems.push({
+      id: "verdicts",
+      label: "Verdicts",
+      icon: Scale,
+      onClick: onVerdictsClick,
+      isActive: currentScreen === "verdicts",
+    });
+  }
+  if (onCircleClick) {
+    rightItems.push({
+      id: "circle",
+      label: "Circle",
+      icon: Users,
+      onClick: onCircleClick,
+      isActive: currentScreen === "circle",
+    });
+  }
+
   return (
-    <>
-      <div aria-hidden="true" className="app-bottom-safe-floor" />
+    <div
+      className="app-bottom-nav app-bottom-nav-motion fixed bottom-0 left-0 right-0 z-[9999] flex justify-center"
+      style={{ paddingBottom: "max(10px, env(safe-area-inset-bottom))", pointerEvents: "none" }}
+    >
       <div
-        className="app-bottom-nav app-bottom-nav-motion fixed bottom-0 left-0 right-0 backdrop-blur-lg z-9999"
+        className="relative mx-3 flex w-full items-center overflow-hidden rounded-[28px] border border-white/[0.07]"
         style={{
-          position: "fixed",
-          bottom: "var(--bottom-nav-bottom-offset)",
-          left: "max(var(--safe-area-left), var(--bottom-nav-inline-inset))",
-          right: "max(var(--safe-area-right), var(--bottom-nav-inline-inset))",
-          zIndex: 9999,
-          background:
-            "radial-gradient(ellipse at 28% -42%, rgba(74,222,128,0.1), transparent 66%), radial-gradient(ellipse at 76% -34%, rgba(14,165,233,0.06), transparent 64%), linear-gradient(180deg, rgba(6,8,6,0.93) 0%, rgba(10,15,10,0.92) 54%, rgba(3,4,3,0.93) 100%)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderRadius: "var(--bottom-nav-radius)",
-          overflow: "hidden",
-          paddingBottom: "var(--bottom-nav-bottom-padding)",
-          boxShadow: "0 -12px 32px rgba(0, 0, 0, 0.24)",
+          pointerEvents: "auto",
+          background: "linear-gradient(180deg, rgba(14,27,17,0.97) 0%, rgba(4,9,5,0.99) 100%)",
+          backdropFilter: "blur(48px)",
+          WebkitBackdropFilter: "blur(48px)",
+          boxShadow:
+            "inset 0 1px 0 rgba(255,255,255,0.06), 0 24px 64px rgba(0,0,0,0.55), 0 8px 28px rgba(0,0,0,0.35)",
+          paddingTop: "9px",
+          paddingBottom: "9px",
+          paddingLeft: "6px",
+          paddingRight: "6px",
         }}
       >
-        <div className="flex items-center justify-around py-1.5">
-        {/* Left Navigation Items */}
-        {navItems.slice(0, 2).map((item) => {
-          const Icon = item.icon;
-          const isActive = currentScreen === item.id;
+        {/* Top shine */}
+        <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.10] to-transparent" />
 
-          return (
-            <button
-              key={item.id}
-              onClick={() => onScreenChange(item.id)}
-              className={`app-pressable flex flex-col items-center justify-center rounded-lg p-1.5 transition-all duration-200 ${
-                isActive ? "text-[#4ade80]" : "text-[#94a3b8] hover:text-white"
-              }`}
-            >
-              <Icon size={24} />
-              {/* <span className="text-xs font-medium">{item.label}</span> */}
-            </button>
-          );
-        })}
+        {/* Left group */}
+        <div className="flex flex-1 items-center justify-around">
+          {leftItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={item.onClick}
+                className="app-pressable flex items-center justify-center px-2 py-1"
+              >
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
+                    item.isActive ? "bg-[#4ade80]/[0.12]" : ""
+                  }`}
+                >
+                  <Icon
+                    size={20}
+                    strokeWidth={item.isActive ? 2.2 : 1.8}
+                    className={item.isActive ? "text-[#4ade80]" : "text-white/40"}
+                  />
+                </div>
+              </button>
+            );
+          })}
+        </div>
 
-        {/* Center Plus Icon */}
-        <button
-          onClick={onCreateClick}
-          className="app-pressable flex translate-y-0.5 flex-col items-center justify-center rounded-full bg-[#4ade80] p-2.5 text-black shadow-lg transition-all duration-200 hover:bg-[#22c55e] hover:shadow-xl"
-        >
-          <Plus size={25} />
-        </button>
+        {/* Center Plus — fixed width so it stays truly centered */}
+        <div className="flex w-[68px] shrink-0 items-center justify-center">
+          <button
+            onClick={onCreateClick}
+            className="nav-plus-btn app-pressable flex h-[44px] w-[44px] items-center justify-center rounded-full"
+            style={{
+              background: "linear-gradient(145deg, #55ea8e 0%, #1db954 100%)",
+              boxShadow:
+                "0 0 0 1px rgba(74,222,128,0.22), 0 12px 32px rgba(74,222,128,0.42), 0 4px 14px rgba(0,0,0,0.55)",
+            }}
+          >
+            <Plus size={20} strokeWidth={2.6} className="text-[#011508]" />
+          </button>
+        </div>
 
-        {/* Right Navigation Items */}
-        {navItems.slice(2).map((item) => {
-          const Icon = item.icon;
-          const isActive = currentScreen === item.id;
-
-          return (
-            <button
-              key={item.id}
-              onClick={() => onScreenChange(item.id)}
-              className={`app-pressable flex flex-col items-center justify-center rounded-lg p-1.5 transition-all duration-200 ${
-                isActive ? "text-[#4ade80]" : "text-[#94a3b8] hover:text-white"
-              }`}
-            >
-              <Icon size={24} />
-              {/* <span className="text-xs font-medium">{item.label}</span> */}
-            </button>
-          );
-        })}
-
-        {/* Profile - Rightmost */}
-        <button
-          onClick={() => onScreenChange("profile")}
-          className={`app-pressable flex flex-col items-center justify-center rounded-lg p-1.5 transition-all duration-200 ${
-            currentScreen === "profile"
-              ? "text-[#4ade80]"
-              : "text-[#94a3b8] hover:text-white"
-          }`}
-        >
-          <User size={24} />
-          {/* <span className="text-xs font-medium">Profile</span> */}
-        </button>
+        {/* Right group */}
+        <div className="flex flex-1 items-center justify-around">
+          {rightItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={item.onClick}
+                className="app-pressable flex items-center justify-center px-2 py-1"
+              >
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
+                    item.isActive ? "bg-[#4ade80]/[0.12]" : ""
+                  }`}
+                >
+                  <Icon
+                    size={20}
+                    strokeWidth={item.isActive ? 2.2 : 1.8}
+                    className={item.isActive ? "text-[#4ade80]" : "text-white/40"}
+                  />
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -46,6 +46,14 @@ import {
   Target,
   Trophy,
   Users,
+  Scale,
+  Bookmark,
+  EyeOff,
+  Flag,
+  UserMinus,
+  TrendingUp,
+  Zap,
+  Info,
 } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { CommentSection, type CommentItem } from "../ui/CommentSection";
@@ -79,6 +87,9 @@ import { GhostModeTimer } from "../ui/GhostModeTimer";
 import { StoryViewer } from "../app/StoryViewer";
 import { CommunityChallengePreviewScreen } from "./CommunityChallengePreviewScreen";
 import { ChallengeHubScreen } from "./ChallengeHubScreen";
+import { DareEventsScreen } from "./DareEventsScreen";
+import { RoastJailScreen } from "./RoastJailScreen";
+import { FriendshipCourtScreen } from "./FriendshipCourtScreen";
 import {
   COMMUNITY_CHALLENGES,
   getCommunityChallengeTitle,
@@ -88,6 +99,10 @@ import {
   communityChallengeService,
   type CommunityChallengeSummary,
 } from "../../middleware/services/community-challenge.service";
+import {
+  circleService,
+  type CircleRecord,
+} from "../../middleware/services/circle.service";
 import { ghostModeService } from "../../middleware/services/ghost-mode.service";
 import { storyReactionService } from "../../middleware/services/story-reaction.service";
 import alertService from "../../middleware/services/alert.service.new";
@@ -328,23 +343,24 @@ async function createStoryReplyPreviewUrl(story: StoryDTO): Promise<string> {
 
 function HeartBurstLayer({ bursts }: { bursts: HeartBurst[] }) {
   return (
-    <div className="absolute inset-0 overflow-hidden z-10">
+    <div
+      className="absolute inset-0 z-10 overflow-hidden pointer-events-none"
+      style={{ pointerEvents: "none" }}
+    >
       {bursts.map((burst) => {
         const size = HEART_SIZES[burst.id % HEART_SIZES.length];
         const color = HEART_COLORS[burst.colorIdx % HEART_COLORS.length];
         return (
           <div
             key={burst.id}
-            style={{
-              position: "absolute",
-              left: burst.x - size / 2,
-              top: burst.y - size / 2,
-              width: size,
-              height: size,
-              /* TEMPORARILY DISABLED FOR MOBILE DEBUGGING - pointerEvents blocking touch */
-              /* DISABLED: pointerEvents: "none", */
-            }}
-          >
+              style={{
+                position: "absolute",
+                left: burst.x - size / 2,
+                top: burst.y - size / 2,
+                width: size,
+                height: size,
+              }}
+            >
             <div
               style={{
                 position: "absolute",
@@ -435,6 +451,8 @@ const SOCIAL_DARES_RAIL_FIRST_INSERT_AFTER = 3;
 const TRUTHS_RAIL_FIRST_INSERT_AFTER = 6;
 const COMMUNITY_RAIL_FIRST_INSERT_AFTER = 9;
 const SOCIAL_CONTENT_RAIL_REPEAT_EVERY = 12;
+const VERDICT_CARD_FIRST_INSERT_AFTER = 4;
+const VERDICT_CARD_REPEAT_EVERY = 5;
 
 const shouldShowRailAfterPost = (
   postIndex: number,
@@ -458,7 +476,8 @@ const getCreatedAtMs = (createdAt?: string) => {
 const getTruthPreviewText = (truth: TruthPost) =>
   truth.answer?.trim() || truth.question;
 
-const getTruthRailActor = (truth: TruthPost) => truth.receiver || truth.challenger;
+const getTruthRailActor = (truth: TruthPost) =>
+  truth.receiver || truth.challenger;
 
 const getTruthRailAction = (truth: TruthPost) =>
   truth.answer?.trim() ? "answered" : "was asked";
@@ -842,7 +861,7 @@ function TruthsFeedRail({
                 </span>
               </div>
 
-              <p className="relative z-[1] mt-2.5 line-clamp-4 text-[15px] font-black leading-[1.22] text-white">
+              <div className="relative z-[1] mt-2.5 line-clamp-4 text-[15px] font-black leading-[1.22] text-white">
                 <span className="inline-flex max-w-full items-center gap-1.5 align-middle text-[#94a3b8]">
                   <Avatar
                     src={actor.avatar}
@@ -855,7 +874,7 @@ function TruthsFeedRail({
                   <span>{action}</span>
                 </span>{" "}
                 {question}
-              </p>
+              </div>
 
               <div className="relative z-[1] mt-1.5 flex min-w-0 items-center gap-1.5 text-[10.5px] font-black uppercase tracking-[0.12em] text-white/54">
                 <span className="shrink-0">Question from</span>
@@ -876,6 +895,1211 @@ function TruthsFeedRail({
   );
 }
 
+function CircleScrapbookScreen({
+  circle,
+  isCustomCircle,
+  posts,
+  stories,
+  dares,
+  truths,
+  onClose,
+  onManage,
+}: {
+  circle: CircleRecord;
+  isCustomCircle: boolean;
+  posts: FeedPost[];
+  stories: StoryDTO[];
+  dares: DarePost[];
+  truths: TruthPost[];
+  onClose: () => void;
+  onManage: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<"memories" | "highlights">(
+    "memories",
+  );
+
+  const mediaPosts = useMemo(
+    () =>
+      posts
+        .filter((post) => post.media?.url && post.media.type === "image")
+        .slice(0, 6),
+    [posts],
+  );
+
+  const memoryCards = useMemo(() => {
+    const cards: Array<{
+      id: string;
+      kind: string;
+      title: string;
+      caption: string;
+      meta: string;
+      source: string;
+      imageUrl: string;
+      accent: string;
+    }> = [];
+
+    mediaPosts.forEach((post, index) => {
+      cards.push({
+        id: `${post.id}-media-${index}`,
+        kind: "Feed memory",
+        title: post.content
+          ? post.content.trim().slice(0, 42)
+          : "Shared moment",
+        caption:
+          post.content?.trim() || "A post that belongs in the circle archive.",
+        meta: formatTimeAgo(post.timestamp),
+        source: "Feed",
+        imageUrl: post.media?.url || "",
+        accent: "from-[#4ade80]/18",
+      });
+    });
+
+    stories.slice(0, 2).forEach((story, index) => {
+      cards.push({
+        id: `${story.id}-story-${index}`,
+        kind: "Story memory",
+        title:
+          story.storyType === "dedication" ? "Dedicated story" : "Story moment",
+        caption: story.caption || "A story that the circle would remember.",
+        meta: formatTimeAgo(story.createdAt),
+        source: "Story",
+        imageUrl: story.media.url,
+        accent: "from-[#38bdf8]/18",
+      });
+    });
+
+    dares.slice(0, 2).forEach((dare, index) => {
+      cards.push({
+        id: `${dare.id}-dare-${index}`,
+        kind: "Dare memory",
+        title: dare.description.slice(0, 42),
+        caption:
+          dare.state === "ACCEPTED_REAL"
+            ? "A dare that made it through the full proof loop."
+            : "A dare card that stayed loud in the room.",
+        meta: formatTimeAgo(dare.createdAt),
+        source: "Dare",
+        imageUrl:
+          dare.proof?.thumbnail ||
+          dare.proof?.url ||
+          mediaPosts[0]?.media?.url ||
+          "",
+        accent: "from-[#fb7185]/18",
+      });
+    });
+
+    truths.slice(0, 2).forEach((truth, index) => {
+      cards.push({
+        id: `${truth.id}-truth-${index}`,
+        kind: "Truth memory",
+        title: truth.question.slice(0, 42),
+        caption:
+          truth.answer?.trim() ||
+          "A truth prompt that turned into a full-thread debate.",
+        meta: formatTimeAgo(truth.createdAt),
+        source: "Truth",
+        imageUrl:
+          mediaPosts[index]?.media?.url || mediaPosts[0]?.media?.url || "",
+        accent: "from-[#facc15]/18",
+      });
+    });
+
+    return cards.slice(0, 6);
+  }, [dares, mediaPosts, stories, truths]);
+
+  const highlights = useMemo(
+    () => [
+      {
+        label: "Members",
+        value: `${circle.member_ids.length}`,
+        note: isCustomCircle ? "Custom circle" : "Shared circle",
+        icon: Users,
+        accent: "#4ade80",
+      },
+      {
+        label: "Memories",
+        value: `${memoryCards.length}`,
+        note: "Saved moments",
+        icon: Sparkles,
+        accent: "#38bdf8",
+      },
+      {
+        label: "Dares",
+        value: `${dares.length}`,
+        note: "Proof moments",
+        icon: Trophy,
+        accent: "#facc15",
+      },
+      {
+        label: "Truths",
+        value: `${truths.length}`,
+        note: "Debate cards",
+        icon: MessageSquare,
+        accent: "#fb7185",
+      },
+    ],
+    [
+      circle.member_ids.length,
+      dares.length,
+      isCustomCircle,
+      memoryCards.length,
+      truths.length,
+    ],
+  );
+
+  const heroImages = memoryCards.slice(0, 6);
+  const heroSlots = heroImages.length > 0 ? heroImages : Array(6).fill(null);
+
+  return (
+    <div className="fixed inset-0 z-[145] bg-[#030706] text-white">
+      <style>{`
+        @keyframes scrapbookFloat {
+          0%, 100% { transform: translate3d(0,0,0) rotate(-0.6deg); }
+          50% { transform: translate3d(0,-4px,0) rotate(0.8deg); }
+        }
+        .circle-paper-tile {
+          box-shadow:
+            0 18px 45px rgba(0,0,0,0.32),
+            inset 0 1px 0 rgba(255,255,255,0.08);
+          animation: scrapbookFloat 6s ease-in-out infinite;
+        }
+      `}</style>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_4%,rgba(74,222,128,0.18),transparent_30%),radial-gradient(circle_at_88%_12%,rgba(56,189,248,0.12),transparent_30%),linear-gradient(180deg,#07100b,#030706_48%,#020303)]" />
+      <div className="absolute inset-x-0 top-0 h-[240px] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),transparent)]" />
+
+      <div className="relative z-10 h-full overflow-y-auto px-4 pb-[calc(var(--safe-area-bottom)+22px)] pt-[calc(var(--safe-area-top)+12px)]">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/12 text-white/76 backdrop-blur-xl active:scale-95"
+            aria-label="Close circle"
+          >
+            <ChevronLeft size={21} />
+          </button>
+          <button
+            type="button"
+            onClick={onManage}
+            className="rounded-full border border-[#4ade80]/20 bg-[#4ade80]/10 px-4 py-2 text-sm font-black text-[#bbf7d0]"
+          >
+            Members
+          </button>
+        </div>
+
+        {isCustomCircle && (
+          <div className="mb-3 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onManage}
+              className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-4 py-2 text-xs font-black text-white/74"
+            >
+              <Pencil size={14} />
+              Rename circle
+            </button>
+            <button
+              type="button"
+              onClick={onManage}
+              className="inline-flex items-center gap-2 rounded-full border border-rose-500/18 bg-rose-500/10 px-4 py-2 text-xs font-black text-rose-100"
+            >
+              <Trash2 size={14} />
+              Delete circle
+            </button>
+          </div>
+        )}
+
+        <div className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[linear-gradient(145deg,rgba(18,25,22,0.92),rgba(10,15,14,0.96))] p-3 shadow-[0_12px_32px_rgba(74,222,128,0.15),inset_0_1px_0_rgba(255,255,255,0.08)]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(250,204,21,0.14),transparent_30%),radial-gradient(circle_at_82%_18%,rgba(74,222,128,0.18),transparent_32%)]" />
+          <div className="relative h-[250px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0a0f0b]">
+            <div className="grid h-full grid-cols-3 gap-1 p-1 opacity-88">
+              {heroSlots.map((entry, index) =>
+                entry ? (
+                  <img
+                    key={entry.id}
+                    src={entry.imageUrl}
+                    alt=""
+                    className={`h-full w-full object-cover ${index === 0 ? "col-span-2 row-span-2" : ""}`}
+                  />
+                ) : (
+                  <div
+                    key={`hero-placeholder-${index}`}
+                    className={`rounded-[18px] bg-[linear-gradient(135deg,rgba(74,222,128,0.12),rgba(14,165,233,0.10))] ${index === 0 ? "col-span-2 row-span-2" : ""}`}
+                  />
+                ),
+              )}
+            </div>
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(74,222,128,0.04),rgba(56,189,248,0.08)_48%,rgba(18,25,20,0.92))]" />
+            <div className="absolute bottom-4 left-4 right-4">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-[#bbf7d0] backdrop-blur-xl">
+                <Sparkles size={12} />
+                Digital scrapbook
+              </div>
+              <h1 className="m-0 text-[30px] font-black leading-none tracking-tight">
+                {circle.name} Circle
+              </h1>
+              <p className="m-0 mt-1 text-sm font-bold text-white/68">
+                Created {formatTimeAgo(circle.created_at)} ·{" "}
+                {circle.member_ids.length} members
+              </p>
+            </div>
+          </div>
+
+          <div className="relative mt-3 grid grid-cols-2 gap-2">
+            {highlights.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.label}
+                  className="rounded-[20px] border border-white/8 bg-white/8 px-3 py-2.5"
+                >
+                  <p className="m-0 text-[10px] font-black uppercase tracking-[0.14em] text-white/38">
+                    {item.label}
+                  </p>
+                  <p className="m-0 mt-1 flex items-center gap-2 text-base font-black text-white">
+                    <span
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-full"
+                      style={{ color: item.accent }}
+                    >
+                      <Icon size={12} />
+                    </span>
+                    {item.value}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 rounded-full border border-white/8 bg-white/12 p-1">
+          {(["memories", "highlights"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-full px-2 py-2.5 text-xs font-black transition-all ${
+                activeTab === tab
+                  ? "bg-[#4ade80] text-[#061006] shadow-[0_10px_24px_rgba(74,222,128,0.24)]"
+                  : "text-white/54"
+              }`}
+            >
+              {tab === "memories" ? "📖 Memories" : "✨ Highlights"}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4">
+          {activeTab === "memories" ? (
+            <div className="space-y-4 pb-4">
+              {memoryCards.map((card, index) => (
+                <div
+                  key={card.id}
+                  className="circle-paper-tile relative w-full overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.1),rgba(74,222,128,0.05)),linear-gradient(180deg,rgba(17,25,20,0.98),rgba(7,10,8,0.99))] p-3"
+                  style={{
+                    transform: `rotate(${index % 2 === 0 ? "-0.9deg" : "0.8deg"})`,
+                  }}
+                >
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${card.accent} to-transparent opacity-80`}
+                  />
+                  <div className="relative overflow-hidden rounded-[26px] border border-white/10 bg-white/8">
+                    <div className="relative">
+                      {card.imageUrl ? (
+                        <img
+                          src={card.imageUrl}
+                          alt={card.title}
+                          className="h-[320px] w-full object-cover sm:h-[360px]"
+                        />
+                      ) : (
+                        <div className="h-[320px] w-full bg-[linear-gradient(135deg,rgba(74,222,128,0.08),rgba(56,189,248,0.08))]" />
+                      )}
+                      <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent,rgba(74,222,128,0.06)_48%,rgba(18,25,20,0.92))]" />
+                      <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white/86 backdrop-blur-xl">
+                        {card.source}
+                      </div>
+                      <div className="absolute bottom-4 left-4 right-4">
+                        <p className="m-0 text-[11px] font-black uppercase tracking-[0.16em] text-[#bbf7d0]">
+                          {card.kind}
+                        </p>
+                        <p className="m-0 mt-2 text-[26px] font-black leading-none text-white">
+                          {card.title}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-3 p-4">
+                      <p className="m-0 text-sm font-semibold leading-relaxed text-white/68">
+                        {card.caption}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-white/50">
+                          {card.meta}
+                        </span>
+                        <span className="rounded-full border border-[#67e8f9]/16 bg-[#67e8f9]/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-[#8be8ff]">
+                          {card.source}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3 pb-4">
+              {highlights.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.label}
+                    className="circle-paper-tile relative overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(145deg,rgba(56,189,248,0.08),rgba(74,222,128,0.06)),linear-gradient(180deg,rgba(15,23,20,0.96),rgba(6,9,8,0.99))] p-4"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-white/10 bg-white/10 text-2xl"
+                        style={{ color: item.accent }}
+                      >
+                        <Icon size={22} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="m-0 text-[11px] font-black uppercase tracking-[0.16em] text-[#86efac]">
+                          {item.label}
+                        </p>
+                        <p className="m-0 mt-1 text-lg font-black leading-tight text-white">
+                          {item.note}
+                        </p>
+                        <p className="m-0 mt-2 text-sm font-bold text-white/45">
+                          {item.value}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FeedVerdictCard — inline verdict teaser card inserted every N feed posts
+// ---------------------------------------------------------------------------
+
+const FEED_VERDICT_POOL = [
+  {
+    id: "fv-haircut",
+    authorAvatar: "https://i.pravatar.cc/120?img=12",
+    authorName: "Aakash",
+    authorUsername: "aakash",
+    question: "Keep the haircut?",
+    description: "Fresh cut before Monday. Be honest before this becomes the new personality.",
+    choiceOne: "Keep it",
+    choiceTwo: "Change it",
+    imageUrl:
+      "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1200&q=86",
+    totalVotes: 48,
+    oneVotes: 37,
+    twoVotes: 11,
+    commentsCount: 6,
+  },
+  {
+    id: "fv-shoes",
+    authorAvatar: "https://i.pravatar.cc/120?img=33",
+    authorName: "Vignesh",
+    authorUsername: "vignesh",
+    question: "Worth buying?",
+    description: "Sale ends tonight. The wallet is scared. The outfit is ready.",
+    choiceOne: "Buy it",
+    choiceTwo: "Skip",
+    imageUrl:
+      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=86",
+    totalVotes: 71,
+    oneVotes: 52,
+    twoVotes: 19,
+    commentsCount: 9,
+  },
+  {
+    id: "fv-meme",
+    authorAvatar: "https://i.pravatar.cc/120?img=47",
+    authorName: "Varsha",
+    authorUsername: "varshhh",
+    question: "Facts or cap?",
+    description: "This meme attacked three people in the group chat directly.",
+    choiceOne: "Facts",
+    choiceTwo: "Cap",
+    imageUrl:
+      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=86",
+    totalVotes: 126,
+    oneVotes: 94,
+    twoVotes: 32,
+    commentsCount: 14,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// PostActionSheet — bottom sheet for per-post actions
+// ---------------------------------------------------------------------------
+
+function PostActionSheet({
+  post,
+  author,
+  isOwn,
+  onClose,
+  onDare,
+  onTruth,
+  onNavigateToProfile,
+}: {
+  post: FeedPost;
+  author: { id?: string; name: string; username: string; avatar: string };
+  isOwn: boolean;
+  onClose: () => void;
+  onDare?: (u: {
+    id: string;
+    name: string;
+    username: string;
+    avatar: string;
+  }) => void;
+  onTruth?: (u: {
+    id: string;
+    name: string;
+    username: string;
+    avatar: string;
+  }) => void;
+  onNavigateToProfile?: (userId: string) => void;
+}) {
+  const [closing, setClosing] = useState(false);
+
+  const dismiss = () => {
+    setClosing(true);
+    setTimeout(onClose, 270);
+  };
+
+  const section1 = [
+    {
+      icon: <TrendingUp size={18} />,
+      label: "Make a prediction",
+      color: "#818cf8",
+      bg: "rgba(129,140,248,0.15)",
+      action: dismiss,
+    },
+    {
+      icon: <MessageSquare size={18} />,
+      label: "Start a rumour",
+      color: "#f472b6",
+      bg: "rgba(244,114,182,0.15)",
+      action: dismiss,
+    },
+    {
+      icon: <Target size={18} />,
+      label: "Ask a truth",
+      color: "#38bdf8",
+      bg: "rgba(56,189,248,0.15)",
+      action: () => {
+        if (!isOwn && author.id && onTruth) {
+          onTruth({
+            id: author.id,
+            name: author.name,
+            username: author.username,
+            avatar: author.avatar,
+          });
+        }
+        dismiss();
+      },
+    },
+    {
+      icon: <Zap size={18} />,
+      label: "Give a dare",
+      color: "#4ade80",
+      bg: "rgba(74,222,128,0.15)",
+      action: () => {
+        if (!isOwn && author.id && onDare) {
+          onDare({
+            id: author.id,
+            name: author.name,
+            username: author.username,
+            avatar: author.avatar,
+          });
+        }
+        dismiss();
+      },
+    },
+  ];
+
+  const section2 = [
+    {
+      icon: <Bookmark size={18} />,
+      label: "Save",
+      color: "#a3e635",
+      bg: "rgba(163,230,53,0.13)",
+      warning: false,
+      action: dismiss,
+    },
+    {
+      icon: <EyeOff size={18} />,
+      label: "Hide post",
+      color: "#94a3b8",
+      bg: "rgba(148,163,184,0.11)",
+      warning: false,
+      action: dismiss,
+    },
+    {
+      icon: <Info size={18} />,
+      label: "About this account",
+      color: "#94a3b8",
+      bg: "rgba(148,163,184,0.11)",
+      warning: false,
+      action: () => {
+        if (author.id && onNavigateToProfile) onNavigateToProfile(author.id);
+        dismiss();
+      },
+    },
+    {
+      icon: <Flag size={18} />,
+      label: "Report",
+      color: "#fb923c",
+      bg: "rgba(251,146,60,0.13)",
+      warning: true,
+      action: dismiss,
+    },
+    {
+      icon: <UserMinus size={18} />,
+      label: "Unfriend",
+      color: "#f87171",
+      bg: "rgba(248,113,113,0.13)",
+      warning: true,
+      action: dismiss,
+    },
+  ];
+
+  const quickActions = [
+    {
+      label: "Prediction",
+      icon: <TrendingUp size={16} strokeWidth={2.4} />,
+      accent: "#c084fc",
+      bg: "rgba(192,132,252,0.12)",
+      border: "rgba(192,132,252,0.22)",
+      action: section1[0].action,
+    },
+    {
+      label: "Rumour",
+      icon: <MessageSquare size={16} strokeWidth={2.4} />,
+      accent: "#f472b6",
+      bg: "rgba(244,114,182,0.12)",
+      border: "rgba(244,114,182,0.22)",
+      action: section1[1].action,
+    },
+    {
+      label: "Ask Truth",
+      icon: <Target size={16} strokeWidth={2.4} />,
+      accent: "#38bdf8",
+      bg: "rgba(56,189,248,0.12)",
+      border: "rgba(56,189,248,0.22)",
+      action: section1[2].action,
+    },
+    {
+      label: "Give Dare",
+      icon: <Zap size={16} strokeWidth={2.4} fill="currentColor" />,
+      accent: "#4ade80",
+      bg: "rgba(74,222,128,0.12)",
+      border: "rgba(74,222,128,0.22)",
+      action: section1[3].action,
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[160] flex items-end"
+      style={{
+        backgroundColor: closing ? "rgba(0,0,0,0)" : "rgba(0,0,0,0.78)",
+        backdropFilter: closing ? "blur(0px)" : "blur(10px)",
+        transition: "background-color 0.26s ease, backdrop-filter 0.26s ease",
+      }}
+      onClick={dismiss}
+    >
+      <style>{`
+        @keyframes postSheetUp {
+          from { opacity:0; transform:translateY(100%); }
+          to   { opacity:1; transform:translateY(0); }
+        }
+        @keyframes postSheetDown {
+          from { opacity:1; transform:translateY(0); }
+          to   { opacity:0; transform:translateY(100%); }
+        }
+        .pas-chip:active  { opacity:0.72; transform:scale(0.94); }
+        .pas-row:active   { background:rgba(255,255,255,0.05); }
+      `}</style>
+
+      <div
+        className="relative w-full overflow-hidden rounded-t-[28px] border-t border-white/[0.09] bg-[#0f1512] shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-28px_56px_rgba(0,0,0,0.65)]"
+        style={{
+          paddingBottom: "max(env(safe-area-inset-bottom,0px),36px)",
+          animation: closing
+            ? "postSheetDown 0.24s cubic-bezier(0.32,0.72,0,1) forwards"
+            : "postSheetUp 0.32s cubic-bezier(0.22,1,0.36,1) forwards",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* shimmer top edge */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(74,222,128,0.5),rgba(56,189,248,0.25),transparent)]" />
+
+        {/* handle */}
+        <div className="flex justify-center pt-3.5 pb-4">
+          <div className="h-[4px] w-9 rounded-full bg-white/[0.16]" />
+        </div>
+
+        {/* ── Author row ── */}
+        <div className="flex items-center gap-3 px-4 pb-4">
+          <Avatar
+            src={author.avatar}
+            alt={author.name}
+            size={40}
+            userId={author.id}
+            username={author.username}
+            style={{ border: "1.5px solid rgba(74,222,128,0.26)" }}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-black leading-tight text-white">
+              {author.name}
+            </p>
+            <p className="truncate text-[12px] font-semibold text-[#4d5e56]">
+              @{author.username}
+            </p>
+          </div>
+        </div>
+
+        {/* ── Section 1: quick-action chips ── */}
+        <div className="px-4 pb-3">
+          <p className="mb-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#3a5248]">
+            Based on this post
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {quickActions.map((qa) => (
+              <button
+                key={qa.label}
+                type="button"
+                onClick={qa.action}
+                className="pas-chip flex items-center gap-2.5 rounded-[14px] border px-3 py-3 text-left transition-transform"
+                style={{
+                  background: qa.bg,
+                  borderColor: qa.border,
+                }}
+              >
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                  style={{ background: `${qa.accent}22`, color: qa.accent }}
+                >
+                  {qa.icon}
+                </span>
+                <span
+                  className="text-[13.5px] font-black leading-tight"
+                  style={{ color: qa.accent }}
+                >
+                  {qa.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* divider */}
+        <div className="mx-4 mb-1 h-px bg-white/[0.06]" />
+
+        {/* ── Section 2: post actions ── */}
+        <div className="px-2 py-1">
+          {section2.map((item, i) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={item.action}
+              className="pas-row flex w-full items-center gap-3 rounded-[12px] px-3 py-[11px] text-left"
+            >
+              <span
+                className="shrink-0"
+                style={{ color: item.warning ? item.color : "#3d5248" }}
+              >
+                {item.icon}
+              </span>
+              <span
+                className="flex-1 text-[14.5px] font-semibold"
+                style={{ color: item.warning ? item.color : "#c8d4cd" }}
+              >
+                {item.label}
+              </span>
+              {!item.warning && (
+                <ChevronRight size={15} className="shrink-0 text-[#2d3d35]" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedVerdictCard({ data }: { data: (typeof FEED_VERDICT_POOL)[0] }) {
+  const [myVote, setMyVote] = useState<"one" | "two" | null>(null);
+  const [counts, setCounts] = useState({
+    one: data.oneVotes,
+    two: data.twoVotes,
+    total: data.totalVotes,
+  });
+
+  const onePct = Math.round((counts.one / Math.max(counts.total, 1)) * 100);
+  const twoPct = 100 - onePct;
+
+  const handleVote = (choice: "one" | "two") => {
+    if (myVote !== null) return;
+    setMyVote(choice);
+    setCounts((v) => ({
+      one: v.one + (choice === "one" ? 1 : 0),
+      two: v.two + (choice === "two" ? 1 : 0),
+      total: v.total + 1,
+    }));
+  };
+
+  const btnBase =
+    "relative min-h-[56px] overflow-hidden rounded-full border-2 px-4 text-center transition-transform duration-200 active:scale-[0.95]";
+
+  return (
+    <div className="relative overflow-hidden rounded-[30px]">
+      <div className="premium-card-glow" />
+      <div className="premium-card-ring" />
+
+      {/* Header */}
+      <div className="relative z-10 flex items-center justify-between gap-3 px-3 pb-3 pt-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Avatar
+            src={data.authorAvatar}
+            alt={data.authorName}
+            size={46}
+            style={{ border: "2px solid rgba(74,222,128,0.22)" }}
+          />
+          <div className="min-w-0">
+            <h3 className="truncate text-[16px] font-black leading-tight text-white">
+              {data.authorName}
+            </h3>
+            <p className="mt-0.5 truncate text-[13px] font-semibold leading-tight text-[#94a3b8]">
+              @{data.authorUsername}
+            </p>
+          </div>
+        </div>
+        <div className="shrink-0 flex items-center gap-1.5 rounded-full border border-[#fb7185]/30 bg-[#fb7185]/10 px-2.5 py-1 text-[10.5px] font-black uppercase tracking-[0.14em] text-[#fb7185] shadow-[0_0_14px_rgba(251,113,133,0.12)]">
+          <Scale size={11} />
+          Verdict
+        </div>
+      </div>
+
+      {/* Media with overlaid question */}
+      <div className="relative mx-1 overflow-hidden rounded-[22px]">
+        <img
+          src={data.imageUrl}
+          alt={data.question}
+          className="h-[420px] w-full object-cover"
+          loading="lazy"
+          decoding="async"
+          onError={(e) => {
+            e.currentTarget.src =
+              "https://picsum.photos/seed/verdict/800/600.jpg";
+          }}
+        />
+        {/* top sheen */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[linear-gradient(180deg,rgba(255,255,255,0.13),transparent)]" />
+        {/* bottom scrim */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-44 bg-[linear-gradient(0deg,rgba(0,0,0,0.90)_0%,rgba(0,0,0,0.48)_52%,transparent_82%)]" />
+        {/* Question + meta */}
+        <div className="absolute inset-x-4 bottom-4">
+          <h2 className="text-[21px] font-black leading-tight tracking-[-0.03em] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">
+            {data.question}
+          </h2>
+          <p className="mt-1 text-[11.5px] font-bold text-white/52">
+            {counts.total.toLocaleString()} votes · {data.commentsCount} comments
+          </p>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="relative z-10 px-4 pb-4 pt-4">
+        {data.description && (
+          <p className="mb-3.5 line-clamp-1 text-[13px] font-semibold leading-snug text-white/44">
+            {data.description}
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          {/* Choice one — green */}
+          <button
+            type="button"
+            onClick={() => handleVote("one")}
+            className={btnBase}
+            style={{
+              borderColor: myVote === "one" ? "#4ade80" : "rgba(74,222,128,0.35)",
+              background:
+                "radial-gradient(circle at 18% 0%,rgba(134,239,172,0.22),transparent 60%),linear-gradient(150deg,rgba(74,222,128,0.14),rgba(34,197,94,0.05))",
+              boxShadow:
+                myVote === "one"
+                  ? "0 0 0 1px #4ade80, 0 14px 32px rgba(74,222,128,0.24), inset 0 1px 0 rgba(255,255,255,0.14)"
+                  : "inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 22px rgba(74,222,128,0.08)",
+            }}
+          >
+            <span className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.48),transparent)]" />
+            {myVote && (
+              <span
+                className="absolute inset-y-0 left-0 transition-[width] duration-700 ease-out"
+                style={{
+                  width: `${onePct}%`,
+                  background:
+                    "linear-gradient(90deg,rgba(74,222,128,0.42),rgba(34,197,94,0.12))",
+                }}
+              />
+            )}
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              <span className="text-[15px] font-black text-white">{data.choiceOne}</span>
+              {myVote && (
+                <span className="shrink-0 text-[13px] font-black tabular-nums text-[#4ade80]">
+                  {onePct}%
+                </span>
+              )}
+            </span>
+          </button>
+
+          {/* Choice two — pink */}
+          <button
+            type="button"
+            onClick={() => handleVote("two")}
+            className={btnBase}
+            style={{
+              borderColor: myVote === "two" ? "#fb7185" : "rgba(251,113,133,0.35)",
+              background:
+                "radial-gradient(circle at 82% 0%,rgba(251,113,133,0.22),transparent 60%),linear-gradient(210deg,rgba(251,113,133,0.14),rgba(244,63,94,0.05))",
+              boxShadow:
+                myVote === "two"
+                  ? "0 0 0 1px #fb7185, 0 14px 32px rgba(251,113,133,0.24), inset 0 1px 0 rgba(255,255,255,0.14)"
+                  : "inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 22px rgba(251,113,133,0.08)",
+            }}
+          >
+            <span className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.48),transparent)]" />
+            {myVote && (
+              <span
+                className="absolute inset-y-0 right-0 transition-[width] duration-700 ease-out"
+                style={{
+                  width: `${twoPct}%`,
+                  background:
+                    "linear-gradient(270deg,rgba(251,113,133,0.42),rgba(244,63,94,0.12))",
+                }}
+              />
+            )}
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              <span className="text-[15px] font-black text-white">{data.choiceTwo}</span>
+              {myVote && (
+                <span className="shrink-0 text-[13px] font-black tabular-nums text-[#fb7185]">
+                  {twoPct}%
+                </span>
+              )}
+            </span>
+          </button>
+        </div>
+
+        {/* Post-vote nudge */}
+        {!myVote && (
+          <p className="mt-3 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-white/28">
+            Tap to weigh in
+          </p>
+        )}
+        {myVote && (
+          <p className="mt-3 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#4ade80]/60">
+            Vote cast · see more in Verdicts
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CarouselMedia — swipeable multi-image carousel for feed posts
+// ---------------------------------------------------------------------------
+
+function CarouselMedia({
+  urls,
+  postId,
+  onTap,
+}: {
+  urls: string[];
+  postId: string;
+  onTap: (
+    id: string,
+    clientX: number,
+    clientY: number,
+    element: HTMLElement,
+  ) => void;
+}) {
+  const [index, setIndex] = useState(0);
+  const [dragDX, setDragDX] = useState(0); // live horizontal drag offset (px)
+  const [isDragging, setIsDragging] = useState(false);
+  const mediaRef = useRef<HTMLDivElement>(null);
+  const startX = useRef<number | null>(null);
+  const startY = useRef(0);
+  const startT = useRef(0);
+  const dragging = useRef(false);
+  const movedH = useRef(false);
+  // rAF-coalesced drag offset: touchmove fires faster than the screen paints,
+  // so we stash the latest value and flush at most once per frame. One render
+  // per frame = no backlog no matter how fast/often you swipe back and forth.
+  const pendingDX = useRef(0);
+  const rafId = useRef<number | null>(null);
+  const n = urls.length;
+  const CARD_W = 100; // percent — full-bleed, same footprint as a normal post
+
+  const flushDrag = () => {
+    rafId.current = null;
+    setDragDX(pendingDX.current);
+  };
+  const queueDrag = (v: number) => {
+    pendingDX.current = v;
+    if (rafId.current === null) rafId.current = requestAnimationFrame(flushDrag);
+  };
+  const cancelDrag = () => {
+    if (rafId.current !== null) {
+      cancelAnimationFrame(rafId.current);
+      rafId.current = null;
+    }
+  };
+  useEffect(() => cancelDrag, []);
+
+  // Keep index in range if the number of images shrinks.
+  useEffect(() => {
+    setIndex((i) => Math.min(i, Math.max(0, urls.length - 1)));
+  }, [urls.length]);
+
+  // Swipe is driven by native NON-PASSIVE touch listeners: React onTouch* are
+  // passive (preventDefault ignored) so we call preventDefault() the moment a
+  // horizontal drag is detected — nothing above can hijack the gesture.
+  const finish = (cx: number, cy: number) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    const dx = startX.current === null ? 0 : cx - startX.current;
+    const dy = cy - startY.current;
+    const dt = Date.now() - startT.current;
+    cancelDrag();
+    setIsDragging(false);
+    setDragDX(0);
+    const width = mediaRef.current?.clientWidth ?? 1;
+    const passed = Math.abs(dx) > width * 0.18 || (Math.abs(dx) > 40 && dt < 300);
+    if (movedH.current) {
+      if (passed) {
+        const dir = dx < 0 ? 1 : -1;
+        setIndex((i) => Math.max(0, Math.min(n - 1, i + dir)));
+      }
+    } else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && mediaRef.current) {
+      onTap(postId, cx, cy, mediaRef.current);
+    }
+    startX.current = null;
+  };
+
+  useEffect(() => {
+    const el = mediaRef.current;
+    if (!el) return;
+
+    const begin = (cx: number, cy: number) => {
+      startX.current = cx;
+      startY.current = cy;
+      startT.current = Date.now();
+      dragging.current = true;
+      movedH.current = false;
+      setDragDX(0);
+    };
+
+    const move = (cx: number, cy: number, ev: Event) => {
+      if (!dragging.current || startX.current === null) return;
+      const dx = cx - startX.current;
+      const dy = cy - startY.current;
+      if (!movedH.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          movedH.current = true;
+          setIsDragging(true);
+        } else {
+          // vertical intent — release the gesture so the feed can scroll
+          dragging.current = false;
+          setDragDX(0);
+          return;
+        }
+      }
+      if (movedH.current) {
+        ev.preventDefault(); // block ancestor scroll-steal
+        let eff = dx;
+        if ((index === 0 && dx > 0) || (index === n - 1 && dx < 0)) eff = dx * 0.35;
+        queueDrag(eff);
+      }
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t) begin(t.clientX, t.clientY);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t) move(t.clientX, t.clientY, e);
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      const t = e.changedTouches[0];
+      finish(t ? t.clientX : startX.current ?? 0, t ? t.clientY : startY.current);
+    };
+    const onTouchCancel = () => {
+      dragging.current = false;
+      cancelDrag();
+      setIsDragging(false);
+      setDragDX(0);
+      startX.current = null;
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchCancel);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchCancel);
+    };
+  }, [index, n, postId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mouse (desktop) — no scroll-steal, plain React handlers suffice.
+  const onMouseDown = (e: React.MouseEvent) => {
+    startX.current = e.clientX;
+    startY.current = e.clientY;
+    startT.current = Date.now();
+    dragging.current = true;
+    movedH.current = false;
+    setDragDX(0);
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragging.current || startX.current === null) return;
+    const dx = e.clientX - startX.current;
+    const dy = e.clientY - startY.current;
+    if (!movedH.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        movedH.current = true;
+        setIsDragging(true);
+      }
+    }
+    if (movedH.current) {
+      let eff = dx;
+      if ((index === 0 && dx > 0) || (index === n - 1 && dx < 0)) eff = dx * 0.35;
+      queueDrag(eff);
+    }
+  };
+  const onMouseUp = (e: React.MouseEvent) => finish(e.clientX, e.clientY);
+
+  return (
+    <div
+      ref={mediaRef}
+      className="relative w-full touch-pan-y overflow-hidden rounded-3xl cursor-pointer select-none"
+      style={{ height: "500px", touchAction: "pan-y" }}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseUp}
+    >
+      {/* Stacked deck — cards piled on top of one another like a stack of    */}
+      {/* photos: the ones behind peek up with a slight tilt; swipe the top    */}
+      {/* card off to reveal the next.                                         */}
+      {urls.map((url, i) => {
+        const pos = i - index; // 0 = front, >0 stacked behind, <0 already gone
+        const gone = pos < 0;
+        const front = pos === 0;
+        const depth = Math.min(pos, 3);
+        // Alternating tilt gives the relaxed "tossed pile of files" feel.
+        const tilt = gone
+          ? dragDX < 0
+            ? -10
+            : 10
+          : (i % 2 === 0 ? 1 : -1) * depth * 2.4;
+        const dragRot = front ? dragDX * 0.045 : 0;
+        const txPx = front ? dragDX : 0;
+        const tx = gone ? "-135%" : `calc(-50% + ${txPx}px)`;
+        const ty = gone ? 0 : -depth * 13; // peek upward behind the front
+        const scale = gone ? 0.9 : 1 - depth * 0.05;
+        const opacity = gone || pos > 3 ? 0 : 1;
+        return (
+          <div
+            key={i}
+            className="absolute top-1/2 left-1/2 touch-pan-y overflow-hidden rounded-3xl border border-white/15 ring-1 ring-inset ring-white/[0.06]"
+            style={{
+              width: `${CARD_W}%`,
+              height: "100%",
+              touchAction: "pan-y",
+              transform: `translate(${tx}, -50%) translateY(${ty}px) rotate(${
+                tilt + dragRot
+              }deg) scale(${scale}) translateZ(0)`,
+              transformOrigin: "center center",
+              // Promote front + neighbours to their own GPU layer so the swipe
+              // is a compositor-only transform (no per-frame repaint of the
+              // image or its shadow) — smooth on low-end devices and Safari.
+              willChange: Math.abs(pos) <= 1 ? "transform" : "auto",
+              backfaceVisibility: "hidden",
+              opacity,
+              zIndex: urls.length - Math.abs(pos),
+              transition: isDragging
+                ? "none"
+                : "transform 460ms cubic-bezier(0.22,1,0.36,1), opacity 460ms ease",
+              boxShadow: front
+                ? "0 30px 70px -14px rgba(0,0,0,0.7)"
+                : "0 22px 48px -16px rgba(0,0,0,0.65)",
+              pointerEvents: front ? "auto" : "none",
+            }}
+          >
+            <img
+              src={url}
+              alt={`Slide ${i + 1}`}
+              className="h-full w-full touch-pan-y object-cover pointer-events-none"
+              style={{ touchAction: "pan-y" }}
+              loading={i === 0 ? "eager" : "lazy"}
+              decoding="async"
+              draggable={false}
+              onError={(e) => {
+                e.currentTarget.src =
+                  "https://picsum.photos/seed/fallback/800/600.jpg";
+              }}
+            />
+            {/* Soft inner sheen along the top edge for a glassy finish.       */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),transparent)]"
+              style={{ opacity: front ? 1 : 0 }}
+            />
+            {/* Gradient floor on the front card for badge/dot legibility.    */}
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.32)_55%,rgba(0,0,0,0.66))]"
+              style={{ opacity: front ? 1 : 0 }}
+            />
+            {/* Dim the cards behind so the front one pops.                   */}
+            <div
+              className="pointer-events-none absolute inset-0 bg-black transition-opacity duration-300"
+              style={{ opacity: front ? 0 : 0.28 }}
+            />
+          </div>
+        );
+      })}
+
+      {/* Dot indicators — centred under the deck, in a glassy pill. */}
+      {n > 1 && (
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md">
+          {urls.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === index
+                  ? "w-6 bg-[linear-gradient(90deg,#4ade80,#38bdf8)] shadow-[0_0_8px_rgba(74,222,128,0.5)]"
+                  : "w-1.5 bg-white/45"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main FeedScreen
 // ---------------------------------------------------------------------------
@@ -892,9 +2116,14 @@ export function FeedScreen({
   onNavigateToTruths,
   onNavigateToCommunityDares,
   onNavigateToDareCenter,
+  onNavigateToBirthdayRoom,
   onNavigateToProfile,
+  onDareUser,
+  onAskTruthUser,
+  onSendToDarren,
   onStoryComposerOpenChange,
   onStoryViewerOpenChange,
+  onCommentsModalOpenChange,
 }: {
   isActive?: boolean;
   onBack: () => void;
@@ -907,9 +2136,24 @@ export function FeedScreen({
   onNavigateToTruths: (truth?: TruthPost) => void;
   onNavigateToCommunityDares: () => void;
   onNavigateToDareCenter: () => void;
+  onNavigateToBirthdayRoom?: () => void;
   onNavigateToProfile?: (userId: string) => void;
+  onDareUser?: (targetUser: {
+    id: string;
+    name: string;
+    username: string;
+    avatar: string;
+  }) => void;
+  onAskTruthUser?: (targetUser: {
+    id: string;
+    name: string;
+    username: string;
+    avatar: string;
+  }) => void;
+  onSendToDarren?: () => void;
   onStoryComposerOpenChange?: (isOpen: boolean) => void;
   onStoryViewerOpenChange?: (isOpen: boolean) => void;
+  onCommentsModalOpenChange?: (isOpen: boolean) => void;
 }) {
   const { getOrCreateConversation, sendRealTimeMessage } = useMessagingStore();
   const unreadCount = useMessagingStore((s) =>
@@ -1009,6 +2253,14 @@ export function FeedScreen({
     [userProfiles, currentDisplayName, currentUsername, currentProfileUserId],
   );
 
+  const [activeMenuPostId, setActiveMenuPostId] = useState<string | null>(null);
+  const [activeMenuPost, setActiveMenuPost] = useState<FeedPost | null>(null);
+  const [activeMenuAuthor, setActiveMenuAuthor] = useState<{
+    id?: string;
+    name: string;
+    username: string;
+    avatar: string;
+  } | null>(null);
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -1105,6 +2357,17 @@ export function FeedScreen({
     useState<CommunityChallenge | null>(null);
   const [showCommunityChallengeHub, setShowCommunityChallengeHub] =
     useState(false);
+  const [showDareEventsScreen, setShowDareEventsScreen] = useState(false);
+  const [showRoastJailScreen, setShowRoastJailScreen] = useState(false);
+  const [showFriendshipCourtScreen, setShowFriendshipCourtScreen] =
+    useState(false);
+  const [showCircleSelector, setShowCircleSelector] = useState(false);
+  const [showCircleCreateModal, setShowCircleCreateModal] = useState(false);
+  const [openCircleId, setOpenCircleId] = useState<string | null>(null);
+  const [circleManageId, setCircleManageId] = useState<string | null>(null);
+  const [customCircles, setCustomCircles] = useState<CircleRecord[]>([]);
+  const [circleDraftName, setCircleDraftName] = useState("");
+  const [circleManageName, setCircleManageName] = useState("");
   const [communityChallengeSummaries, setCommunityChallengeSummaries] =
     useState<Record<string, CommunityChallengeSummary>>({});
   const [joinedCommunityChallengeIds, setJoinedCommunityChallengeIds] =
@@ -1238,6 +2501,11 @@ export function FeedScreen({
     onNavigateToDareCenter();
   }, [onNavigateToDareCenter]);
 
+  const refreshCustomCircles = useCallback(() => {
+    if (!user?.id) return;
+    setCustomCircles(circleService.getCachedCircles(user.id));
+  }, [user?.id]);
+
   const hydratedCommunityChallenges = useMemo(
     () =>
       communityChallengeService.hydrateChallenges(
@@ -1252,6 +2520,20 @@ export function FeedScreen({
         (challenge) => challenge.id === selectedCommunityChallenge.id,
       ) || selectedCommunityChallenge
     : null;
+
+  const activeCircle = useMemo(
+    () => customCircles.find((circle) => circle.id === openCircleId) || null,
+    [customCircles, openCircleId],
+  );
+
+  useEffect(() => {
+    if (!circleManageId) {
+      setCircleManageName("");
+      return;
+    }
+    const target = customCircles.find((circle) => circle.id === circleManageId);
+    setCircleManageName(target?.name || "");
+  }, [circleManageId, customCircles]);
 
   const handleJoinCommunityChallenge = useCallback(
     async (challenge: CommunityChallenge) => {
@@ -1282,6 +2564,53 @@ export function FeedScreen({
     [user?.avatar, user?.displayName, user?.id, user?.username],
   );
 
+  const openCircleManageModal = useCallback((circleId: string) => {
+    setCircleManageId(circleId);
+    setShowCircleSelector(false);
+  }, []);
+
+  const handleCreateCircle = useCallback(async () => {
+    if (!user?.id) return;
+    const name = circleDraftName.trim();
+    if (!name) return;
+    const created = await circleService.createCircle(user.id, name);
+    setCustomCircles(circleService.getCachedCircles(user.id));
+    setCircleDraftName("");
+    setShowCircleCreateModal(false);
+    setShowCircleSelector(false);
+    setOpenCircleId(created.id);
+  }, [circleDraftName, user?.id]);
+
+  const handleRenameCircle = useCallback(async () => {
+    if (!user?.id || !circleManageId) return;
+    const trimmed = circleManageName.trim();
+    if (!trimmed) return;
+    await circleService.renameCircle(user.id, circleManageId, trimmed);
+    refreshCustomCircles();
+    setCircleManageId(null);
+  }, [circleManageId, circleManageName, refreshCustomCircles, user?.id]);
+
+  const handleDeleteCircle = useCallback(async () => {
+    if (!user?.id || !circleManageId) return;
+    const target = customCircles.find((circle) => circle.id === circleManageId);
+    if (!target) return;
+    if (!window.confirm(`Delete ${target.name}? This cannot be undone.`)) {
+      return;
+    }
+    await circleService.deleteCircle(user.id, circleManageId);
+    refreshCustomCircles();
+    setCircleManageId(null);
+    if (openCircleId === circleManageId) {
+      setOpenCircleId(null);
+    }
+  }, [
+    circleManageId,
+    customCircles,
+    openCircleId,
+    refreshCustomCircles,
+    user?.id,
+  ]);
+
   useEffect(() => {
     return () => clearDareCenterLongPressTimer();
   }, [clearDareCenterLongPressTimer]);
@@ -1298,6 +2627,31 @@ export function FeedScreen({
       user?.id,
       setJoinedCommunityChallengeIds,
     );
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCustomCircles([]);
+      return;
+    }
+
+    let active = true;
+    setCustomCircles(circleService.getCachedCircles(user.id));
+
+    void circleService
+      .loadCircles(user.id)
+      .then((circles) => {
+        if (active) {
+          setCustomCircles(circles);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load circles:", error);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [user?.id]);
 
   // ── Header hide/show logic ──
@@ -1432,14 +2786,19 @@ export function FeedScreen({
       .filter((post) => {
         if (totalLikes(post) <= 0) return false;
         if (requestedLikePreviewPostIdsRef.current.has(post.id)) return false;
-        return !Object.values(getLikesByUser(post)).some(isDisplayableLikeEntry);
+        return !Object.values(getLikesByUser(post)).some(
+          isDisplayableLikeEntry,
+        );
       })
       .map((post) => post.id);
 
     if (postIdsNeedingPreview.length === 0) return;
 
     let cancelled = false;
-    const batchPostIds = postIdsNeedingPreview.slice(0, LIKE_PREVIEW_BATCH_SIZE);
+    const batchPostIds = postIdsNeedingPreview.slice(
+      0,
+      LIKE_PREVIEW_BATCH_SIZE,
+    );
 
     batchPostIds.forEach((postId) =>
       requestedLikePreviewPostIdsRef.current.add(postId),
@@ -1695,7 +3054,14 @@ export function FeedScreen({
       showStoryTypeSheet ||
       showStoryUploadModal ||
       showStoryViewerModal ||
-      showCommunityChallengeHub,
+      showCommunityChallengeHub ||
+      showDareEventsScreen ||
+      showRoastJailScreen ||
+      showFriendshipCourtScreen ||
+      showCircleSelector ||
+      showCircleCreateModal ||
+      circleManageId !== null ||
+      openCircleId !== null,
   );
 
   // ── Story handlers ──
@@ -1803,6 +3169,11 @@ export function FeedScreen({
   }, [onStoryComposerOpenChange, showStoryTypeSheet, showStoryUploadModal]);
 
   useEffect(() => {
+    onCommentsModalOpenChange?.(showCommentsModal);
+    return () => onCommentsModalOpenChange?.(false);
+  }, [onCommentsModalOpenChange, showCommentsModal]);
+
+  useEffect(() => {
     if (!isStoryMusicModalOpen) {
       stopStoryMusicPreview();
     }
@@ -1881,6 +3252,12 @@ export function FeedScreen({
       setViewerStoryAuthorId(currentUser.userId);
       setShowStoryViewerModal(true);
       onStoryViewerOpenChange?.(true);
+      return;
+    }
+    // No active story — tapping the avatar opens your own profile.
+    // The "+" badge remains the affordance for creating a story.
+    if (onNavigateToProfile && currentUser.userId) {
+      onNavigateToProfile(currentUser.userId);
       return;
     }
     openStoryTypeSheet();
@@ -2571,6 +3948,7 @@ export function FeedScreen({
         const file = files[index];
         const mediaUrl = await storyService.uploadStoryMedia(
           file,
+          currentUser.userId,
           (percent) => {
             const overallProgress = Math.round(
               ((index + percent / 100) / files.length) * 100,
@@ -2905,15 +4283,19 @@ export function FeedScreen({
   );
 
   const handleMediaTap = useCallback(
-    (postId: string, e: React.MouseEvent<HTMLDivElement>) => {
-      e.stopPropagation();
+    (
+      postId: string,
+      clientX: number,
+      clientY: number,
+      mediaElement: HTMLElement,
+    ) => {
       const now = Date.now();
       const last = lastTapTimeRef.current[postId] ?? 0;
       const isDoubleTap = now - last < DOUBLE_TAP_DELAY;
       lastTapTimeRef.current[postId] = isDoubleTap ? 0 : now;
       if (!isDoubleTap) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      spawnBurst(postId, e.clientX - rect.left, e.clientY - rect.top);
+      const rect = mediaElement.getBoundingClientRect();
+      spawnBurst(postId, clientX - rect.left, clientY - rect.top);
       addLike(postId);
     },
     [spawnBurst, addLike],
@@ -3016,10 +4398,11 @@ export function FeedScreen({
     <div
       className="screen-container"
       style={{
-        paddingBottom: "120px",
-        boxSizing: "border-box",
+        /* ORIGINAL BG (green gradient):
+           "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.16), transparent 34%), radial-gradient(circle at 12% 18%, rgba(14,165,233,0.10), transparent 28%), linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%)"
+        */
         background:
-          "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.16), transparent 34%), radial-gradient(circle at 12% 18%, rgba(14,165,233,0.10), transparent 28%), linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%)",
+          "linear-gradient(180deg, #141414 0%, #0e0e0e 52%, #0a0a0a 100%)",
       }}
     >
       <style>{`
@@ -3127,20 +4510,16 @@ export function FeedScreen({
           position: "sticky",
           top: 0,
           zIndex: 50,
+          /* ORIGINAL HEADER BG (green gradient):
+             "radial-gradient(ellipse at 28% -42%, rgba(74,222,128,0.11), transparent 66%), radial-gradient(ellipse at 76% -34%, rgba(14,165,233,0.07), transparent 64%), linear-gradient(180deg, rgba(6,8,6,0.94) 0%, rgba(10,15,10,0.93) 54%, rgba(3,4,3,0.92) 100%)"
+          */
           background:
-            "radial-gradient(ellipse at 28% -42%, rgba(74,222,128,0.11), transparent 66%), radial-gradient(ellipse at 76% -34%, rgba(14,165,233,0.07), transparent 64%), linear-gradient(180deg, rgba(6,8,6,0.94) 0%, rgba(10,15,10,0.93) 54%, rgba(3,4,3,0.92) 100%)",
+            "linear-gradient(180deg, rgba(20,20,20,0.98) 0%, rgba(15,15,15,0.97) 100%)",
         }}
       >
         <div className="px-4 pb-3 pt-3">
           <div className="relative flex items-center justify-between">
             <div className="z-10 flex items-center gap-2">
-              <button
-                onClick={onNavigateToSearch}
-                className="flex h-10 w-10 items-center justify-center text-[#94a3b8] transition-all duration-200 hover:text-[#4ade80]"
-                aria-label="Search"
-              >
-                <Search size={18} />
-              </button>
               <button
                 onClick={onNavigateToDares}
                 className="flex h-10 w-10 items-center justify-center text-[#94a3b8] transition-all duration-200 hover:text-[#4ade80]"
@@ -3149,11 +4528,11 @@ export function FeedScreen({
                 <Target size={18} />
               </button>
               <button
-                onClick={() => setShowCommunityChallengeHub(true)}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#4ade80]/14 bg-[#4ade80]/[0.045] text-[#94a3b8] transition-all duration-200 hover:border-[#4ade80]/30 hover:bg-[#4ade80]/10 hover:text-[#86efac]"
-                aria-label="Community dare hub"
+                onClick={() => setShowDareEventsScreen(true)}
+                className="flex h-10 w-10 items-center justify-center text-[#94a3b8] transition-all duration-200 hover:text-[#4ade80]"
+                aria-label="Open event rooms"
               >
-                <Users size={18} />
+                <Trophy size={18} />
               </button>
             </div>
             <div
@@ -3181,7 +4560,7 @@ export function FeedScreen({
               </button>
             </div>
             */}
-            <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center space-x-3">
+            <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center space-x-1">
               <button
                 onClick={() => {
                   if (alertUnreadCount > 0) {
@@ -3349,12 +4728,20 @@ export function FeedScreen({
                     </div>
                   </div>
                 ) : (
-                  // No stories — show add button
-                  <div className="relative flex h-[84px] w-[84px] items-center justify-center rounded-full border border-white/10 bg-[radial-gradient(circle_at_top,#20242c_0%,#121417_55%,#090909_100%)] shadow-[0_18px_40px_rgba(0,0,0,0.45)] transition-all duration-300 group-hover:scale-[1.04] group-hover:border-[#4ade80]/60">
-                    <Plus
-                      size={28}
-                      className="text-[#4ade80] transition-transform duration-300 group-hover:scale-110"
-                    />
+                  // No stories — keep the avatar visible and let the corner badge act as the add affordance
+                  <div className="relative h-[84px] w-[84px] rounded-full border border-white/10 bg-[radial-gradient(circle_at_top,#1b2321_0%,#101513_58%,#070908_100%)] p-[3px] shadow-[0_18px_40px_rgba(0,0,0,0.45)] transition-all duration-300 group-hover:scale-[1.04] group-hover:border-[#4ade80]/60">
+                    <div className="h-full w-full rounded-full bg-[#050505] p-[3px]">
+                      <Avatar
+                        src={currentUser.avatar}
+                        alt="Your story"
+                        userId={currentUser.userId}
+                        username={currentUser.username}
+                        fallbackText={
+                          currentUser.name || currentUser.username || "You"
+                        }
+                        className="!h-full !w-full"
+                      />
+                    </div>
                   </div>
                 )}
                 <button
@@ -3531,6 +4918,18 @@ export function FeedScreen({
                 COMMUNITY_RAIL_FIRST_INSERT_AFTER,
                 COMMUNITY_RAIL_REPEAT_EVERY,
               );
+              const showVerdictCard = shouldShowRailAfterPost(
+                index,
+                sortedPosts.length,
+                VERDICT_CARD_FIRST_INSERT_AFTER,
+                VERDICT_CARD_REPEAT_EVERY,
+              );
+              const verdictPoolIndex =
+                (Math.floor(
+                  (index - VERDICT_CARD_FIRST_INSERT_AFTER + 1) /
+                    VERDICT_CARD_REPEAT_EVERY,
+                ) + FEED_VERDICT_POOL.length) %
+                FEED_VERDICT_POOL.length;
               const showSocialDaresRail = shouldShowRailAfterPost(
                 index,
                 sortedPosts.length,
@@ -3548,16 +4947,15 @@ export function FeedScreen({
                 <Fragment key={post.id}>
                   <div
                     id={`feed-post-${post.id}`}
-                    className={`relative overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,22,18,0.97),rgba(6,9,8,0.99))] shadow-[0_22px_62px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.05)] ${
+                    className={`relative overflow-hidden rounded-[30px] ${
                       animatingPosts.has(post.id) ? "premium-card-burst" : ""
                     }`}
                   >
-                    <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.68),rgba(14,165,233,0.38),rgba(74,222,128,0))]" />
                     <div className="premium-card-glow" />
                     <div className="premium-card-ring" />
                     {/* Post header */}
                     <div className="relative z-10 flex items-center justify-between gap-3 px-3 pt-3 pb-3">
-                      <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <Avatar
                           src={author.avatar}
                           alt={author.name}
@@ -3592,15 +4990,47 @@ export function FeedScreen({
                           </p>
                         </button>
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuPostId(post.id);
+                          setActiveMenuPost(post);
+                          setActiveMenuAuthor(author);
+                        }}
+                        className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/40 transition-colors active:bg-white/[0.09] active:text-white"
+                        aria-label="Post options"
+                      >
+                        <MoreHorizontal size={20} />
+                      </button>
                     </div>
 
-                    {/* Media */}
-                    {post.media && post.media.url && (
+                    {/* Media — carousel or single */}
+                    {post.media_urls && post.media_urls.length > 0 ? (
+                      <div className="px-1">
+                        <div id={`media-${post.id}`} className="relative">
+                          <CarouselMedia
+                            urls={post.media_urls}
+                            postId={post.id}
+                            onTap={handleMediaTap}
+                          />
+                          <HeartBurstLayer bursts={postBursts} />
+                        </div>
+                      </div>
+                    ) : post.media && post.media.url ? (
                       <div className="px-1">
                         <div
                           id={`media-${post.id}`}
                           className="w-full relative cursor-pointer rounded-3xl overflow-hidden"
-                          onClick={(e) => handleMediaTap(post.id, e)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleMediaTap(
+                              post.id,
+                              event.clientX,
+                              event.clientY,
+                              event.currentTarget,
+                            );
+                          }}
                         >
                           {post.media.type === "image" ? (
                             <img
@@ -3649,11 +5079,11 @@ export function FeedScreen({
                           <HeartBurstLayer bursts={postBursts} />
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Actions */}
                     <div className="relative z-10 px-2 pt-3">
-                      <div className="grid grid-cols-3 items-center gap-1 rounded-full border border-white/8 bg-[linear-gradient(180deg,rgba(15,22,18,0.97),rgba(6,9,8,0.99))] px-3 py-2.5 shadow-[0_12px_26px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)]">
+                      <div className="grid grid-cols-3 items-center gap-1 px-3 py-2.5">
                         <div className="flex min-w-0 items-center justify-center">
                           <button
                             onClick={(e) => handleHeartIconClick(post.id, e)}
@@ -3762,7 +5192,22 @@ export function FeedScreen({
                             <span className="font-black text-white">
                               {likeSocialProof.lead}
                             </span>{" "}
-                            <span>{likeSocialProof.rest}</span>
+                            <span>
+                              {likeSocialProof.rest
+                                .split(/([\d.]+k?\s+times?)/i)
+                                .map((part, i) =>
+                                  /^[\d.]+k?\s+times?$/i.test(part) ? (
+                                    <span
+                                      key={i}
+                                      className="font-black text-[#4ade80] drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]"
+                                    >
+                                      {part}
+                                    </span>
+                                  ) : (
+                                    part
+                                  ),
+                                )}
+                            </span>
                           </p>
                         </button>
                       </div>
@@ -3778,6 +5223,11 @@ export function FeedScreen({
                       </p>
                     </div>
                   </div>
+                  {showVerdictCard && (
+                    <FeedVerdictCard
+                      data={FEED_VERDICT_POOL[verdictPoolIndex]!}
+                    />
+                  )}
                   {showSocialDaresRail && feedSocialDares.length > 0 && (
                     <SocialDaresFeedRail
                       dares={feedSocialDares}
@@ -5675,7 +7125,9 @@ export function FeedScreen({
       ══════════════════════════════════════════ */}
       {selectedCommunityChallenge && (
         <CommunityChallengePreviewScreen
-          challenge={selectedHydratedCommunityChallenge || selectedCommunityChallenge}
+          challenge={
+            selectedHydratedCommunityChallenge || selectedCommunityChallenge
+          }
           isJoined={joinedCommunityChallengeIds.has(
             selectedCommunityChallenge.id,
           )}
@@ -5701,6 +7153,231 @@ export function FeedScreen({
         </div>
       )}
 
+      {showDareEventsScreen && (
+        <DareEventsScreen
+          onClose={() => setShowDareEventsScreen(false)}
+          onOpenDareCenter={() => {
+            setShowDareEventsScreen(false);
+            handleEnterDareCenter();
+          }}
+          onOpenRoastRoom={() => {
+            setShowDareEventsScreen(false);
+            setShowRoastJailScreen(true);
+          }}
+          onOpenFriendshipCourt={() => {
+            setShowDareEventsScreen(false);
+            setShowFriendshipCourtScreen(true);
+          }}
+        />
+      )}
+
+      {showRoastJailScreen && (
+        <RoastJailScreen onClose={() => setShowRoastJailScreen(false)} />
+      )}
+
+      {showFriendshipCourtScreen && (
+        <FriendshipCourtScreen
+          onClose={() => setShowFriendshipCourtScreen(false)}
+        />
+      )}
+
+      {showCircleSelector && (
+        <div
+          className="fixed inset-0 z-[141] flex items-end bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowCircleSelector(false)}
+        >
+          <div
+            className="relative w-full overflow-hidden rounded-t-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,20,0.99),rgba(5,8,6,1))] p-4 pb-[calc(var(--safe-area-bottom)+16px)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/18" />
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="m-0 text-[11px] font-black uppercase tracking-[0.18em] text-[#86efac]">
+                  Circles
+                </p>
+                <h3 className="m-0 mt-1 text-xl font-black text-white">
+                  Choose a scrapbook
+                </h3>
+                <p className="m-0 mt-1 text-sm font-bold text-[#94a3b8]">
+                  Open a circle, rename it, or create a new one.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCircleSelector(false)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/8 bg-white/[0.04] text-[#94a3b8]"
+                aria-label="Close circles"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid max-h-[42dvh] grid-cols-2 gap-2 overflow-y-auto pr-1 scrollbar-hide">
+              {customCircles.map((circle) => (
+                <div
+                  key={circle.id}
+                  className="rounded-[24px] border border-white/8 bg-white/[0.04] p-3"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenCircleId(circle.id);
+                      setShowCircleSelector(false);
+                    }}
+                    className="block w-full text-left"
+                  >
+                    <p className="m-0 truncate text-sm font-black text-white">
+                      {circle.name}
+                    </p>
+                    <p className="m-0 mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/38">
+                      {circle.member_ids.length} members
+                    </p>
+                  </button>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCircleManageId(circle.id);
+                        setShowCircleSelector(false);
+                      }}
+                      className="flex h-9 flex-1 items-center justify-center gap-2 rounded-full border border-white/8 bg-white/[0.035] text-xs font-black text-white/72"
+                    >
+                      <Pencil size={13} />
+                      Manage
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenCircleId(circle.id);
+                        setShowCircleSelector(false);
+                      }}
+                      className="flex h-9 flex-1 items-center justify-center gap-2 rounded-full bg-[#4ade80] text-xs font-black text-[#061006]"
+                    >
+                      Open
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowCircleCreateModal(true)}
+              className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-full border border-dashed border-[#4ade80]/28 bg-white/[0.03] px-3 text-left text-white transition-all duration-200 hover:bg-white/[0.06]"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#4ade80]/12 text-[#86efac]">
+                <Plus size={16} />
+              </span>
+              <div className="min-w-0">
+                <p className="m-0 truncate text-sm font-black">Create circle</p>
+                <p className="m-0 mt-0.5 text-[10px] font-bold uppercase tracking-[0.11em] text-[#64748b]">
+                  Add a new friend-group world
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showCircleCreateModal && (
+        <div
+          className="fixed inset-0 z-[142] flex items-end bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowCircleCreateModal(false)}
+        >
+          <div
+            className="relative w-full overflow-hidden rounded-t-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,20,0.99),rgba(5,8,6,1))] p-4 pb-[calc(var(--safe-area-bottom)+16px)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/18" />
+            <p className="m-0 text-xl font-black text-white">Create circle</p>
+            <p className="m-0 mt-1 text-sm font-bold text-[#94a3b8]">
+              Give this friend group a name and keep it private to you for now.
+            </p>
+            <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.04] p-3">
+              <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-[#86efac]">
+                Circle name
+              </label>
+              <input
+                value={circleDraftName}
+                onChange={(event) => setCircleDraftName(event.target.value)}
+                placeholder="College crew"
+                className="w-full bg-transparent text-[17px] font-black text-white outline-none placeholder:text-white/28"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCreateCircle()}
+              className="mt-3 flex min-h-12 w-full items-center justify-center rounded-full bg-[#4ade80] text-sm font-black text-[#061006]"
+            >
+              Create circle
+            </button>
+          </div>
+        </div>
+      )}
+
+      {circleManageId && activeCircle && (
+        <div
+          className="fixed inset-0 z-[143] flex items-end bg-black/70 backdrop-blur-sm"
+          onClick={() => setCircleManageId(null)}
+        >
+          <div
+            className="relative w-full overflow-hidden rounded-t-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,20,0.99),rgba(5,8,6,1))] p-4 pb-[calc(var(--safe-area-bottom)+16px)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/18" />
+            <p className="m-0 text-xl font-black text-white">Manage circle</p>
+            <p className="m-0 mt-1 text-sm font-bold text-[#94a3b8]">
+              Rename or delete this circle.
+            </p>
+            <div className="mt-4 space-y-2">
+              <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-3">
+                <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-[#86efac]">
+                  Circle name
+                </label>
+                <input
+                  value={circleManageName}
+                  onChange={(event) => setCircleManageName(event.target.value)}
+                  className="w-full bg-transparent text-[16px] font-black text-white outline-none placeholder:text-white/28"
+                  placeholder="Circle name"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleRenameCircle()}
+                className="flex min-h-12 w-full items-center justify-center rounded-full bg-[#4ade80] text-sm font-black text-[#061006]"
+              >
+                Save rename
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteCircle()}
+                className="flex min-h-12 w-full items-center justify-center rounded-full border border-rose-500/18 bg-rose-500/12 text-sm font-black text-rose-100"
+              >
+                Delete circle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeCircle && openCircleId && (
+        <CircleScrapbookScreen
+          circle={activeCircle}
+          isCustomCircle={true}
+          posts={posts}
+          stories={stories}
+          dares={darePosts}
+          truths={truthPosts}
+          onClose={() => setOpenCircleId(null)}
+          onManage={() => {
+            setCircleManageId(activeCircle.id);
+            setOpenCircleId(null);
+          }}
+        />
+      )}
+
       {showStoryViewerModal && viewerStories.length > 0 && (
         <StoryViewer
           stories={viewerStories}
@@ -5716,6 +7393,22 @@ export function FeedScreen({
           onNavigateToProfile={onNavigateToProfile}
           onReact={!viewerIsOwner ? handleStoryReact : undefined}
           onReply={!viewerIsOwner ? handleStoryReply : undefined}
+        />
+      )}
+
+      {activeMenuPostId && activeMenuPost && activeMenuAuthor && (
+        <PostActionSheet
+          post={activeMenuPost}
+          author={activeMenuAuthor}
+          isOwn={activeMenuAuthor.id === currentUser.userId}
+          onClose={() => {
+            setActiveMenuPostId(null);
+            setActiveMenuPost(null);
+            setActiveMenuAuthor(null);
+          }}
+          onDare={onDareUser}
+          onTruth={onAskTruthUser}
+          onNavigateToProfile={onNavigateToProfile}
         />
       )}
     </div>
