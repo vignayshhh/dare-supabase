@@ -27,6 +27,7 @@ export interface AuthStore extends AuthState {
     success: boolean;
     user?: AuthUser;
     error?: string;
+    requiresEmailConfirmation?: boolean;
   }>;
 
   // Sign in
@@ -137,12 +138,12 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       set({ loading: true, error: null });
       try {
         const response = await authService.signUp(userData);
-        if (response.success && response.user) {
+        if (response.success) {
           set({
-            user: response.user,
+            user: response.user ?? null,
             loading: false,
             error: null,
-            isAuthenticated: true,
+            isAuthenticated: !!response.user,
           });
         } else {
           set({

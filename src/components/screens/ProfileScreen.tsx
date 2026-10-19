@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useState,
@@ -18,15 +18,15 @@ import {
   Share2,
   Clock,
   CheckCircle,
-  Shield,
   Zap,
   LogOut,
   Play,
   X,
   Star,
-  Activity,
   MessageSquare,
   ChevronRight,
+  Menu,
+  Search,
 } from "lucide-react";
 import "@/styles/design-system.css";
 import { useAuthStore } from "../../stores/useAuthStore-v2";
@@ -37,6 +37,7 @@ import { PostsScreen } from "./PostsScreen";
 import { ProfileEditScreen } from "./ProfileEditScreen";
 import { FriendsScreen } from "./FriendsScreen";
 import { Avatar } from "../ui/Avatar";
+import { AppearanceToggleInline } from "../ui/AppearanceToggle";
 import { useProfileDataStore } from "../../stores/profileDataStore";
 import { getAggressiveAvatar, useAvatarStore } from "../../stores/avatarStore";
 import { avatarSyncService } from "@/services/avatarSyncService";
@@ -45,6 +46,8 @@ import { closeFriendsService } from "../../middleware/services/service-factory";
 import { formatTimeAgo } from "../../utils/timeFormat";
 import { TruthsListScreen } from "./TruthsListScreen";
 import { DaresListScreen } from "./DaresListScreen";
+import { RelationshipsScreen } from "./RelationshipsScreen";
+import { SocialProfileView } from "../profile/SocialProfileView";
 import {
   dareService,
   truthService,
@@ -54,15 +57,15 @@ import type {
   DarePost,
 } from "../../middleware/adapters/data-adapters";
 import { resolveUserProfile } from "../../utils/profileResolver";
-import { db } from "../../backend/lib/firebase";
-import {
-  collection,
-  getCountFromServer,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { TruthEntity } from "../../backend/domain/entities/Truth";
+import { useAuraStore } from "../../stores/useAuraStore";
+import { StickmanCustomizationScreen } from "./StickmanCustomizationScreen";
+import {
+  DEFAULT_STICKMAN_CUSTOMIZATION,
+  getStickmanCustomization,
+  type StickmanCustomization,
+} from "../../services/stickmanCustomizationService";
 
 interface ProfileStats {
   daresCompleted: number;
@@ -85,7 +88,7 @@ type ProfileCountCollection = "dares" | "truths";
 interface ProfileScreenProps {
   isActive?: boolean;
   onNavigateToProfile?: (userId: string) => void;
-  onNavigateToActivity?: () => void;
+  onNavigateToSearch?: () => void;
   onNavigateToTruthPost?: (truth: TruthPost) => void;
   onNavigateToDarePost?: (dare: DarePost) => void;
 }
@@ -101,43 +104,29 @@ function toSafeCount(value: unknown): number {
   return Number.isFinite(numericValue) ? numericValue : 0;
 }
 
+function formatProfileCount(value: number): string {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (value >= 10_000) {
+    return `${Math.round(value / 1_000)}K`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)}K`;
+  }
+  return value.toLocaleString();
+}
+
 const profileCache = new Map<string, any>();
 
 async function fetchProfile(userId: string): Promise<any | null> {
   if (!userId) return null;
   if (profileCache.has(userId)) return profileCache.get(userId);
 
-  try {
-    const resolvedProfile = await resolveUserProfile(userId);
-    if (resolvedProfile) {
-      profileCache.set(userId, resolvedProfile);
-      return resolvedProfile;
-    }
-  } catch (_error) {
-    // Fall back to direct query when lookup strategy differs.
-  }
-
-  try {
-    const snapshot = await getDocs(
-      query(collection(db, "users"), where("user_id", "==", userId)),
-    );
-
-    if (!snapshot.empty) {
-      const data = snapshot.docs[0].data();
-      const docId = snapshot.docs[0].id;
-      const profile = {
-        id: data.user_id || docId,
-        userId: data.user_id || docId,
-        displayName: data.display_name,
-        username: data.username,
-        nickname: data.display_name || data.nickname,
-        avatarUrl: data.avatar_url,
-      };
-      profileCache.set(userId, profile);
-      return profile;
-    }
-  } catch (_error) {
-    // Keep null cache entry to avoid repeated failed reads in one session.
+  const resolvedProfile = await resolveUserProfile(userId);
+  if (resolvedProfile) {
+    profileCache.set(userId, resolvedProfile);
+    return resolvedProfile;
   }
 
   profileCache.set(userId, null);
@@ -174,23 +163,15 @@ function extractAvatar(profile: any): string {
 async function countUserChallengeDocs(
   collectionName: ProfileCountCollection,
   userId: string,
+  state: string,
 ): Promise<number> {
-  const [sentSnapshot, receivedSnapshot] = await Promise.all([
-    getCountFromServer(
-      query(
-        collection(db, collectionName),
-        where("challenger_id", "==", userId),
-      ),
-    ),
-    getCountFromServer(
-      query(
-        collection(db, collectionName),
-        where("receiver_id", "==", userId),
-      ),
-    ),
-  ]);
-
-  return sentSnapshot.data().count + receivedSnapshot.data().count;
+  const { count, error } = await getSupabaseBrowserClient()
+    .from(collectionName)
+    .select("id", { count: "exact", head: true })
+    .or(`challenger_id.eq.${userId},receiver_id.eq.${userId}`)
+    .eq("state", state);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 async function buildTruthPost(truth: TruthEntity): Promise<TruthPost | null> {
@@ -268,10 +249,12 @@ async function buildDarePost(dare: any): Promise<DarePost | null> {
 export function ProfileScreen({
   isActive = true,
   onNavigateToProfile,
-  onNavigateToActivity,
+  onNavigateToSearch,
   onNavigateToTruthPost,
   onNavigateToDarePost,
 }: ProfileScreenProps = {}) {
+  const currentAura = useAuraStore((state) => state.currentAura);
+  const openAuraSheet = useAuraStore((state) => state.openSheet);
   const [activeTab, setActiveTab] = useState<"posts" | "truths" | "dares">(
     "posts",
   );
@@ -284,9 +267,8 @@ export function ProfileScreen({
     subscribeToUserPosts,
     unsubscribeFromUserPosts,
   } = usePostsStore();
-  const { profile, friendsCount, loadProfile } = useUserProfileStore();
+  const { profile, friends, friendsCount, loadProfile } = useUserProfileStore();
   const { sentDares, receivedDares, loadUserDares } = useDareStore();
-  const [isGhostMode, setIsGhostMode] = useState(false);
   const [showPostsScreen, setShowPostsScreen] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -295,6 +277,11 @@ export function ProfileScreen({
   const [showAvatarPreview, setShowAvatarPreview] = useState(false);
   const [showTruthsListScreen, setShowTruthsListScreen] = useState(false);
   const [showDaresListScreen, setShowDaresListScreen] = useState(false);
+  const [showRelationshipsScreen, setShowRelationshipsScreen] = useState(false);
+  const [showStickmanCustomization, setShowStickmanCustomization] = useState(false);
+  const [stickmanCustomization, setStickmanCustomization] = useState<StickmanCustomization>(
+    DEFAULT_STICKMAN_CUSTOMIZATION,
+  );
   const [initialTruthId, setInitialTruthId] = useState<string | undefined>(
     undefined,
   );
@@ -316,18 +303,24 @@ export function ProfileScreen({
     });
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (profile || user) {
+      setStickmanCustomization(getStickmanCustomization(profile || user));
+    }
+  }, [profile, user]);
+
   // Handle logout
   const handleLogout = async () => {
     // TEMPORARILY DISABLED FOR MOBILE DEBUGGING - Remove isLoggingOut state to prevent button being stuck disabled
     // DISABLED: setIsLoggingOut(true);
 
     try {
-      console.log("🚪 Attempting logout...");
+      console.log("ðŸšª Attempting logout...");
       await signOut();
-      console.log("✅ Logout successful");
+      console.log("âœ… Logout successful");
       // The app should automatically redirect to auth screen due to isAuthenticated change
     } catch (error) {
-      console.error("❌ LOGOUT ERROR:", error);
+      console.error("âŒ LOGOUT ERROR:", error);
       alert(
         `Logout failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
@@ -364,11 +357,16 @@ export function ProfileScreen({
   ]);
 
   const loadProfileHeaderCounts = useCallback(async (userId: string) => {
+    const { data, error } = await getSupabaseBrowserClient().rpc("get_profile_content_counts", {
+      p_user_id: userId,
+    });
+    if (!error && data?.[0]) {
+      return { dares: Number(data[0].dares) || 0, truths: Number(data[0].truths) || 0 };
+    }
     const [dares, truths] = await Promise.all([
-      countUserChallengeDocs("dares", userId),
-      countUserChallengeDocs("truths", userId),
+      countUserChallengeDocs("dares", userId, "ACCEPTED_REAL"),
+      countUserChallengeDocs("truths", userId, "APPROVED"),
     ]);
-
     return { dares, truths };
   }, []);
 
@@ -411,7 +409,10 @@ export function ProfileScreen({
           }) === index
         );
       });
-      const builtTruths = await Promise.all(uniqueTruths.map(buildTruthPost));
+      const approvedTruths = uniqueTruths.filter(
+        (truth: TruthEntity) => truth.state === "APPROVED",
+      );
+      const builtTruths = await Promise.all(approvedTruths.map(buildTruthPost));
 
       setTruthPosts(
         builtTruths.filter((truth): truth is TruthPost => truth !== null),
@@ -446,12 +447,17 @@ export function ProfileScreen({
         );
       });
 
-      uniqueDares.sort(
+      const completedDares = uniqueDares.filter(
+        (dare: any) =>
+          dare.state === "ACCEPTED_REAL" && !!dare.proofMediaUrl,
+      );
+
+      completedDares.sort(
         (a: any, b: any) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
 
-      const builtDares = await Promise.all(uniqueDares.map(buildDarePost));
+      const builtDares = await Promise.all(completedDares.map(buildDarePost));
 
       setDarePosts(
         builtDares.filter((dare): dare is DarePost => dare !== null),
@@ -476,14 +482,14 @@ export function ProfileScreen({
   useEffect(() => {
     if (!isActive || !user?.id) return;
     if (
-      activeTab === "truths" &&
+      activeTab !== "posts" &&
       !loadingTruth &&
       loadedState.truthsLoadedForUserId !== user.id
     ) {
       void loadProfileTruthPosts(user.id);
     }
     if (
-      activeTab === "dares" &&
+      activeTab !== "posts" &&
       !loadingDares &&
       loadedState.daresLoadedForUserId !== user.id
     ) {
@@ -519,6 +525,9 @@ export function ProfileScreen({
     profileData.currentUsername
       ? profileData.currentUsername
       : user?.username || "user";
+  const profileHeaderUsername = username.startsWith("@")
+    ? username
+    : `@${username}`;
   const currentAvatarFromStore = useAvatarStore((state) =>
     user?.id
       ? state.userAvatars[user.id] || state.globalAvatar
@@ -619,11 +628,41 @@ export function ProfileScreen({
     return timestampB - timestampA;
   });
 
+  const feedPostById = new Map((storePosts || []).map((post) => [post.id, post]));
+  const getUniqueLikeCountFromPost = (
+    post?: (typeof sortedPosts)[number] | null,
+  ) => {
+    if (!post) return 0;
+    const explicitCount = toSafeCount(
+      post.likes_count ??
+        (post as any).likesCount ??
+        (post as any).like_count ??
+        (post as any).stats?.likes,
+    );
+    const uniqueLikedUsers = Object.keys(post.likesByUser || {}).length;
+
+    return Math.max(explicitCount, uniqueLikedUsers);
+  };
+
+  const getPostLikeCount = (post: (typeof sortedPosts)[number]) => {
+    const feedPost = feedPostById.get(post.id) as
+      | (typeof sortedPosts)[number]
+      | undefined;
+
+    return Math.max(
+      getUniqueLikeCountFromPost(feedPost),
+      getUniqueLikeCountFromPost(post),
+    );
+  };
+
   const userTruthPosts = truthPosts.filter(
     (truth) =>
       !user?.id ||
       truth.challengerId === user.id ||
       truth.receiverId === user.id,
+  );
+  const approvedUserTruthPosts = userTruthPosts.filter(
+    (truth) => truth.state === "APPROVED",
   );
   const fallbackProfileTruthsCount = toSafeCount(
     (profile as any)?.truthsCount ??
@@ -641,6 +680,30 @@ export function ProfileScreen({
     (dare) =>
       !user?.id || dare.challengerId === user.id || dare.receiverId === user.id,
   );
+  const completedUserDarePosts = userDarePosts.filter(
+    (dare) => dare.state === "ACCEPTED_REAL" && !!dare.proof,
+  );
+  const profileTopStats = [
+    {
+      label: "Friends",
+      value: profileStats.friends,
+      onClick: handleFriendsClick,
+    },
+    {
+      label: "Truths",
+      value: profileTruthsCount,
+      onClick: () => {
+        setActiveTab("truths");
+      },
+    },
+    {
+      label: "Dares",
+      value: profileStats.daresCompleted,
+      onClick: () => {
+        setActiveTab("dares");
+      },
+    },
+  ];
 
   if (showPostsScreen) {
     return (
@@ -664,9 +727,10 @@ export function ProfileScreen({
           setShowTruthsListScreen(false);
           setInitialTruthId(undefined);
         }}
-        truthPosts={userTruthPosts}
+        truthPosts={approvedUserTruthPosts}
         loading={loadingTruth}
         initialTruthId={initialTruthId}
+        titleName={displayName || username}
         onSelectTruth={(truth) => {
           setShowTruthsListScreen(false);
           setInitialTruthId(undefined);
@@ -684,9 +748,10 @@ export function ProfileScreen({
           setShowDaresListScreen(false);
           setInitialDareId(undefined);
         }}
-        darePosts={userDarePosts}
+        darePosts={completedUserDarePosts}
         loading={loadingDares}
         initialDareId={initialDareId}
+        titleName={displayName || username}
         onSelectDare={(dare) => {
           setShowDaresListScreen(false);
           setInitialDareId(undefined);
@@ -834,7 +899,7 @@ export function ProfileScreen({
           </div>
         )}
 
-        {/* Image — full width, tall, edge-to-edge inside card */}
+        {/* Image â€” full width, tall, edge-to-edge inside card */}
         {post.media && (
           <div style={{ margin: "6px -17px 16px -17px" }}>
             <div style={{ borderRadius: "14px", overflow: "hidden" }}>
@@ -891,7 +956,7 @@ export function ProfileScreen({
           </div>
         )}
 
-        {/* Action row — like, comment, share — matching reference layout */}
+        {/* Action row â€” like, comment, share â€” matching reference layout */}
         <div
           style={{
             display: "flex",
@@ -953,7 +1018,7 @@ export function ProfileScreen({
           </button>
         </div>
 
-        {/* Caption — @username bold + text inline, like reference */}
+        {/* Caption â€” @username bold + text inline, like reference */}
         <p
           style={{
             color: "rgba(255,255,255,0.9)",
@@ -965,7 +1030,7 @@ export function ProfileScreen({
           <span style={{ fontWeight: 700 }}>@{username}</span> {post.content}
         </p>
 
-        {/* Timestamp */}
+        {/* DatabaseTimestamp */}
         <p
           style={{
             color: "rgba(255,255,255,0.3)",
@@ -982,16 +1047,20 @@ export function ProfileScreen({
   return (
     <div
       style={{
-        minHeight: "100vh",
+        height: "100%",
+        minHeight: 0,
         background:
-          "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.16), transparent 34%), radial-gradient(circle at 12% 18%, rgba(14,165,233,0.10), transparent 28%), linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%)",
+          "linear-gradient(180deg, #141414 0%, #0e0e0e 52%, #0a0a0a 100%)",
         fontFamily:
-          "'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
+          "var(--font-ui)",
         paddingTop: "calc(var(--safe-area-top) + 12px)",
         paddingBottom: "calc(var(--bottom-nav-total-height) + 24px)",
         position: "relative",
         overflowX: "hidden",
         overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
+        overscrollBehaviorY: "contain",
+        touchAction: "pan-y",
       }}
     >
       <style>{`
@@ -1004,64 +1073,87 @@ export function ProfileScreen({
         .profile-hero-card {
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          gap: 18px;
         }
         .profile-proof-stat-row {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 10px;
+          gap: 0;
+          width: 100%;
+          min-height: 76px;
+          align-items: stretch;
         }
         .profile-proof-stat {
           align-items: center;
-          border: 1px solid rgba(255,255,255,0.055);
-          border-radius: 999px;
+          background: transparent;
+          border: 0;
+          border-radius: 16px;
           display: flex;
+          flex-direction: column;
+          gap: 7px;
           justify-content: center;
-          min-height: 48px;
+          min-height: 76px;
           min-width: 0;
-          padding: 0 10px;
+          padding: 11px 6px 10px;
+          position: relative;
           text-align: center;
-          white-space: nowrap;
+          transition: background 0.18s ease, transform 0.18s ease;
         }
-        .profile-proof-stat.is-primary {
-          background: linear-gradient(135deg,#4ade80,#22c55e);
-          border-color: rgba(255,255,255,0.08);
-          box-shadow: 0 14px 30px rgba(74,222,128,0.2);
+        .profile-proof-stat:not(:first-child)::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 18px;
+          bottom: 18px;
+          width: 1px;
+          background: linear-gradient(180deg, transparent, rgba(255,255,255,0.16), transparent);
         }
-        .profile-proof-stat:not(.is-primary) {
-          background: rgba(255,255,255,0.045);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.045);
+        .profile-proof-stat:hover {
+          background: rgba(255,255,255,0.055);
         }
-        .profile-proof-stat-text {
-          color: #d7ffe6;
-          font-size: 13px;
-          font-weight: 900;
+        .profile-proof-stat-value {
+          color: #fff;
+          font-size: 25px;
+          font-weight: 950;
           line-height: 1;
           margin: 0;
+          letter-spacing: 0;
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .profile-proof-stat.is-primary .profile-proof-stat-text {
-          color: #061006;
+        .profile-proof-stat-label {
+          color: #cbd5e1;
+          font-size: 12.5px;
+          font-weight: 850;
+          line-height: 1;
+          margin: 0;
+          letter-spacing: 0;
         }
         @media (max-width: 480px) {
           .profile-posts-grid {
             gap: 18px;
           }
           .profile-hero-card {
-            gap: 19px;
-            padding: 24px 22px 26px !important;
-            border-radius: 34px !important;
+            gap: 15px;
+            padding: 8px 4px 16px !important;
+            border-radius: 28px !important;
           }
           .profile-hero-card h2 {
-            font-size: 25px !important;
+            font-size: 20px !important;
           }
           .profile-proof-stat {
-            min-height: 46px;
-            padding: 0 8px;
+            min-height: 70px;
+            padding: 10px 3px 9px;
           }
-          .profile-proof-stat-text {
-            font-size: 13px;
+          .profile-proof-stat:not(:first-child)::before {
+            top: 17px;
+            bottom: 17px;
+          }
+          .profile-proof-stat-value {
+            font-size: 22px;
+          }
+          .profile-proof-stat-label {
+            font-size: 11.5px;
           }
         }
         @keyframes fadeInUp {
@@ -1108,8 +1200,184 @@ export function ProfileScreen({
           animation: dailySweep 6.6s ease-in-out infinite;
           pointer-events: none;
         }
+        @keyframes activityRadarSweep {
+          0% { transform: translateX(-135%) skewX(-18deg); opacity: 0; }
+          12% { opacity: 1; }
+          44% { transform: translateX(260%) skewX(-18deg); opacity: 1; }
+          100% { transform: translateX(260%) skewX(-18deg); opacity: 0; }
+        }
+        @keyframes activityRadarPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.22), 0 0 20px rgba(74,222,128,0.18); }
+          50% { box-shadow: 0 0 0 7px rgba(74,222,128,0), 0 0 30px rgba(56,189,248,0.24); }
+        }
+        .activity-radar-cta {
+          position: relative;
+          min-height: 58px;
+          width: 100%;
+          overflow: hidden;
+          border: 1px solid rgba(74,222,128,0.42);
+          border-radius: 22px;
+          background:
+            radial-gradient(circle at 18% 0%, rgba(255,255,255,0.18), transparent 34%),
+            radial-gradient(circle at 82% 120%, rgba(56,189,248,0.22), transparent 40%),
+            linear-gradient(135deg, rgba(8,15,10,0.98), rgba(12,28,18,0.98) 48%, rgba(4,14,18,0.98));
+          color: #dfffea;
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 12px;
+          padding: 10px 16px 10px 12px;
+          cursor: pointer;
+          box-shadow:
+            0 18px 42px rgba(0,0,0,0.38),
+            0 0 34px rgba(74,222,128,0.16),
+            inset 0 1px 0 rgba(255,255,255,0.08);
+          transition:
+            transform 180ms ease,
+            border-color 180ms ease,
+            box-shadow 180ms ease,
+            filter 180ms ease;
+        }
+        .activity-radar-cta::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+          animation: activityRadarSweep 4.2s ease-in-out infinite;
+          pointer-events: none;
+        }
+        .activity-radar-cta::after {
+          content: "";
+          position: absolute;
+          inset: 1px;
+          border-radius: 21px;
+          background: radial-gradient(circle at 16% 50%, rgba(74,222,128,0.18), transparent 34%);
+          pointer-events: none;
+        }
+        .activity-radar-cta:hover {
+          transform: translateY(-2px);
+          border-color: rgba(134,239,172,0.68);
+          filter: brightness(1.08);
+          box-shadow:
+            0 22px 52px rgba(0,0,0,0.42),
+            0 0 46px rgba(74,222,128,0.24),
+            inset 0 1px 0 rgba(255,255,255,0.12);
+        }
+        .activity-radar-cta:disabled {
+          cursor: default;
+          opacity: 0.52;
+          filter: grayscale(0.35);
+        }
+        .activity-radar-orb {
+          position: relative;
+          z-index: 1;
+          transform: translateX(-3px);
+          display: inline-flex;
+          width: 38px;
+          height: 38px;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: linear-gradient(180deg, rgba(18,24,18,0.98), rgba(7,10,8,0.98));
+          color: #86efac;
+          box-shadow:
+            0 10px 24px rgba(74,222,128,0.16),
+            inset 0 1px 0 rgba(255,255,255,0.08),
+            inset 0 -14px 28px rgba(74,222,128,0.06);
+          animation: activityRadarPulse 2.8s ease-in-out infinite;
+        }
+        .activity-radar-copy {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          min-width: 0;
+          flex-direction: column;
+          align-items: flex-start;
+          line-height: 1.02;
+        }
+        .activity-radar-title {
+          font-size: 15px;
+          font-weight: 950;
+          letter-spacing: 0;
+          color: #f0fff5;
+        }
+        .activity-radar-subtitle {
+          margin-top: 4px;
+          font-size: 11px;
+          font-weight: 850;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: rgba(187,247,208,0.72);
+        }
       `}</style>
 
+      <SocialProfileView
+        username={username}
+        name={displayName}
+        bio={user?.bio}
+        avatarUrl={avatarPreviewSrc}
+        profileUserId={user?.id}
+        aura={currentAura}
+        friendsCount={profileStats.friends}
+        posts={sortedPosts.map((post) => ({
+          id: post.id,
+          content: post.content,
+          media: post.media,
+          likes: getPostLikeCount(post),
+        }))}
+        truths={approvedUserTruthPosts}
+        dares={completedUserDarePosts}
+        backedOutCount={profileStats.daresSurrendered}
+        activeTab={activeTab === "posts" ? "posts" : "drama"}
+        onTabChange={(tab) => setActiveTab(tab === "posts" ? "posts" : "truths")}
+        onOpenPost={() => setShowPostsScreen(true)}
+        onOpenTruth={(truthId) => {
+          setInitialTruthId(truthId);
+          setShowTruthsListScreen(true);
+        }}
+        onOpenDare={(dareId) => {
+          setInitialDareId(dareId);
+          setShowDaresListScreen(true);
+        }}
+        onOpenFriends={handleFriendsClick}
+        onOpenRelationships={() => setShowRelationshipsScreen(true)}
+        stickmanCustomization={stickmanCustomization}
+        onOpenStickmanCustomization={() => setShowStickmanCustomization(true)}
+        onOpenAura={openAuraSheet}
+        onOpenAvatar={handleAvatarTap}
+        onChangeAvatar={() => avatarFileInputRef.current?.click()}
+        onOpenMenu={() => setShowEditProfile(true)}
+        onSearch={onNavigateToSearch}
+        onLogout={handleLogout}
+        topbarAccessory={<AppearanceToggleInline />}
+        isOwnProfile
+        friendFaces={(friends || []).map((friend: any) => ({
+          id: friend.userId || friend.id,
+          name: friend.displayName || friend.display_name || friend.username,
+          avatar: friend.avatarUrl || friend.avatar_url || friend.avatar,
+        }))}
+      />
+
+      {showStickmanCustomization && user?.id && (
+        <div className="app-story-shell" style={{ position: "fixed", inset: 0, zIndex: 1100, background: "#0a0f0a" }}>
+          <StickmanCustomizationScreen
+            userId={user.id}
+            name={displayName}
+            avatarUrl={avatarPreviewSrc}
+            initialCustomization={stickmanCustomization}
+            onBack={() => setShowStickmanCustomization(false)}
+            onSaved={(next) => {
+              setStickmanCustomization(next);
+              setShowStickmanCustomization(false);
+            }}
+          />
+        </div>
+      )}
+
+      <div style={{ display: "none" }} aria-hidden="true">
+      {/* Legacy profile markup retained temporarily while the new profile settles. */}
       {/* Ambient background glow */}
       <div
         style={{
@@ -1126,66 +1394,6 @@ export function ProfileScreen({
         }}
       />
 
-      {/* Profile Header — horizontal layout like reference */}
-      <div
-        className="animate-fade-in-up"
-        style={{
-          padding: "0 14px 12px",
-          maxWidth: "430px",
-          margin: "0 auto",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "12px",
-          }}
-        >
-          <div>
-            <h1
-              style={{
-                color: "#fff",
-                fontSize: "18px",
-                fontWeight: 850,
-                lineHeight: 1.2,
-                margin: 0,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              {username.startsWith("@") ? username : `@${username}`}
-            </h1>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setShowEditProfile(true);
-            }}
-            aria-label="Settings"
-            style={{
-              width: "42px",
-              height: "42px",
-              flexShrink: 0,
-              borderRadius: "17px",
-              border: "1px solid rgba(255,255,255,0.08)",
-              background: "rgba(255,255,255,0.045)",
-              color: "#cbd5e1",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              boxShadow:
-                "0 14px 34px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
-            }}
-          >
-            <Settings size={21} strokeWidth={1.8} />
-          </button>
-        </div>
-      </div>
-
       <div
         className="animate-fade-in-up"
         style={{
@@ -1197,64 +1405,117 @@ export function ProfileScreen({
         }}
       >
         <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "center",
+            gap: "8px",
+            minHeight: "42px",
+            margin: "0 2px 4px",
+          }}
+        >
+          <div
+            style={{
+              minWidth: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <span
+              style={{
+                color: "#f8fafc",
+                fontSize: "20px",
+                fontWeight: 950,
+                lineHeight: 1,
+                letterSpacing: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {profileHeaderUsername}
+            </span>
+          </div>
+          <AppearanceToggleInline />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              justifyContent: "flex-end",
+            }}
+          >
+            {onNavigateToSearch && (
+              <button
+                type="button"
+                onClick={onNavigateToSearch}
+                aria-label="Search users"
+                title="Search users"
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  flexShrink: 0,
+                  borderRadius: "12px",
+                  border: "none",
+                  background: "transparent",
+                  color: "#f8fafc",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  boxShadow: "none",
+                  WebkitTapHighlightColor: "transparent",
+                }}
+              >
+                <Search size={19} strokeWidth={2.45} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowEditProfile(true)}
+              aria-label="Profile options"
+              title="Profile options"
+              style={{
+                width: "36px",
+                height: "36px",
+                flexShrink: 0,
+                borderRadius: "12px",
+                border: "none",
+                background: "transparent",
+                color: "#f8fafc",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "none",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              <Menu size={20} strokeWidth={2.55} />
+            </button>
+          </div>
+        </div>
+
+        <div
           className="profile-hero-card"
           style={{
-            marginBottom: "28px",
-            padding: "26px 22px 26px",
-            borderRadius: "34px",
-            border: "1px solid rgba(74,222,128,0.14)",
-            background:
-              "radial-gradient(circle at 18% -18%, rgba(74,222,128,0.16), transparent 34%), radial-gradient(circle at 96% 12%, rgba(14,165,233,0.1), transparent 34%), linear-gradient(180deg, rgba(13,24,15,0.98), rgba(6,11,7,0.99))",
-            boxShadow:
-              "0 28px 70px rgba(0,0,0,0.48), 0 0 34px rgba(74,222,128,0.06), inset 0 1px 0 rgba(255,255,255,0.055)",
-            overflow: "hidden",
+            marginBottom: "20px",
+            padding: "2px 4px 12px",
+            borderRadius: 0,
+            border: "none",
+            background: "transparent",
+            boxShadow: "none",
+            overflow: "visible",
             position: "relative",
           }}
         >
-          {/* Premium gradient accents */}
-          <div
-            style={{
-              position: "absolute",
-              inset: "0 0 auto 0",
-              height: "1px",
-              background:
-                "linear-gradient(90deg, rgba(74,222,128,0), rgba(74,222,128,0.78), rgba(14,165,233,0.42), rgba(74,222,128,0))",
-              pointerEvents: "none",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              right: "-42px",
-              top: "-54px",
-              width: "180px",
-              height: "180px",
-              borderRadius: "999px",
-              background: "rgba(74,222,128,0.08)",
-              filter: "blur(38px)",
-              pointerEvents: "none",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              left: "-64px",
-              bottom: "-72px",
-              width: "190px",
-              height: "190px",
-              borderRadius: "999px",
-              background: "rgba(14,165,233,0.055)",
-              filter: "blur(42px)",
-              pointerEvents: "none",
-            }}
-          />
-
           {/* Instagram-style horizontal layout */}
           <div
             style={{
               display: "flex",
-              alignItems: "flex-start",
-              gap: "20px",
+              alignItems: "center",
+              gap: "18px",
               width: "100%",
               position: "relative",
               zIndex: 1,
@@ -1262,7 +1523,14 @@ export function ProfileScreen({
             }}
           >
             {/* Avatar - Left side */}
-            <div style={{ position: "relative", flexShrink: 0 }}>
+            <div
+              style={{
+                position: "relative",
+                flexShrink: 0,
+                overflow: "visible",
+                isolation: "isolate",
+              }}
+            >
               <div
                 onClick={handleAvatarTap}
                 onContextMenu={(event) => event.preventDefault()}
@@ -1273,9 +1541,9 @@ export function ProfileScreen({
                     "linear-gradient(135deg, #4ade80 0%, #38bdf8 100%)",
                   border: "none",
                   boxShadow:
-                    "0 16px 34px rgba(0,0,0,0.36), 0 0 26px rgba(74,222,128,0.12)",
-                  width: "70px",
-                  height: "70px",
+                    "0 16px 34px rgba(0,0,0,0.36), 0 0 0 1px rgba(255,255,255,0.06)",
+                  width: "82px",
+                  height: "82px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -1289,17 +1557,17 @@ export function ProfileScreen({
               >
                 <div
                   style={{
-                    width: "70px",
-                    height: "70px",
+                    width: "78px",
+                    height: "78px",
                     borderRadius: "50%",
                     overflow: "hidden",
-                    border: "1px solid rgba(255,255,255,0.08)",
+                    border: "2px solid #07100b",
                   }}
                 >
                   <Avatar
                     src={user?.avatar || ""}
                     alt={displayName || "User"}
-                    size={74}
+                    size={82}
                     userId={user?.id}
                   />
                 </div>
@@ -1311,10 +1579,10 @@ export function ProfileScreen({
                 aria-label="Change avatar"
                 style={{
                   position: "absolute",
-                  bottom: "-2px",
-                  right: "-2px",
-                  width: "26px",
-                  height: "26px",
+                  bottom: "-3px",
+                  right: "-3px",
+                  width: "30px",
+                  height: "30px",
                   borderRadius: "50%",
                   background: "linear-gradient(135deg, #4ade80, #22c55e)",
                   border: "3px solid #07100b",
@@ -1323,8 +1591,11 @@ export function ProfileScreen({
                   justifyContent: "center",
                   cursor: isUploadingAvatar ? "default" : "pointer",
                   color: "#000",
-                  boxShadow: "0 4px 12px rgba(74,222,128,0.4)",
+                  boxShadow:
+                    "0 8px 18px rgba(0,0,0,0.42), 0 4px 12px rgba(74,222,128,0.4)",
                   opacity: isUploadingAvatar ? 0.72 : 1,
+                  zIndex: 5,
+                  pointerEvents: "auto",
                 }}
               >
                 {isUploadingAvatar ? (
@@ -1344,52 +1615,88 @@ export function ProfileScreen({
               </button>
             </div>
 
-            <div style={{ minWidth: 0, flex: 1, paddingTop: "6px" }}>
-              <h2
-                style={{
-                  color: "#fff",
-                  fontSize: "26px",
-                  fontWeight: 950,
-                  lineHeight: 1.05,
-                  margin: "0 0 7px",
-                  letterSpacing: "-0.035em",
-                  textShadow: "0 8px 26px rgba(0,0,0,0.28)",
-                }}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                className="profile-proof-stat-row"
+                style={{ position: "relative", zIndex: 1 }}
               >
-                {displayName}
-              </h2>
-              <p
-                style={{
-                  color: "#94a3b8",
-                  fontSize: "13px",
-                  fontWeight: 850,
-                  lineHeight: 1,
-                  margin: 0,
-                }}
-              >
-                {username.startsWith("@") ? username : `@${username}`}
-              </p>
+                {profileTopStats.map((stat) => (
+                  <button
+                    key={stat.label}
+                    type="button"
+                    onClick={stat.onClick}
+                    className="profile-proof-stat"
+                    style={{
+                      cursor: "pointer",
+                      WebkitTapHighlightColor: "transparent",
+                    }}
+                  >
+                    <span className="profile-proof-stat-value">
+                      {formatProfileCount(stat.value)}
+                    </span>
+                    <span className="profile-proof-stat-label">
+                      {stat.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Compact bio */}
+          {/* Identity and bio */}
           <div
             style={{
               position: "relative",
               zIndex: 1,
             }}
           >
+            <h2
+              style={{
+                color: "#fff",
+                fontSize: "22px",
+                fontWeight: 900,
+                lineHeight: 1.1,
+                margin: "0 0 5px",
+                letterSpacing: "-0.025em",
+              }}
+            >
+              {displayName}
+            </h2>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                margin: "0 0 12px",
+                minWidth: 0,
+              }}
+            >
+              <p
+                style={{
+                  color: "#94a3b8",
+                  fontSize: "13px",
+                  fontWeight: 750,
+                  lineHeight: 1,
+                  margin: 0,
+                  minWidth: 0,
+                }}
+              >
+                {username.startsWith("@") ? username : `@${username}`}
+              </p>
+            </div>
             <p
               style={{
-                color: "#d7ffe6",
+                color: "rgba(255,255,255,0.78)",
                 fontSize: "14px",
-                lineHeight: 1.45,
+                lineHeight: 1.42,
                 margin: "0",
                 maxWidth: "100%",
-                whiteSpace: "nowrap",
+                whiteSpace: "normal",
                 overflow: "hidden",
-                textOverflow: "ellipsis",
-                fontWeight: 850,
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                fontWeight: 600,
                 letterSpacing: "-0.01em",
               }}
             >
@@ -1397,161 +1704,34 @@ export function ProfileScreen({
                 "Proof-first posts, real dares, close-friend stories."}
             </p>
           </div>
-
-          <div
-            className="profile-proof-stat-row"
-            style={{ position: "relative", zIndex: 1 }}
-          >
-            {[
-              {
-                label: "Dares",
-                value: profileStats.daresCompleted,
-                primary: true,
-                onClick: undefined,
-              },
-              {
-                label: "Truths",
-                value: profileTruthsCount,
-                primary: false,
-                onClick: undefined,
-              },
-              {
-                label: "Friends",
-                value: profileStats.friends,
-                primary: false,
-                onClick: handleFriendsClick,
-              },
-            ].map((stat) => (
-              <button
-                key={stat.label}
-                type="button"
-                onClick={stat.onClick}
-                className={`profile-proof-stat ${stat.primary ? "is-primary" : ""}`}
-                style={{
-                  cursor: stat.onClick ? "pointer" : "default",
-                  WebkitTapHighlightColor: "transparent",
-                }}
-              >
-                <span className="profile-proof-stat-text">
-                  {stat.value} {stat.label}
-                </span>
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Subtle profile actions */}
         <div
           style={{
-            margin: "-12px 16px 18px",
+            margin: "-22px 16px 18px",
             padding: 0,
           }}
         >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr auto",
+              gridTemplateColumns: "1fr",
               gap: "8px",
             }}
           >
             <button
               type="button"
-              onClick={() => setShowEditProfile(true)}
-              style={{
-                minHeight: "40px",
-                borderRadius: "999px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(255,255,255,0.045)",
-                color: "#d7ffe6",
-                fontSize: "13px",
-                fontWeight: 850,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(74,222,128,0.08)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(255,255,255,0.045)";
-              }}
+              onClick={() => setShowRelationshipsScreen(true)}
+              className="activity-radar-cta"
             >
-              Edit profile
-            </button>
-            <button
-              type="button"
-              onClick={onNavigateToActivity}
-              disabled={!onNavigateToActivity}
-              style={{
-                minHeight: "40px",
-                borderRadius: "999px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(255,255,255,0.045)",
-                color: "#d7ffe6",
-                fontSize: "13px",
-                fontWeight: 850,
-                cursor: onNavigateToActivity ? "pointer" : "default",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: onNavigateToActivity ? 1 : 0.5,
-                transition: "all 0.2s ease",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-              }}
-              onMouseEnter={(e) => {
-                if (onNavigateToActivity) {
-                  e.currentTarget.style.background = "rgba(74,222,128,0.08)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(255,255,255,0.045)";
-              }}
-            >
-              View activity
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsGhostMode(!isGhostMode)}
-              aria-label="Toggle ghost mode"
-              style={{
-                width: "40px",
-                height: "40px",
-                borderRadius: "999px",
-                border: isGhostMode
-                  ? "1px solid rgba(74,222,128,0.44)"
-                  : "1px solid rgba(255,255,255,0.08)",
-                background: isGhostMode
-                  ? "rgba(74,222,128,0.16)"
-                  : "rgba(255,255,255,0.045)",
-                color: isGhostMode ? "#4ade80" : "#cbd5e1",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                boxShadow: isGhostMode
-                  ? "0 0 22px rgba(74,222,128,0.16), inset 0 1px 0 rgba(255,255,255,0.05)"
-                  : "inset 0 1px 0 rgba(255,255,255,0.04)",
-              }}
-              onMouseEnter={(e) => {
-                if (isGhostMode) {
-                  e.currentTarget.style.background = "rgba(74,222,128,0.25)";
-                } else {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (isGhostMode) {
-                  e.currentTarget.style.background = "rgba(74,222,128,0.16)";
-                } else {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.045)";
-                }
-              }}
-            >
-              <Shield size={17} strokeWidth={2.2} />
+              <span className="activity-radar-orb">
+                <Heart size={18} strokeWidth={2.8} />
+              </span>
+              <span className="activity-radar-copy">
+                <span className="activity-radar-title">Relationships</span>
+                <span className="activity-radar-subtitle">Conflicts, allies, rivals</span>
+              </span>
             </button>
           </div>
         </div>
@@ -1787,7 +1967,7 @@ export function ProfileScreen({
                             fontWeight: 700,
                           }}
                         >
-                          ♥ {Object.keys(post.likesByUser || {}).length}
+                          â™¥ {formatProfileCount(getPostLikeCount(post))}
                         </span>
                         <span
                           style={{
@@ -1796,7 +1976,7 @@ export function ProfileScreen({
                             fontWeight: 700,
                           }}
                         >
-                          💬 {post.comments_count || 0}
+                          ðŸ’¬ {formatProfileCount(toSafeCount(post.comments_count))}
                         </span>
                       </div>
                     </div>
@@ -1839,7 +2019,7 @@ export function ProfileScreen({
                         >
                           {post.media?.type === "video"
                             ? `Views ${post.stats?.views ?? 0}`
-                            : `Likes ${Object.keys(post.likesByUser || {}).length}`}
+                            : `Likes ${formatProfileCount(getPostLikeCount(post))}`}
                         </span>
                       </div>
                     </div>
@@ -1889,13 +2069,12 @@ export function ProfileScreen({
         {activeTab === "truths" && (
           <div
             style={{
-              padding: "20px",
-              borderRadius: "34px",
-              border: "1px solid rgba(255,255,255,0.08)",
-              background:
-                "linear-gradient(180deg, rgba(16,20,17,0.96), rgba(7,9,8,0.98))",
-              boxShadow:
-                "0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+              padding: 0,
+              borderRadius: 0,
+              border: "none",
+              background: "transparent",
+              boxShadow: "none",
+              touchAction: "pan-y",
             }}
           >
             {loadingTruth ? (
@@ -1931,7 +2110,7 @@ export function ProfileScreen({
                   Loading truths...
                 </span>
               </div>
-            ) : userTruthPosts.length === 0 ? (
+            ) : approvedUserTruthPosts.length === 0 ? (
               <div style={{ padding: "64px 24px", textAlign: "center" }}>
                 <MessageSquare
                   size={36}
@@ -1963,10 +2142,10 @@ export function ProfileScreen({
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  gap: "22px",
+                  gap: "14px",
                 }}
               >
-                {userTruthPosts.map((truth, index) => {
+                {approvedUserTruthPosts.map((truth, index) => {
                   const badge =
                     truth.state === "APPROVED"
                       ? { label: "Approved", color: "#4ade80" }
@@ -1991,52 +2170,63 @@ export function ProfileScreen({
                         animationDelay: `${index * 0.04}s`,
                         width: "100%",
                         background:
-                          "linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        borderLeft: `3px solid ${badge.color}`,
-                        borderRadius: "20px",
-                        padding: "24px 28px",
+                          "radial-gradient(circle at 10% 0%, rgba(74,222,128,0.13), transparent 34%), radial-gradient(circle at 96% 0%, rgba(56,189,248,0.08), transparent 34%), linear-gradient(180deg, rgba(19,28,22,0.98), rgba(6,10,8,0.99))",
+                        border: `1px solid ${badge.color}36`,
+                        borderRadius: "25px",
+                        padding: "14px",
                         color: "#fff",
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "flex-start",
-                        gap: "18px",
+                        gap: "12px",
+                        position: "relative",
+                        overflow: "hidden",
                         boxShadow:
-                          "0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 24px rgba(0,0,0,0.28)",
+                          "0 18px 44px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.07)",
                         transition:
-                          "border-color 0.2s ease, transform 0.15s ease",
+                          "border-color 0.2s ease, transform 0.15s ease, filter 0.15s ease",
+                        WebkitTapHighlightColor: "transparent",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = "translateY(-1px)";
+                        e.currentTarget.style.filter = "brightness(1.04)";
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.filter = "brightness(1)";
                       }}
                     >
-                      {/* Accent dot */}
                       <div
                         style={{
-                          width: "10px",
-                          height: "10px",
-                          borderRadius: "50%",
-                          background: badge.color,
-                          boxShadow: `0 0 14px ${badge.color}90`,
+                          width: "38px",
+                          height: "38px",
+                          borderRadius: "16px",
+                          background:
+                            "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025))",
+                          border: `1px solid ${badge.color}36`,
+                          color: badge.color,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: `0 12px 28px rgba(0,0,0,0.28), 0 0 20px ${badge.color}24`,
                           flexShrink: 0,
-                          marginTop: "7px",
                         }}
-                      />
+                      >
+                        <MessageSquare size={18} strokeWidth={2.7} />
+                      </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
+                            flexWrap: "wrap",
                             gap: "6px",
                             margin: 0,
-                            fontSize: "14px",
-                            fontWeight: 600,
+                            fontSize: "13px",
+                            fontWeight: 800,
                             lineHeight: 1.3,
-                            color: "rgba(255,255,255,0.55)",
-                            letterSpacing: "-0.005em",
+                            color: "rgba(255,255,255,0.58)",
+                            letterSpacing: 0,
                           }}
                         >
                           <button
@@ -2067,14 +2257,15 @@ export function ProfileScreen({
                                 height: "20px",
                                 borderRadius: "50%",
                                 objectFit: "cover",
-                                border: "1px solid rgba(255,255,255,0.2)",
+                                border: "1px solid rgba(255,255,255,0.14)",
+                                boxShadow: "0 5px 12px rgba(0,0,0,0.26)",
                               }}
                             />
-                            <span
-                              style={{
-                                color: "rgba(255,255,255,0.9)",
-                                fontSize: "14px",
-                                fontWeight: 600,
+                              <span
+                                style={{
+                                color: "rgba(255,255,255,0.92)",
+                                fontSize: "13px",
+                                fontWeight: 850,
                               }}
                             >
                               {truth.challenger.nickname}
@@ -2083,11 +2274,15 @@ export function ProfileScreen({
                           <span
                             style={{
                               margin: "0 6px",
-                              color: "rgba(255,255,255,0.35)",
-                              fontWeight: 500,
+                              color: "#86efac",
+                              fontSize: "10.5px",
+                              fontWeight: 950,
+                              letterSpacing: "0.08em",
+                              textTransform: "uppercase",
+                              textShadow: "0 0 14px rgba(74,222,128,0.34)",
                             }}
                           >
-                            asked
+                            Asked
                           </span>
                           <button
                             onClick={(e) => {
@@ -2117,14 +2312,15 @@ export function ProfileScreen({
                                 height: "20px",
                                 borderRadius: "50%",
                                 objectFit: "cover",
-                                border: "1px solid rgba(255,255,255,0.2)",
+                                border: "1px solid rgba(255,255,255,0.14)",
+                                boxShadow: "0 5px 12px rgba(0,0,0,0.26)",
                               }}
                             />
-                            <span
-                              style={{
-                                color: "rgba(255,255,255,0.9)",
-                                fontSize: "14px",
-                                fontWeight: 600,
+                              <span
+                                style={{
+                                color: "rgba(255,255,255,0.92)",
+                                fontSize: "13px",
+                                fontWeight: 850,
                               }}
                             >
                               {truth.receiver.nickname}
@@ -2134,11 +2330,11 @@ export function ProfileScreen({
                         {truth.question && (
                           <p
                             style={{
-                              margin: "8px 0 0",
-                              fontSize: "19px",
-                              fontWeight: 700,
+                              margin: "10px 0 0",
+                              fontSize: "16px",
+                              fontWeight: 900,
                               lineHeight: 1.35,
-                              letterSpacing: "-0.02em",
+                              letterSpacing: 0,
                               color: "#fff",
                               overflow: "hidden",
                               display: "-webkit-box",
@@ -2153,30 +2349,17 @@ export function ProfileScreen({
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: "10px",
-                            marginTop: "13px",
+                            justifyContent: "space-between",
+                            gap: "8px",
+                            marginTop: "14px",
+                            flexWrap: "wrap",
                           }}
                         >
                           <span
                             style={{
-                              fontSize: "11px",
-                              fontWeight: 700,
-                              color: badge.color,
-                              letterSpacing: "0.1em",
-                              textTransform: "uppercase",
-                              padding: "5px 12px",
-                              borderRadius: "99px",
-                              background: `${badge.color}18`,
-                              border: `1px solid ${badge.color}40`,
-                            }}
-                          >
-                            {badge.label}
-                          </span>
-                          <span
-                            style={{
                               color: "rgba(255,255,255,0.4)",
-                              fontSize: "13px",
-                              fontWeight: 500,
+                              fontSize: "12px",
+                              fontWeight: 750,
                             }}
                           >
                             {formatTimeAgo(truth.createdAt)}
@@ -2194,13 +2377,12 @@ export function ProfileScreen({
         {activeTab === "dares" && (
           <div
             style={{
-              padding: "20px",
-              borderRadius: "34px",
-              border: "1px solid rgba(255,255,255,0.08)",
-              background:
-                "linear-gradient(180deg, rgba(16,20,17,0.96), rgba(7,9,8,0.98))",
-              boxShadow:
-                "0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+              padding: 0,
+              borderRadius: 0,
+              border: "none",
+              background: "transparent",
+              boxShadow: "none",
+              touchAction: "pan-y",
             }}
           >
             {loadingDares ? (
@@ -2236,7 +2418,7 @@ export function ProfileScreen({
                   Loading dares...
                 </span>
               </div>
-            ) : userDarePosts.length === 0 ? (
+            ) : completedUserDarePosts.length === 0 ? (
               <div style={{ padding: "64px 24px", textAlign: "center" }}>
                 <Target
                   size={36}
@@ -2268,10 +2450,10 @@ export function ProfileScreen({
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  gap: "22px",
+                  gap: "14px",
                 }}
               >
-                {userDarePosts.map((dare, index) => {
+                {completedUserDarePosts.map((dare, index) => {
                   const badge =
                     dare.state === "ACCEPTED_REAL"
                       ? { label: "Completed", color: "#4ade80" }
@@ -2289,6 +2471,8 @@ export function ProfileScreen({
                                   label: "Pending",
                                   color: "rgba(255,255,255,0.4)",
                                 };
+                  const darePreviewUrl =
+                    dare.proof?.thumbnail || dare.proof?.url || "";
                   return (
                     <div
                       key={dare.id}
@@ -2300,52 +2484,63 @@ export function ProfileScreen({
                         animationDelay: `${index * 0.04}s`,
                         width: "100%",
                         background:
-                          "linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        borderLeft: `3px solid ${badge.color}`,
-                        borderRadius: "20px",
-                        padding: "24px 28px",
+                          "radial-gradient(circle at 10% 0%, rgba(74,222,128,0.13), transparent 34%), radial-gradient(circle at 96% 0%, rgba(56,189,248,0.08), transparent 34%), linear-gradient(180deg, rgba(19,28,22,0.98), rgba(6,10,8,0.99))",
+                        border: `1px solid ${badge.color}36`,
+                        borderRadius: "25px",
+                        padding: "14px",
                         color: "#fff",
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "flex-start",
-                        gap: "18px",
+                        gap: "12px",
+                        position: "relative",
+                        overflow: "hidden",
                         boxShadow:
-                          "0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 24px rgba(0,0,0,0.28)",
+                          "0 18px 44px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.07)",
                         transition:
-                          "border-color 0.2s ease, transform 0.15s ease",
+                          "border-color 0.2s ease, transform 0.15s ease, filter 0.15s ease",
+                        WebkitTapHighlightColor: "transparent",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = "translateY(-1px)";
+                        e.currentTarget.style.filter = "brightness(1.04)";
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.filter = "brightness(1)";
                       }}
                     >
-                      {/* Accent dot */}
                       <div
                         style={{
-                          width: "10px",
-                          height: "10px",
-                          borderRadius: "50%",
-                          background: badge.color,
-                          boxShadow: `0 0 14px ${badge.color}90`,
+                          width: "38px",
+                          height: "38px",
+                          borderRadius: "16px",
+                          background:
+                            "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025))",
+                          border: `1px solid ${badge.color}36`,
+                          color: badge.color,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: `0 12px 28px rgba(0,0,0,0.28), 0 0 20px ${badge.color}24`,
                           flexShrink: 0,
-                          marginTop: "7px",
                         }}
-                      />
+                      >
+                        <Target size={18} strokeWidth={2.7} />
+                      </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
+                            flexWrap: "wrap",
                             gap: "6px",
                             margin: 0,
-                            fontSize: "14px",
-                            fontWeight: 600,
+                            fontSize: "13px",
+                            fontWeight: 800,
                             lineHeight: 1.3,
-                            color: "rgba(255,255,255,0.55)",
-                            letterSpacing: "-0.005em",
+                            color: "rgba(255,255,255,0.58)",
+                            letterSpacing: 0,
                           }}
                         >
                           <button
@@ -2376,14 +2571,15 @@ export function ProfileScreen({
                                 height: "20px",
                                 borderRadius: "50%",
                                 objectFit: "cover",
-                                border: "1px solid rgba(255,255,255,0.2)",
+                                border: "1px solid rgba(255,255,255,0.14)",
+                                boxShadow: "0 5px 12px rgba(0,0,0,0.26)",
                               }}
                             />
-                            <span
-                              style={{
-                                color: "rgba(255,255,255,0.9)",
-                                fontSize: "14px",
-                                fontWeight: 600,
+                              <span
+                                style={{
+                                color: "rgba(255,255,255,0.92)",
+                                fontSize: "13px",
+                                fontWeight: 850,
                               }}
                             >
                               {dare.challenger.nickname}
@@ -2392,11 +2588,15 @@ export function ProfileScreen({
                           <span
                             style={{
                               margin: "0 6px",
-                              color: "rgba(255,255,255,0.35)",
-                              fontWeight: 500,
+                              color: "#86efac",
+                              fontSize: "10.5px",
+                              fontWeight: 950,
+                              letterSpacing: "0.08em",
+                              textTransform: "uppercase",
+                              textShadow: "0 0 14px rgba(74,222,128,0.34)",
                             }}
                           >
-                            dared
+                            Dared
                           </span>
                           <button
                             onClick={(e) => {
@@ -2426,14 +2626,15 @@ export function ProfileScreen({
                                 height: "20px",
                                 borderRadius: "50%",
                                 objectFit: "cover",
-                                border: "1px solid rgba(255,255,255,0.2)",
+                                border: "1px solid rgba(255,255,255,0.14)",
+                                boxShadow: "0 5px 12px rgba(0,0,0,0.26)",
                               }}
                             />
-                            <span
-                              style={{
-                                color: "rgba(255,255,255,0.9)",
-                                fontSize: "14px",
-                                fontWeight: 600,
+                              <span
+                                style={{
+                                color: "rgba(255,255,255,0.92)",
+                                fontSize: "13px",
+                                fontWeight: 850,
                               }}
                             >
                               {dare.receiver.nickname}
@@ -2443,11 +2644,11 @@ export function ProfileScreen({
                         {dare.description && (
                           <p
                             style={{
-                              margin: "8px 0 0",
-                              fontSize: "19px",
-                              fontWeight: 700,
+                              margin: "10px 0 0",
+                              fontSize: "16px",
+                              fontWeight: 900,
                               lineHeight: 1.35,
-                              letterSpacing: "-0.02em",
+                              letterSpacing: 0,
                               color: "#fff",
                               overflow: "hidden",
                               display: "-webkit-box",
@@ -2462,35 +2663,101 @@ export function ProfileScreen({
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: "10px",
-                            marginTop: "13px",
+                            justifyContent: "space-between",
+                            gap: "8px",
+                            marginTop: "14px",
+                            flexWrap: "wrap",
                           }}
                         >
                           <span
                             style={{
-                              fontSize: "11px",
-                              fontWeight: 700,
-                              color: badge.color,
-                              letterSpacing: "0.1em",
-                              textTransform: "uppercase",
-                              padding: "5px 12px",
-                              borderRadius: "99px",
-                              background: `${badge.color}18`,
-                              border: `1px solid ${badge.color}40`,
-                            }}
-                          >
-                            {badge.label}
-                          </span>
-                          <span
-                            style={{
                               color: "rgba(255,255,255,0.4)",
-                              fontSize: "13px",
-                              fontWeight: 500,
+                              fontSize: "12px",
+                              fontWeight: 750,
                             }}
                           >
                             {formatTimeAgo(dare.createdAt)}
                           </span>
                         </div>
+                      </div>
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          width: "74px",
+                          height: "92px",
+                          flexShrink: 0,
+                          alignSelf: "stretch",
+                          minHeight: "92px",
+                          borderRadius: "18px",
+                          overflow: "hidden",
+                          border: `1px solid ${badge.color}30`,
+                          background:
+                            "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))",
+                          boxShadow:
+                            "0 14px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08)",
+                          position: "relative",
+                        }}
+                      >
+                        {darePreviewUrl ? (
+                          <>
+                            <img
+                              src={darePreviewUrl}
+                              alt=""
+                              loading="lazy"
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                display: "block",
+                              }}
+                            />
+                            <span
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                background:
+                                  "linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.34))",
+                              }}
+                            />
+                            {dare.proof?.type === "video" && (
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  right: "7px",
+                                  bottom: "7px",
+                                  width: "24px",
+                                  height: "24px",
+                                  borderRadius: "999px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  background: "rgba(0,0,0,0.58)",
+                                  border: "1px solid rgba(255,255,255,0.16)",
+                                  color: "#fff",
+                                  backdropFilter: "blur(8px)",
+                                  WebkitBackdropFilter: "blur(8px)",
+                                }}
+                              >
+                                <Play size={12} fill="currentColor" />
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <div
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: badge.color,
+                              background:
+                                "radial-gradient(circle at 35% 24%, rgba(74,222,128,0.18), transparent 44%), linear-gradient(180deg, rgba(10,18,13,0.95), rgba(4,8,6,0.98))",
+                            }}
+                          >
+                            <Target size={22} strokeWidth={2.5} />
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -2532,6 +2799,7 @@ export function ProfileScreen({
           <span>Logout</span>
         </button>
       </div>
+      </div>
 
       <input
         ref={avatarFileInputRef}
@@ -2550,7 +2818,7 @@ export function ProfileScreen({
             inset: 0,
             zIndex: 1600,
             background:
-              "radial-gradient(circle at 50% 20%, rgba(74,222,128,0.12), transparent 34%), rgba(0,0,0,0.92)",
+              "linear-gradient(180deg, #141414 0%, #0e0e0e 52%, #0a0a0a 100%)",
             backdropFilter: "blur(18px)",
             WebkitBackdropFilter: "blur(18px)",
             display: "flex",
@@ -2597,21 +2865,22 @@ export function ProfileScreen({
               borderRadius: "50%",
               padding: "4px",
               background:
-                "linear-gradient(135deg, rgba(74,222,128,0.95), rgba(255,255,255,0.22) 44%, rgba(96,165,250,0.42))",
+                "linear-gradient(180deg, #141414 0%, #0e0e0e 52%, #0a0a0a 100%)",
               boxShadow:
                 "0 30px 100px rgba(0,0,0,0.58), 0 0 60px rgba(74,222,128,0.14), inset 0 1px 0 rgba(255,255,255,0.2)",
               position: "relative",
             }}
           >
-            <img
+            <Avatar
               src={avatarPreviewSrc}
               alt={`${displayName}'s avatar`}
+              size={400}
+              userId={user?.id}
+              disableRealtime
               style={{
                 width: "100%",
                 height: "100%",
                 borderRadius: "50%",
-                objectFit: "cover",
-                display: "block",
                 background: "#111611",
               }}
             />
@@ -2698,6 +2967,37 @@ export function ProfileScreen({
           <FriendsScreen
             onBack={() => setShowFriendsScreen(false)}
             onNavigateToProfile={onNavigateToProfile}
+          />
+        </div>
+      )}
+
+      {showRelationshipsScreen && user?.id && (
+        <div
+          className="app-story-shell"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1000,
+            backgroundColor: "#050806",
+          }}
+        >
+          <RelationshipsScreen
+            onBack={() => setShowRelationshipsScreen(false)}
+            currentUser={{
+              id: user.id,
+              display_name: displayName,
+              username: username.replace(/^@/, ""),
+              avatar_url: user.avatar || avatarPreviewSrc || "",
+            }}
+            profileUser={{
+              id: user.id,
+              display_name: displayName,
+              username: username.replace(/^@/, ""),
+              avatar_url: user.avatar || avatarPreviewSrc || "",
+            }}
           />
         </div>
       )}

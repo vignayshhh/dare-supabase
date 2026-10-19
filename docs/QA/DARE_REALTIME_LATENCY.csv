@@ -1,0 +1,2 @@
+sample,marker,publication_confirmed,b_visible_without_manual_refresh,latency_ms,measurement_note
+1,DARE-QA-20261013-a1c-realtime-1791923619315,true,true,,B's feed screenshot showed the marker before the test timed out on an overly exact locator; the corrected substring assertion passed in a read-only replay, so no precise host latency is claimed.

@@ -12,8 +12,6 @@ export class UserProfileEntity {
     public readonly consentAccepted: boolean,
     public readonly daresCompleted: number,
     public readonly daresRefused: number,
-    public readonly ghostModeActive: boolean,
-    public readonly ghostModeExpiresAt: string | null,
     public readonly createdAt: string,
     public readonly updatedAt: string,
   ) {}
@@ -31,8 +29,6 @@ export class UserProfileEntity {
     consentAccepted: boolean;
     daresCompleted: number;
     daresRefused: number;
-    ghostModeActive: boolean;
-    ghostModeExpiresAt: string | null;
     createdAt: string;
     updatedAt: string;
   }): UserProfileEntity {
@@ -49,8 +45,6 @@ export class UserProfileEntity {
       data.consentAccepted,
       data.daresCompleted,
       data.daresRefused,
-      data.ghostModeActive,
-      data.ghostModeExpiresAt,
       data.createdAt,
       data.updatedAt,
     );
@@ -62,13 +56,6 @@ export class UserProfileEntity {
 
   isPrivate(): boolean {
     return this.visibility === "PRIVATE";
-  }
-
-  isGhostModeActive(): boolean {
-    if (!this.ghostModeActive || !this.ghostModeExpiresAt) {
-      return false;
-    }
-    return new Date(this.ghostModeExpiresAt) > new Date();
   }
 
   canBeViewedBy(viewerId?: string): boolean {
@@ -84,7 +71,7 @@ export class UserProfileEntity {
   }
 
   canReceiveDares(): boolean {
-    return this.is18Plus && this.consentAccepted && !this.isGhostModeActive();
+    return this.is18Plus && this.consentAccepted;
   }
 
   updateProfile(updates: {
@@ -93,8 +80,6 @@ export class UserProfileEntity {
     bio?: string;
     avatarUrl?: string;
     visibility?: "PUBLIC" | "PRIVATE";
-    ghostModeActive?: boolean;
-    ghostModeExpiresAt?: string | null;
   }): UserProfileEntity {
     return new UserProfileEntity(
       this.id,
@@ -109,8 +94,6 @@ export class UserProfileEntity {
       this.consentAccepted,
       this.daresCompleted,
       this.daresRefused,
-      updates.ghostModeActive ?? this.ghostModeActive,
-      updates.ghostModeExpiresAt ?? this.ghostModeExpiresAt,
       this.createdAt,
       new Date().toISOString(),
     );
@@ -130,8 +113,6 @@ export class UserProfileEntity {
       this.consentAccepted,
       this.daresCompleted + 1,
       this.daresRefused,
-      this.ghostModeActive,
-      this.ghostModeExpiresAt,
       this.createdAt,
       new Date().toISOString(),
     );
@@ -151,8 +132,6 @@ export class UserProfileEntity {
       this.consentAccepted,
       this.daresCompleted,
       this.daresRefused + 1,
-      this.ghostModeActive,
-      this.ghostModeExpiresAt,
       this.createdAt,
       new Date().toISOString(),
     );

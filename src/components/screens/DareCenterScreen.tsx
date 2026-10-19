@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Bell,
+  Cake,
   CheckCircle2,
   Clock3,
   Eye,
@@ -17,7 +18,6 @@ import {
   Search,
   Send,
   Share2,
-  ShieldCheck,
   Sparkles,
   Target,
   Upload,
@@ -32,7 +32,8 @@ type CenterTarget =
   | "feed"
   | "main"
   | "alerts"
-  | "chat";
+  | "chat"
+  | "birthday";
 
 type DareCenterPage = {
   id: string;
@@ -85,25 +86,6 @@ const pages: DareCenterPage[] = [
     ],
     cta: "Go to Dares",
     ctaTarget: "dares",
-  },
-  {
-    id: "ghost",
-    eyebrow: "After approval",
-    title: "Ghost Mode rewards completed dares",
-    body: "When a dare is accepted as real, the app activates a short quiet window that suppresses surveillance-style alerts.",
-    accent: "#86efac",
-    icon: ShieldCheck,
-    steps: [
-      "Complete a dare and get it approved as real.",
-      "Watch the DARE header turn into a live countdown.",
-      "During Ghost Mode, profile, photo, mention, and like alerts stay quiet.",
-    ],
-    stats: [
-      ["15 min", "standard timer"],
-      ["Quiet", "alert suppression"],
-    ],
-    cta: "See alerts",
-    ctaTarget: "alerts",
   },
   {
     id: "truth",
@@ -172,7 +154,6 @@ const pages: DareCenterPage[] = [
     steps: [
       "Open Alerts to split social notifications from suspicious signals.",
       "Live profile views update while someone is on your profile.",
-      "Ghost Mode suppresses these signals when someone earned privacy.",
     ],
     stats: [
       ["Live", "profile watching"],
@@ -199,6 +180,25 @@ const pages: DareCenterPage[] = [
     ],
     cta: "Go Home",
     ctaTarget: "feed",
+  },
+  {
+    id: "birthday",
+    eyebrow: "Birthday rooms",
+    title: "A 24-hour room for wishes, memories, secrets, and dares",
+    body: "On your birthday, friends get one live room to drop wishes, old photos, anonymous compliments, birthday dares, inside jokes, and reactions. After the day ends, it becomes your private memory capsule.",
+    accent: "#fb7185",
+    icon: Cake,
+    steps: [
+      "The room unlocks for the birthday day and stays live for 24 hours.",
+      "Friends drop memories, media, reactions, anonymous notes, and dares.",
+      "After midnight, the room locks into a private replay capsule.",
+    ],
+    stats: [
+      ["24h", "live window"],
+      ["Replay", "private archive"],
+    ],
+    cta: "Open Birthday Room",
+    ctaTarget: "birthday",
   },
   {
     id: "messaging",
@@ -431,6 +431,7 @@ export function DareCenterScreen({
   onOpenMain,
   onOpenAlerts,
   onOpenChat,
+  onOpenBirthdayRoom,
 }: {
   onBack: () => void;
   onOpenCreate: () => void;
@@ -440,6 +441,7 @@ export function DareCenterScreen({
   onOpenMain: () => void;
   onOpenAlerts: () => void;
   onOpenChat: () => void;
+  onOpenBirthdayRoom: () => void;
 }) {
   const [activePage, setActivePage] = useState(0);
   const page = pages[activePage];
@@ -472,6 +474,9 @@ export function DareCenterScreen({
       case "chat":
         onOpenChat();
         break;
+      case "birthday":
+        onOpenBirthdayRoom();
+        break;
     }
   };
 
@@ -483,7 +488,7 @@ export function DareCenterScreen({
             radial-gradient(circle at 50% -12%, rgba(74,222,128,0.18), transparent 34%),
             radial-gradient(circle at 12% 18%, rgba(14,165,233,0.12), transparent 28%),
             linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%);
-          font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+          font-family: var(--font-ui);
         }
         @keyframes dareCenterFloatIn {
           from { opacity: 0; transform: translateY(18px) scale(0.98); }

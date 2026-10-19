@@ -1,0 +1,166 @@
+<svg width="390" height="844" viewBox="0 0 390 844" fill="none" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, -apple-system, sans-serif">
+  <!-- ============================================================
+       CONCEPT 04 — GOLDEN GAVEL
+       Prestige courtroom drama: deep purple velvet + gold trim,
+       tall ornate bench, curtain wings, witness stand spotlight,
+       verdict scales as the centerpiece. Reality-TV grandeur.
+  ============================================================ -->
+  <defs>
+    <linearGradient id="ggBg" x1="0" y1="0" x2="0" y2="844" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17102a"/>
+      <stop offset="0.5" stop-color="#120b21"/>
+      <stop offset="1" stop-color="#090514"/>
+    </linearGradient>
+    <radialGradient id="ggSpot" cx="0.5" cy="0.28" r="0.45">
+      <stop offset="0" stop-color="#facc15" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#facc15" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ggGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset="0.5" stop-color="#facc15"/>
+      <stop offset="1" stop-color="#ca8a04"/>
+    </linearGradient>
+    <linearGradient id="ggCurtain" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b1d5e"/>
+      <stop offset="1" stop-color="#1d0f33"/>
+    </linearGradient>
+    <g id="ggBody" stroke="#ffffff" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="0" x2="0" y2="20"/>
+      <line x1="0" y1="6" x2="-11" y2="14"/>
+      <line x1="0" y1="6" x2="11" y2="14"/>
+      <line x1="0" y1="20" x2="-9" y2="33"/>
+      <line x1="0" y1="20" x2="9" y2="33"/>
+    </g>
+  </defs>
+
+  <rect width="390" height="844" fill="url(#ggBg)"/>
+  <rect width="390" height="520" fill="url(#ggSpot)"/>
+
+  <!-- curtain wings -->
+  <path d="M0 40 Q26 200 8 420 Q40 300 34 40 Z" fill="url(#ggCurtain)"/>
+  <path d="M390 40 Q364 200 382 420 Q350 300 356 40 Z" fill="url(#ggCurtain)"/>
+  <path d="M0 40 Q60 66 120 58 Q195 50 270 58 Q330 66 390 40 L390 76 Q195 96 0 76 Z" fill="#2a1545"/>
+  <path d="M0 72 Q195 94 390 72 L390 78 Q195 100 0 78 Z" fill="url(#ggGold)" opacity="0.7"/>
+
+  <!-- status bar -->
+  <text x="30" y="30" fill="#fff" font-size="13" font-weight="700">9:41</text>
+  <rect x="336" y="20" width="22" height="11" rx="3" stroke="#ffffff66"/>
+  <rect x="338" y="22" width="14" height="7" rx="1.5" fill="#facc15"/>
+
+  <!-- header -->
+  <rect x="16" y="96" width="36" height="36" rx="14" fill="#ffffff0a" stroke="#facc1533"/>
+  <path d="M40 114 H30 M34 109 l-5 5 5 5" stroke="#e9d5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="195" y="112" text-anchor="middle" fill="#fde68a" font-size="10" font-weight="900" letter-spacing="4">THE HIGH COURT OF FRIENDSHIP</text>
+  <text x="195" y="132" text-anchor="middle" fill="#fff" font-size="15" font-weight="900">Who ruined the Goa trip?</text>
+  <text x="195" y="148" text-anchor="middle" fill="#a78bca" font-size="10" font-weight="600">Session 42 · The Crown vs. Rahul</text>
+
+  <!-- ── ORNATE BENCH with judge ── -->
+  <g transform="translate(195,208)">
+    <circle r="20" fill="url(#ggGold)"/>
+    <circle r="16.5" fill="#241536"/>
+    <text y="6" text-anchor="middle" fill="#fde68a" font-size="15" font-weight="900">P</text>
+    <!-- gold laurel around head -->
+    <path d="M-24 2 q-4 -16 10 -24 M24 2 q4 -16 -10 -24" stroke="#facc15" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <use href="#ggBody" y="20"/>
+  </g>
+  <!-- tall bench -->
+  <path d="M96 282 L118 262 L272 262 L294 282 Z" fill="#2a1545" stroke="#facc1566"/>
+  <rect x="96" y="282" width="198" height="46" rx="8" fill="#1d0f33" stroke="#facc1580" stroke-width="1.5"/>
+  <rect x="96" y="282" width="198" height="7" fill="url(#ggGold)" opacity="0.85"/>
+  <text x="195" y="312" text-anchor="middle" fill="#fde68a" font-size="11" font-weight="900" letter-spacing="3">✦ HON. JUDGE PRIYA ✦</text>
+  <!-- gavel resting on bench -->
+  <g transform="translate(276,272) rotate(-24)">
+    <rect x="-3" y="0" width="5" height="22" rx="2.5" fill="#ca8a04"/>
+    <rect x="-11" y="-8" width="21" height="11" rx="4" fill="url(#ggGold)"/>
+  </g>
+
+  <!-- ── SCALES OF FRIENDSHIP (hero verdict) ── -->
+  <g transform="translate(195,392)">
+    <line x1="0" y1="-28" x2="0" y2="30" stroke="url(#ggGold)" stroke-width="4" stroke-linecap="round"/>
+    <line x1="-92" y1="-16" x2="92" y2="-30" stroke="url(#ggGold)" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="0" cy="-34" r="6" fill="url(#ggGold)"/>
+    <!-- left pan (guilty, heavier = lower) -->
+    <line x1="-92" y1="-16" x2="-112" y2="16" stroke="#fde68a99" stroke-width="1.5"/>
+    <line x1="-92" y1="-16" x2="-72" y2="16" stroke="#fde68a99" stroke-width="1.5"/>
+    <path d="M-118 16 Q-92 40 -66 16 Z" fill="#fb718533" stroke="#fb7185" stroke-width="2"/>
+    <text x="-92" y="34" text-anchor="middle" fill="#fda4af" font-size="11" font-weight="900">8</text>
+    <text x="-92" y="56" text-anchor="middle" fill="#fda4af" font-size="9" font-weight="900" letter-spacing="1.5">GUILTY</text>
+    <!-- right pan (not guilty, higher) -->
+    <line x1="92" y1="-30" x2="72" y2="-2" stroke="#fde68a99" stroke-width="1.5"/>
+    <line x1="92" y1="-30" x2="112" y2="-2" stroke="#fde68a99" stroke-width="1.5"/>
+    <path d="M66 -2 Q92 22 118 -2 Z" fill="#38bdf833" stroke="#38bdf8" stroke-width="2"/>
+    <text x="92" y="16" text-anchor="middle" fill="#7dd3fc" font-size="11" font-weight="900">6</text>
+    <text x="92" y="38" text-anchor="middle" fill="#7dd3fc" font-size="9" font-weight="900" letter-spacing="1.5">INNOCENT</text>
+    <!-- base -->
+    <path d="M-22 30 L22 30 L14 42 L-14 42 Z" fill="#2a1545" stroke="#facc1566"/>
+  </g>
+
+  <!-- ── WITNESS STAND, center spotlight ── -->
+  <g transform="translate(195,538)">
+    <ellipse cx="0" cy="58" rx="72" ry="12" fill="#facc15" opacity="0.08"/>
+    <g transform="translate(0,-18)">
+      <circle r="24" fill="#facc15" opacity="0.18"/>
+      <circle r="17" fill="#c084fc"/>
+      <circle r="14" fill="#231328"/>
+      <text y="5" text-anchor="middle" fill="#e9d5ff" font-size="13" font-weight="900">M</text>
+      <!-- right hand raised: sworn in -->
+      <g stroke="#ffffff" stroke-opacity="0.9" stroke-width="3" stroke-linecap="round">
+        <line x1="0" y1="17" x2="0" y2="37"/>
+        <line x1="0" y1="24" x2="-11" y2="31"/>
+        <line x1="0" y1="24" x2="12" y2="8"/>
+        <line x1="0" y1="37" x2="-9" y2="50"/>
+        <line x1="0" y1="37" x2="9" y2="50"/>
+      </g>
+    </g>
+    <rect x="-40" y="36" width="80" height="26" rx="6" fill="#1d0f33" stroke="#facc1580"/>
+    <rect x="-40" y="36" width="80" height="4" fill="url(#ggGold)" opacity="0.8"/>
+    <text y="54" text-anchor="middle" fill="#fde68a" font-size="8.5" font-weight="900" letter-spacing="1.5">WITNESS STAND</text>
+    <text x="52" y="-44" font-size="13">🤞</text>
+    <text x="-72" y="-30" text-anchor="middle" fill="#e9d5ff" font-size="9" font-weight="700" font-style="italic">"I swear to spill</text>
+    <text x="-72" y="-18" text-anchor="middle" fill="#e9d5ff" font-size="9" font-weight="700" font-style="italic">the whole tea…"</text>
+  </g>
+
+  <!-- side galleries: mini stickmen rows -->
+  <g transform="translate(58,560)">
+    <g transform="scale(0.62)">
+      <circle r="14" fill="#fb7185"/><circle r="11" fill="#2a1216"/>
+      <text y="4" text-anchor="middle" fill="#fda4af" font-size="10" font-weight="900">A</text>
+      <use href="#ggBody" y="14"/>
+    </g>
+    <g transform="translate(42,6) scale(0.55)">
+      <circle r="14" fill="#4ade80"/><circle r="11" fill="#0f2416"/>
+      <text y="4" text-anchor="middle" fill="#bbf7d0" font-size="10" font-weight="900">K</text>
+      <use href="#ggBody" y="14"/>
+    </g>
+    <text x="20" y="66" text-anchor="middle" fill="#fda4af" font-size="8" font-weight="900" letter-spacing="1.5">PROSECUTION</text>
+  </g>
+  <g transform="translate(332,560)">
+    <g transform="scale(0.62)">
+      <circle r="14" fill="#38bdf8"/><circle r="11" fill="#0e1f2a"/>
+      <text y="4" text-anchor="middle" fill="#7dd3fc" font-size="10" font-weight="900">R</text>
+      <use href="#ggBody" y="14"/>
+    </g>
+    <g transform="translate(-42,6) scale(0.55)">
+      <circle r="14" fill="#38bdf8"/><circle r="11" fill="#0e1f2a"/>
+      <text y="4" text-anchor="middle" fill="#7dd3fc" font-size="10" font-weight="900">S</text>
+      <use href="#ggBody" y="14"/>
+    </g>
+    <text x="-20" y="66" text-anchor="middle" fill="#7dd3fc" font-size="8" font-weight="900" letter-spacing="1.5">DEFENSE</text>
+  </g>
+
+  <!-- testimony card -->
+  <rect x="20" y="648" width="350" height="64" rx="14" fill="#1a1030" stroke="#facc1544"/>
+  <rect x="20" y="648" width="350" height="3" fill="url(#ggGold)" opacity="0.8"/>
+  <text x="38" y="670" fill="#fde68a" font-size="9" font-weight="900" letter-spacing="2">SWORN TESTIMONY · EXHIBIT C</text>
+  <text x="38" y="690" fill="#fff" font-size="12.5" font-weight="600" font-style="italic">"He said 'trust me bro, I set three alarms.'</text>
+  <text x="38" y="705" fill="#fff" font-size="12.5" font-weight="600" font-style="italic">There were zero alarms, Your Honor."</text>
+
+  <!-- verdict actions -->
+  <rect x="20" y="728" width="163" height="50" rx="25" fill="none" stroke="url(#ggGold)" stroke-width="2"/>
+  <text x="101" y="759" text-anchor="middle" fill="#fde68a" font-size="13" font-weight="900">CONDEMN 🔨</text>
+  <rect x="199" y="728" width="171" height="50" rx="25" fill="url(#ggGold)"/>
+  <text x="284" y="759" text-anchor="middle" fill="#1d0f33" font-size="13" font-weight="900">GRANT MERCY 🕊️</text>
+
+  <text x="195" y="804" text-anchor="middle" fill="#a78bca" font-size="9" font-weight="600">The court may overrule the judge · 02:14 left to vote</text>
+  <rect x="128" y="822" width="134" height="5" rx="2.5" fill="#ffffff33"/>
+</svg>

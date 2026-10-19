@@ -1,0 +1,396 @@
+{
+  "runDate": "2026-10-13/2026-10-15",
+  "environment": {
+    "baseUrl": "http://localhost:3000",
+    "database": "user-approved development Supabase project",
+    "guestMode": "excluded by user instruction"
+  },
+  "results": [
+    {
+      "id": "auth-desktop-mobile",
+      "status": "PASS",
+      "evidence": "A/B/C authentication passed on desktop and at 360x800, 390x844, and 430x932."
+    },
+    {
+      "id": "feed-text-persistence",
+      "status": "PASS_WITH_RISK",
+      "evidence": "QA-marked feed text post returned 200 and appeared in a later independent feed read; immediate composer handoff can race publication."
+    },
+    {
+      "id": "expanded-mock-content-fixtures",
+      "status": "PASS",
+      "evidence": "With explicit user authorization on 2026-10-14, a second uniquely marked fixture set was created through normal A/B UI flows: one feed post, image Story, Truth/answer, Verdict/vote, and direct Dare/image-proof lifecycle."
+    },
+    {
+      "id": "feed-cross-account-caption-render",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B received A's persisted caption through the feed API and rendered it after the native body-field fallback and legacy last-child hide-rule fix."
+    },
+    {
+      "id": "feed-cross-account-repeat-likes",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B added consecutive intentional likes to A's QA-marked post. B's accumulated tap total persisted through reload, and A's Likes sheet displayed B's accumulated liked-N-times value; the feed headline remains a unique-person count."
+    },
+    {
+      "id": "feed-two-image-carousel-cross-account",
+      "status": "PASS",
+      "evidence": "A published one retained two-image carousel through the normal composer. A and B loaded both persisted signed slides; Next/Previous and B reload passed. Separate zero-write navigation checks passed on desktop and 360x800, 390x844, and 430x932."
+    },
+    {
+      "id": "feed-carousel-controls-like-isolation",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "Rapid carousel Next/Previous navigation previously bubbled through the media pointer recognizer and issued an unintended repeat-like POST. Interactive descendants now clear and bypass tap pairing. Navigation emitted zero like requests on four viewports, while two deliberate media double-taps emitted exactly two HTTP 200 writes; B's accumulated count survived reload and matched A's independent Likes-sheet read."
+    },
+    {
+      "id": "feed-comment-reply-like-persistence",
+      "status": "PASS",
+      "evidence": "B's marked parent comment, A's nested reply, and A's one-like increment persisted to B after reload. The exact incremented count matched, and the comment-like control now has stable accessible labels."
+    },
+    {
+      "id": "feed-post-option-composer-routing",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "Prediction and Rumour chips previously dismissed Post Options without navigating. Both now open their real composers; Ask Truth and Give Dare also pass and preselect A from A's post. Save, Hide, Report, and Unfriend remain unimplemented stubs."
+    },
+    {
+      "id": "feed-audio-video-cross-account",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "A uploaded one tiny WAV and one generated WebM through the normal composer. A and B received loaded native signed-URL players, B reload retained them, and actual muted playback progress plus no horizontal overflow passed at 360x800, 390x844, and 430x932 (6/6 mobile checks)."
+    },
+    {
+      "id": "feed-owner-delete-lifecycle",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "Delete is now exposed for the owner. The action sheet hides the global nav, awaits the API/store mutation, and suppresses racing stale snapshots. A deleted all five explicitly disposable retry rows; exact cards disappeared, A reload stayed clean, and B saw no marker."
+    },
+    {
+      "id": "verdict-comments-results-vote-undo",
+      "status": "PASS",
+      "evidence": "B's marked parent comment and A's nested reply persisted to B after reload. A rendered 100%/1 Keep versus 0%/0 Change. B's hold-to-undo returned DELETE 200, both choices returned, Keep was restored with POST 200, and reload retained it."
+    },
+    {
+      "id": "feed-cross-account-comment-persistence",
+      "status": "PASS",
+      "evidence": "B posted a QA-marked comment on A's existing QA post and A saw it in the normal comments sheet. Two same-marker comments are retained from early locator retries."
+    },
+    {
+      "id": "friendship-a-to-b",
+      "status": "PASS",
+      "evidence": "A searched for B and sent a request (200); B saw it and accepted it through Notifications (PATCH 200)."
+    },
+    {
+      "id": "friendship-persisted-alert",
+      "status": "PASS",
+      "evidence": "B reloads Notifications and sees the established friendship state after the supported alert-type fix."
+    },
+    {
+      "id": "mobile-primary-navigation",
+      "status": "PASS",
+      "evidence": "Feed, Dares, Verdicts, and Circle were reachable without horizontal overflow at all three requested mobile viewport sizes."
+    },
+    {
+      "id": "mobile-feed-composer",
+      "status": "PASS",
+      "evidence": "Touch long-press, center action, feed-composer controls, and disabled empty submit state rendered without horizontal overflow at all requested mobile sizes."
+    },
+    {
+      "id": "profile-people-search-navigation",
+      "status": "PASS",
+      "evidence": "A reached the rendered own-profile surface, opened Find people, and reached the username/display-name search field on desktop and at 360x800, 390x844, and 430x932."
+    },
+    {
+      "id": "profile-owner-display-name-cross-account",
+      "status": "PASS",
+      "evidence": "A saved a temporary display-name edit through Profile settings. B rendered the updated name in A's normal feed post, and the test restored A's exact original display name through the same UI. Avatar upload remains untested."
+    },
+    {
+      "id": "profile-owner-bio-cross-account",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "A saved a temporary bio through the rendered Profile settings editor. B opened A's normal profile and rendered the exact bio. The test restored A's exact original bio through the same UI."
+    },
+    {
+      "id": "mobile-dares-regression",
+      "status": "PASS",
+      "evidence": "After unique Realtime channel naming, the 390x844 Dares flow showed no page exception or error boundary."
+    },
+    {
+      "id": "mobile-story-viewer",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B opened A's existing QA Story at 360x800, 390x844, and 430x932; the story-media viewer rendered and the persisted image loaded with non-zero dimensions after server-side URL refresh."
+    },
+    {
+      "id": "mobile-verdict-card",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B rendered the existing QA Verdict and selected-vote state at 360x800, 390x844, and 430x932; the persisted verdict image loaded with non-zero dimensions after server-side URL refresh."
+    },
+    {
+      "id": "authorization-boundaries",
+      "status": "PASS",
+      "evidence": "Anonymous access to /api/users/me/email returned 401; account C access to /api/admin/ip-block returned 403."
+    },
+    {
+      "id": "unit-and-dependency-checks",
+      "status": "PASS_WITH_WARNINGS",
+      "evidence": "Jest passed 11 suites / 32 tests; production npm audit found zero vulnerabilities; ESLint exited 0 with 415 repository-wide warnings."
+    },
+    {
+      "id": "community-join-rls",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "The prior recursive policy was replaced and the preview waits for RPC success. B joined the official reading challenge through the UI (RPC 200); its persisted membership is waiting, official, and seven days."
+    },
+    {
+      "id": "read-rate-limit-isolation",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "The shared feed bucket was split into same-strength per-resource buckets; diagnostics no longer show cross-feature 429 responses during normal startup."
+    },
+    {
+      "id": "messaging-composer",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B can open A's conversation and see the composer on desktop and 360x800, 390x844, and 430x932 after the modal and shared-presence fixes."
+    },
+    {
+      "id": "messaging-durable-delivery",
+      "status": "PASS_AFTER_DATABASE_FIX",
+      "evidence": "B sent the QA-marked message through the normal UI; send_message returned 200 and A received the message after the secure receipt and shared-inbox repairs."
+    },
+    {
+      "id": "messaging-cross-account-typing-presence",
+      "status": "PASS",
+      "evidence": "Two authenticated contexts opened the existing A/B conversation. B entered a draft, A saw the normal TYPING... header state through Realtime presence, and A saw it clear after B cleared the draft; no message was sent."
+    },
+    {
+      "id": "prediction-cross-account-persistence",
+      "status": "PASS_WITH_QA_ARTIFACT",
+      "evidence": "A's QA-marked prediction persisted with B as subject and rendered for B. An early test idempotence flaw created four retained marker records."
+    },
+    {
+      "id": "prediction-due-outcome-cross-account",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "An authenticated expired Prediction entered Happened already, A persisted DIDN'T HAPPEN through the normal card action, and a fresh B session rendered the saved Final state. The client/database negative-verdict contract is translated at the API boundary."
+    },
+    {
+      "id": "deal-due-outcome-cross-account",
+      "status": "PASS",
+      "evidence": "A resolved one marked expired Deal with IT HAPPENED through the normal Happened already card. The update returned 200 and B's fresh session rendered the persisted Deal Won result."
+    },
+    {
+      "id": "rumour-due-outcome-cross-account",
+      "status": "PASS",
+      "evidence": "A resolved one marked expired Rumour with CONFIRM TRUE through the normal Happened already card. The update returned 200 and B's fresh session rendered Confirmed true."
+    },
+    {
+      "id": "promise-due-outcome-cross-account",
+      "status": "PASS",
+      "evidence": "A resolved one marked expired Promise with PROMISE KEPT through the normal Happened already card. The update returned 200 and B's fresh session rendered Promise kept."
+    },
+    {
+      "id": "drama-card-variants-cross-account-persistence",
+      "status": "PASS_WITH_RATE_LIMIT_OBSERVATION",
+      "evidence": "B created one uniquely marked Deal, Rumour, Promise, and Custom card through the normal Feed composer; all four /api/drama writes returned 200 and A read the markers back through the normal card filters. An earlier retry burst returned the expected per-user 429 post-create limit; no bypass was used."
+    },
+    {
+      "id": "rumour-reply-persistence",
+      "status": "PASS",
+      "evidence": "B added one uniquely marked reply to an existing persisted Rumour through the normal replies sheet. The update returned 200 and the reply rendered after a full authenticated reload."
+    },
+    {
+      "id": "promise-reply-persistence",
+      "status": "PASS",
+      "evidence": "B added one uniquely marked reply to an existing persisted Promise through the normal replies sheet. The update returned 200 and the reply rendered after a full authenticated reload."
+    },
+    {
+      "id": "prediction-comment-persistence",
+      "status": "PASS_AFTER_ACCESSIBILITY_FIX",
+      "evidence": "B added one uniquely marked comment to A's persisted Prediction through the now-labelled comment sheet. The update returned 200 and the comment rendered after a full authenticated reload."
+    },
+    {
+      "id": "direct-dare-submission-routing-acceptance",
+      "status": "PASS",
+      "evidence": "A-to-B submission persisted. B's Notifications -> dare organizer -> received inbox route highlights the QA dare; B accepted it and received the normal Ready-to-prove-it confirmation. The public approved-dares reel is a separate surface."
+    },
+    {
+      "id": "direct-dare-proof-lifecycle",
+      "status": "SUPERSEDED_BY_QA-35",
+      "evidence": "The earlier automatic-completion result exposed a lifecycle contradiction: proof submission set COMPLETED even though challenger review required SUBMITTED. It must not be used as evidence for the intended review workflow."
+    },
+    {
+      "id": "direct-dare-proof-challenger-review",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "The retained chromium-desktop regression passed in 31.0 seconds. A created the marked Dare, B accepted and submitted synthetic image proof, A opened the proof-submitted alert into Sent -> Review proof -> Accept, and B opened the approved alert into Received and saw Dare completed."
+    },
+    {
+      "id": "direct-dare-public-audience-vote",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "C accepted A's normal authenticated friend request and read approved A-to-B proof fixtures from the public Dares feed. On separate cards, C double-tapped the cover to open proof, waited for the deliberate vote-control reveal, and cast both Real (20.9s) and Fake (17.9s) votes; each Chromium desktop POST /api/dares/:id/vote returned 200."
+    },
+    {
+      "id": "direct-dare-comment-persistence",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "A uniquely marked C comment returned HTTP 201, rendered immediately after the returned-row store fix, persisted after reload, and was visible in B's independent authenticated session. The retained Chromium desktop regression passed in 42.1 seconds. Earlier retries left two same-marker QA comments; they were retained. After migration 20261094000000, a separate A-to-B regression passed in 30.2 seconds with B's comments sheet already open and no reload."
+    },
+    {
+      "id": "direct-dare-comment-like-persistence",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B's comment-like request originally returned HTTP 400 / PGRST204 because the client sent a nonexistent id field. Composite-key writes and count reads were corrected. The combined C-comment/B-read/B-like/reload regression passed in 57.2 seconds, retaining B's selected like and count of 1."
+    },
+    {
+      "id": "direct-dare-proof-media-persistence",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "The stronger image check initially failed because the feed returned an expired persisted signed URL. The Dare feed now refreshes proof URLs and thumbnails on fresh and cached reads. The image-loaded regression passed on desktop in 14.8 seconds. B's separate view/media-like/reload regression passed in 28.9 seconds, checking HTTP 201 writes, selected like state, and nonzero persisted counts."
+    },
+    {
+      "id": "direct-dare-proof-mobile-read",
+      "status": "PASS",
+      "evidence": "The approved-Dare cover-to-proof transition, actual image loading, and timed control reveal passed at 360x800 (14.0s), 390x844 (14.1s), and 430x932 (14.6s). These mobile runs verify reads and control reveal, not mobile vote/comment/media-like writes."
+    },
+    {
+      "id": "custom-card-vote-undo-persistence",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "The retained B-authored Custom card exposed a decorative overlay intercepting real clicks and an HTTP 500 vote save: the auth.uid()-based RPC was invoked with a service-role client. Removed the universal pointer auto debug rule, explicitly excluded the refresh overlay from hit testing, and run the vote RPC with the verified caller token. Vote/reload/hold-to-undo/opposite-vote/B-readback passed on desktop (14.5s) and mobile 390x844 (17.4s). The mobile test hides only Next's development-tools portal before normal navigation clicks. Navigation layout regressions also passed at all three mobile sizes. Other text-card kinds require separate vote coverage."
+    },
+    {
+      "id": "four-text-card-kind-votes-bidirectional",
+      "status": "PASS",
+      "evidence": "Created eight uniquely marked future-due QA fixtures through the authenticated application API: Prediction, Deal, Rumour, and Promise by each of A and B. A voted on B's four cards and B independently read the saved voter identity, choice, and count (desktop 31.0s; 390x844 27.4s). Reverse B-votes/A-reads passed on desktop in 29.5s and 390x844 in 23.9s. Each choice survived voter reload; initial writes returned 200. Mobile runs reused the persisted fixtures and votes."
+    },
+    {
+      "id": "custom-card-live-vote-series",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B's open card originally retained one vote for 20 seconds after A's successful removal. Added loaded-card-scoped subscriptions and deployed migration 20261095000000 to publish drama posts/votes/comments. A paced 20-update series then passed 20/20 without recipient reload: response-to-visible median 1339.5ms, nearest-rank p95 1375ms, min 834ms, max 1863ms. Detailed samples are in DARE_TEXT_CARD_REALTIME_RESULTS.json. This does not replace the distinct feed-publication series."
+    },
+    {
+      "id": "four-text-card-deadline-transition",
+      "status": "PASS",
+      "evidence": "A read-only browser clock test reused B's four future-due Prediction/Deal/Rumour/Promise fixtures. After advancing the ticking test browser clock past all deadlines, the normal 30-second date check moved them from Upcoming into Happened already. A saw waiting states after the intentional 10-second reveal and no outcome controls (43.7s); creator B saw the appropriate outcome controls (33.3s). Voting confirmation controls were absent after expiry. Custom remained Upcoming. Backend clocks/timestamps were not changed; this verifies UI time transitions, not backend deadline enforcement."
+    },
+    {
+      "id": "recent-write-suite-no-write-gate",
+      "status": "PASS",
+      "evidence": "Added the general DARE_QA_ALLOW_WRITES guard to the seven recent direct-Dare/Custom vote, comment, and media-write checks. Executed those files with the flag false: all seven skipped before browser actions. README now documents these gates, retained fixtures, live timing, and browser-clock deadline tests."
+    },
+    {
+      "id": "community-retained-run-lifecycle-read",
+      "status": "PASS",
+      "evidence": "The broad read regression exposed an expired-fixture assumption: the old replay looked only in Active after the proof deadline elapsed. The revised test reads B's returned membership status and proof_due_at, selects the derived lifecycle tab, opens the retained run, and verifies Submit proof is absent for the eliminated state. Targeted desktop replay passed in 11.6 seconds without membership/proof mutations."
+    },
+    {
+      "id": "older-alert-pagination",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "The broad replay found B's established-friend alert unreachable beyond the newest 50 alerts. Added an authenticated timestamp/id keyset page and Load older alerts control, preserving history during realtime changes and preventing older rows from auto-switching the selected category. The retained friend alert now renders on desktop (5.1s) and at 360x800 (6.8s), 390x844 (3.8s), and 430x932 (3.7s). Type-check and all 32 unit tests pass."
+    },
+    {
+      "id": "broad-desktop-read-regression-20261015",
+      "status": "PARTIAL",
+      "evidence": "With every explicit test-write gate false and account-C security probes excluded, the 74-test desktop run completed with 22 passed, 49 skipped, and 3 failed in 5.6 minutes. Failures were the expired community Active assumption, unreachable old friendship alert, and expired Story fixture. After fixes, targeted replays passed community lifecycle and friendship pagination; the successful Story feed had no current A fixture, so viewer replay correctly skipped. Original run evidence is retained in latest-desktop-read-regression.json; a clean full-suite rerun is still required. No bearer/JWT patterns were found in that artifact."
+    },
+    {
+      "id": "broad-desktop-read-regression-after-fixes",
+      "status": "PASS",
+      "evidence": "The same 74-test desktop batch reran after the alert-pagination and retained-fixture fixes with all explicit write gates false and account-C security probes excluded: 24 passed, 50 skipped, 0 failures in 209.6 seconds. Skips include write-gated checks, mobile-only checks, and the unavailable unexpired Story fixture. Evidence: desktop-read-regression-after-fixes.json; scan found no bearer/JWT patterns. npm run lint -- --quiet exited 0. The newly added feed-carousel write test is separate from this collected batch."
+    },
+    {
+      "id": "direct-dare-chicken-out-persistence",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B refused a retained pending A-to-B QA Dare through the normal inbox. The authenticated chicken-out response returned CHICKEN_OUT; A then opened the normal alert-to-inbox route and saw B's persisted surrendered state after the UI service wiring and workflow-state persistence fixes."
+    },
+    {
+      "id": "truth-cross-account-answer-persistence",
+      "status": "PASS",
+      "evidence": "A created dedicated QA Truth fixtures for B through the normal UI, including the expanded 2026-10-14 fixture. B received it via Alerts -> Dares, accepted it, submitted the QA answer, and saw Truth completed; the native record persisted the exact answer with ANSWERED / APPROVED state."
+    },
+    {
+      "id": "truth-cross-account-answer-mobile",
+      "status": "PASS",
+      "evidence": "The normal A-to-B Truth create, notification, accept, and answer flow completed at 360x800, 390x844, and 430x932 without retained failure artifacts."
+    },
+    {
+      "id": "truth-cross-account-refusal-persistence",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "A created a fresh uniquely marked Truth for B. B received it through Alerts -> Dares and selected the rendered Refuse Truth control on the normal response screen. The response returned REJECTED and A received B's normal refusal notification."
+    },
+    {
+      "id": "truth-vote-cross-account-reconciliation",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "With A's completed-Truth vote modal already open, B cast the sole LIE vote through the normal UI. The persisted vote reconciled to A's modal within the active subscription's five-second bounded refresh; the focused desktop regression passed in 22 seconds."
+    },
+    {
+      "id": "truth-comment-cross-account-reconciliation",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B posted a marked comment through the normal completed-Truth modal. A's already-open modal reconciled the persisted comment within the active subscription's bounded refresh after the bottom-navigation stacking repair."
+    },
+    {
+      "id": "verdict-cross-account-media-vote-persistence",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "A used the normal composer to publish one friends-scope QA Verdict with a synthetic PNG. B rendered the marked Verdict, voted Keep, and saw the selected-vote state; the native verdict vote persisted and later reads re-signed the expired media URL."
+    },
+    {
+      "id": "story-cross-account-upload-viewer",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "A published one synthetic image Normal story through the real Story picker/upload flow. B's feed displayed the A-story affordance and the read-only viewer regression opened and loaded the story media after server-side URL refresh; the native row persisted FRIENDS visibility and a 24-hour expiry."
+    },
+    {
+      "id": "story-dedication-cross-account-viewer",
+      "status": "PASS",
+      "evidence": "A used the real Dedication story flow, selected B as the recipient, uploaded one synthetic image, and published it. B opened the resulting story through the normal story rail/viewer."
+    },
+    {
+      "id": "story-reaction-reply-cross-account",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "B selected Like in A's normal Story viewer and the selected state persisted. B then sent one uniquely marked Story reply, which A received through the normal A/B conversation."
+    },
+    {
+      "id": "story-close-friends-audience-cross-account",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "The composer audience now persists as CLOSE_FRIENDS through the typed service/repository and deployed 20261096000000 migration. The normal Add to Close Friends flow was repaired to query native ACCEPTED status. A added B, published the synthetic image Story, and B's independent feed returned CLOSE_FRIENDS and opened the media. Desktop passed in 20.8 seconds; read-only 360x800, 390x844, and 430x932 replays all passed. Account-C exclusion was intentionally not probed."
+    },
+    {
+      "id": "messaging-typing-presence-story-preview-regression",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "A conversation containing Story replies no longer crashes while registering preview Realtime callbacks. In a no-write A/B replay, B's draft made A show TYPING... and clearing it removed the indicator."
+    },
+    {
+      "id": "community-batch-activation-and-room-entry",
+      "status": "PASS_AFTER_DATABASE_FIX",
+      "evidence": "A joined B's retained waiting official challenge through the normal UI. The repaired batch RPC promoted the eligible A/B batch to active with a proof deadline, and B reopened the normal hub into the active day-1 room and its Submit proof control."
+    },
+    {
+      "id": "community-proof-vote-cross-account",
+      "status": "PASS",
+      "evidence": "B uploaded one uniquely marked synthetic image proof through the active community-room UI. A rendered that exact proof in the same active room, selected Real, and saw the selected vote state and count change."
+    },
+    {
+      "id": "community-room-chat-cross-account",
+      "status": "PASS_AFTER_DATABASE_FIX",
+      "evidence": "B sent one uniquely marked room-chat message through the active room. It appeared immediately for B and propagated to A's already-open room after the chat table was added to the Realtime publication."
+    },
+    {
+      "id": "persisted-media-url-refresh",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "Previously expired Story/Verdict signed URLs returned failed image requests. Server-side storage-reference parsing now refreshes persisted private-media links on Story, Verdict, feed, and profile/media reads; desktop and all three mobile viewports loaded the existing QA media."
+    },
+    {
+      "id": "dares-navigation-media-diagnostic",
+      "status": "PASS_WITH_RETAINED_QA_ORB",
+      "evidence": "Dares navigation has no console errors, page errors, or error boundary. One retained synthetic QA avatar request is blocked by Chromium ORB despite HTTP 200; the shared profile path avoids stale cached links and Avatar falls back to initials."
+    },
+    {
+      "id": "feed-realtime-20-run",
+      "status": "PARTIAL_1_BOUNDED_SAMPLE",
+      "evidence": "Fixed the optimized feed's missing Postgres listener. One authorized A→B sample kept B's feed open and showed A's newly published marker without manual refresh; the initial assertion was a false negative because the rendered caption includes the author prefix, and a corrected read-only replay passed. The initial three-post budget is exhausted, so no 20-run median/p95 claim is made."
+    },
+    {
+      "id": "feed-realtime-subscription-fix",
+      "status": "PASS_AFTER_FIX_1_SAMPLE",
+      "evidence": "subscribeToFeedOptimized now creates feed-posts:<userId>, listens for public.posts changes, and forces one coalesced authorized feed refresh per burst. The bounded sample's failure screenshot showed B's marker rendered before the locator correction; the corrected replay passed without a refresh."
+    },
+    {
+      "id": "messaging-bidirectional-reliability-and-resources",
+      "status": "PASS_AFTER_FIX",
+      "evidence": "Fresh A-to-B and B-to-A messages each used one send_message RPC, appeared live in the already-open peer chat, and survived reload. Both accounts showed ACTIVE NOW; typing appeared and cleared in both directions without Postgres writes. Mood Block and freeze synchronized both ways, survived reload, and were cleared/unfrozen at the end. Desktop passed 3/3 in 56.8s; mobile-390 delivery/state passed 2/2 and the final presence/typing replay passed in 11.7s. A threaded-reply/read-state regression passed desktop (13.7s) and mobile-390 (10.9s): A's opened message invoked the durable read RPC, B replied through Message options, and both reply payload and message persisted after reload. The attachment regression found a real defect: native records persist media_path but not media_type, so received images rendered as text. The chat now infers PHOTO for a durable non-shared path; tiny synthetic A-to-B image delivery, B reload, and B fullscreen viewing passed desktop (9.7s) and mobile-390 (11.4s). Games and temporary-invite surfaces opened and closed without writes desktop (5.4s) and mobile-390 (5.2s); initiating a game or invite requires a third-account lifecycle and remains open. Migrations 20261097000000-20261100000000 persist and atomically broadcast conversation state, authorize private message topics, and remove duplicate inbox refreshes. Shared channels, serialized presence tracking, typing heartbeat/stale expiry, and conditional reconnect reads minimize Supabase usage."
+    }
+  ],
+  "artifacts": {
+    "playwright": "test-results/ and playwright-report/ are intentionally ignored; failures retain screenshots plus HTML/JSON results. Trace/video retention is disabled because authenticated traces can serialize local sign-in input values.",
+    "report": "docs/QA/DARE_QA_REPORT.md",
+    "inventory": "docs/QA/DARE_FEATURE_INVENTORY.md",
+    "realtimeLatencyCsv": "docs/QA/DARE_REALTIME_LATENCY.csv"
+  }
+}

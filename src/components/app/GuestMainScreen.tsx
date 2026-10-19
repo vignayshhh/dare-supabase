@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Heart, MessageCircle, Play, Send, Share2, X } from "lucide-react";
+import { Eye, Heart, MessageCircle, Send, Share2, X } from "lucide-react";
 import { formatTimeAgo } from "../../utils/timeFormat";
 import {
   guestDareCards,
@@ -485,7 +485,6 @@ function GuestDareCard({
   reelMode,
   isActive,
   onVoteClick,
-  onFullscreenMedia,
   onOpenComments,
   onOpenShare,
   onNavigateToProfile,
@@ -494,11 +493,6 @@ function GuestDareCard({
   reelMode?: boolean;
   isActive?: boolean;
   onVoteClick: (dare: DarePost) => void;
-  onFullscreenMedia: (media: {
-    url: string;
-    type: "image" | "video";
-    thumbnail?: string;
-  }) => void;
   onOpenComments?: (dare: DarePost) => void;
   onOpenShare?: (dare: DarePost) => void;
   onNavigateToProfile?: (userId: string) => void;
@@ -509,14 +503,12 @@ function GuestDareCard({
   const [phase, setPhase] = useState<"idle" | "confirming" | "voted">(
     priorVote ? "voted" : "idle",
   );
-  const [likeTrigger, setLikeTrigger] = useState(0);
   const [buttonsVisible, setButtonsVisible] = useState(priorVote ? true : false);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerKey, setTimerKey] = useState(0);
   const [exiting, setExiting] = useState(false);
   const btnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipVoteUntilRef = useRef<number>(0);
-  const lastTapRef = useRef<number>(0);
   const realViewCount = dare.votes?.total ?? 0;
   const realCommentCount = 0;
 
@@ -560,19 +552,6 @@ function GuestDareCard({
     onVoteClick(dare);
   };
 
-  const handleMediaTap = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 300 && dare.proof) {
-      setLikeTrigger((value) => value + 1);
-      onFullscreenMedia({
-        url: dare.proof.url,
-        type: dare.proof.type,
-        thumbnail: dare.proof.thumbnail,
-      });
-    }
-    lastTapRef.current = now;
-  };
-
   const hasVoted = phase === "voted" && vote !== null;
   if (!reelMode) return null;
 
@@ -586,9 +565,8 @@ function GuestDareCard({
         background: "#0a0a0a",
       }}
     >
-      <DoubleTapLike trigger={likeTrigger} />
       {dare.proof && (
-        <div style={{ position: "absolute", inset: 0, zIndex: 0 }} onClick={handleMediaTap}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
           <img
             src={dare.proof.url}
             alt="Dare proof"
@@ -1823,11 +1801,6 @@ export function GuestMainScreen({
     activeViewProp ?? "dares",
   );
   const [activeReelIndex, setActiveReelIndex] = useState(0);
-  const [fullscreenMedia, setFullscreenMedia] = useState<{
-    url: string;
-    type: "image" | "video";
-    thumbnail?: string;
-  } | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
@@ -2135,7 +2108,6 @@ export function GuestMainScreen({
                   reelMode
                   isActive={activeReelIndex === 0}
                   onVoteClick={handleDareVoteClick}
-                  onFullscreenMedia={setFullscreenMedia}
                   onOpenComments={handleOpenComments}
                   onOpenShare={handleOpenShare}
                   onNavigateToProfile={onNavigateToProfile}
@@ -2162,7 +2134,6 @@ export function GuestMainScreen({
                   reelMode
                   isActive={activeReelIndex === index + 1}
                   onVoteClick={handleDareVoteClick}
-                  onFullscreenMedia={setFullscreenMedia}
                   onOpenComments={handleOpenComments}
                   onOpenShare={handleOpenShare}
                   onNavigateToProfile={onNavigateToProfile}
@@ -2216,87 +2187,6 @@ export function GuestMainScreen({
         </div>
       )}
 
-      {fullscreenMedia && (
-        <div
-          onClick={() => setFullscreenMedia(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 1000,
-            background: "rgba(0,0,0,0.97)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <button
-            onClick={() => setFullscreenMedia(null)}
-            style={{
-              position: "absolute",
-              top: "20px",
-              right: "20px",
-              width: "40px",
-              height: "40px",
-              borderRadius: "50%",
-              background: "rgba(255,255,255,0.12)",
-              border: "none",
-              color: "#fff",
-              fontSize: "20px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backdropFilter: "blur(8px)",
-            }}
-          >
-            ×
-          </button>
-          {fullscreenMedia.type === "image" ? (
-            <img
-              src={fullscreenMedia.url}
-              alt="Fullscreen"
-              style={{ maxWidth: "100%", maxHeight: "100vh", objectFit: "contain" }}
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <div
-              style={{ position: "relative", width: "100%", maxHeight: "100vh" }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <img
-                src={fullscreenMedia.thumbnail || fullscreenMedia.url}
-                alt="Video fullscreen"
-                style={{ width: "100%", maxHeight: "100vh", objectFit: "contain" }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <div
-                  style={{
-                    width: "72px",
-                    height: "72px",
-                    borderRadius: "50%",
-                    background: "rgba(255,255,255,0.2)",
-                    backdropFilter: "blur(8px)",
-                    border: "2px solid rgba(255,255,255,0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Play size={32} color="#fff" fill="#fff" />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {truthResultModal ? (
         <GuestMainLikesSheet

@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Heart, ChevronDown, ChevronUp, CornerDownRight } from "lucide-react";
+import {
+  Heart,
+  ChevronDown,
+  ChevronUp,
+  CornerDownRight,
+  SendHorizontal,
+} from "lucide-react";
 import { Avatar } from "./Avatar";
 import { formatTimeAgo } from "../../utils/timeFormat";
 
@@ -226,6 +232,10 @@ function SingleComment({
           {/* Actions row */}
           <div className="flex items-center gap-4 mt-1.5">
             <button
+              type="button"
+              aria-label={
+                comment.likedByCurrentUser ? "Comment liked" : "Like comment"
+              }
               onClick={() => {
                 if (!comment.likedByCurrentUser) {
                   void onLike?.(comment.id);
@@ -381,7 +391,7 @@ export function CommentSection({
       {/* ── Comments list ── */}
       <div
         ref={listRef}
-        className="app-modal-sheet-scroll px-4 pt-4 pb-4"
+        className="app-modal-sheet-scroll flex-1 px-4 pb-5 pt-4"
       >
         <style>{`
           @keyframes commentFadeIn {
@@ -440,7 +450,7 @@ export function CommentSection({
       </div>
 
       {/* ── Composer area (pinned bottom) ── */}
-      <div className="shrink-0 border-t border-[#1e1e1e] bg-[#111] px-4 pt-3 pb-[calc(var(--safe-area-bottom)+12px)]">
+      <div className="shrink-0 border-t border-white/8 bg-[linear-gradient(180deg,rgba(10,15,10,0.96),rgba(3,4,3,0.99))] px-4 pb-[calc(var(--safe-area-bottom)+12px)] pt-3 shadow-[0_-14px_34px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.045)]">
         {replyTo && (
           <div className="mb-2 flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5 text-xs font-medium text-[#4ade80]">
@@ -457,42 +467,46 @@ export function CommentSection({
             </button>
           </div>
         )}
-        <div className="flex items-center gap-3">
+        <form
+          className="flex items-center gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+        >
           <Avatar
             src={currentUser.avatar}
             alt="You"
-            size="md"
+            size="sm"
             className="shrink-0"
             userId={currentUser.userId}
           />
-          <div className="flex flex-1 items-center gap-2 rounded-full border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-2.5 transition-colors focus-within:border-[#4ade80]/40">
+          <div className="flex min-h-[46px] flex-1 items-center gap-2 rounded-full border border-white/8 bg-white/[0.045] px-4 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors focus-within:border-[#4ade80]/35 focus-within:bg-[#0f1710]">
             <input
               ref={inputRef}
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleSubmit();
                 if (e.key === "Escape") cancelReply();
               }}
               placeholder={
                 replyTo
                   ? `Reply to @${replyTo.username}...`
-                  : "Write a comment..."
+                  : "Add a comment..."
               }
-              className="flex-1 bg-transparent text-sm text-white outline-none placeholder-[#4a5568]"
+              className="min-w-0 flex-1 bg-transparent text-[15px] font-medium text-white outline-none placeholder:text-[#64748b]"
             />
-            {inputText.trim() && (
-              <button
-                onClick={handleSubmit}
-                disabled={posting}
-                className="shrink-0 text-sm font-bold text-[#4ade80] transition-colors hover:text-[#22c55e] disabled:opacity-50"
-              >
-                {posting ? "..." : "Post"}
-              </button>
-            )}
+            <button
+              type="submit"
+              disabled={!inputText.trim() || posting}
+              aria-label={replyTo ? "Post reply" : "Post comment"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#4ade80] text-[#031008] shadow-[0_10px_22px_rgba(74,222,128,0.24)] transition-all active:scale-95 disabled:bg-white/[0.07] disabled:text-[#64748b] disabled:shadow-none"
+            >
+              <SendHorizontal size={17} />
+            </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

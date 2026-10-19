@@ -1,0 +1,162 @@
+<svg width="390" height="844" viewBox="0 0 390 844" fill="none" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, -apple-system, sans-serif">
+  <!-- ============================================================
+       CONCEPT 05 — TABLOID TRIAL
+       Courtroom as breaking-news drama: comic halftone accents,
+       headline banner, courtroom-sketch panel with stickmen,
+       hot-take ticker, poll as front-page infographic.
+  ============================================================ -->
+  <defs>
+    <linearGradient id="ttBg" x1="0" y1="0" x2="0" y2="844" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b0f0a"/>
+      <stop offset="1" stop-color="#050705"/>
+    </linearGradient>
+    <linearGradient id="ttSlam" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <pattern id="ttDots" width="9" height="9" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.4" fill="#fb7185" opacity="0.35"/>
+    </pattern>
+    <pattern id="ttDotsSky" width="9" height="9" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.4" fill="#38bdf8" opacity="0.35"/>
+    </pattern>
+    <g id="ttBody" stroke="#17211d" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="0" x2="0" y2="20"/>
+      <line x1="0" y1="6" x2="-11" y2="14"/>
+      <line x1="0" y1="6" x2="11" y2="14"/>
+      <line x1="0" y1="20" x2="-9" y2="33"/>
+      <line x1="0" y1="20" x2="9" y2="33"/>
+    </g>
+  </defs>
+
+  <rect width="390" height="844" fill="url(#ttBg)"/>
+
+  <!-- status bar -->
+  <text x="30" y="34" fill="#fff" font-size="13" font-weight="700">9:41</text>
+  <rect x="336" y="24" width="22" height="11" rx="3" stroke="#ffffff66"/>
+  <rect x="338" y="26" width="14" height="7" rx="1.5" fill="#4ade80"/>
+
+  <!-- header -->
+  <rect x="16" y="52" width="36" height="36" rx="14" fill="#ffffff0a" stroke="#ffffff14"/>
+  <path d="M40 70 H30 M34 65 l-5 5 5 5" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="62" y="56" width="96" height="28" rx="6" fill="#fb7185"/>
+  <text x="110" y="75" text-anchor="middle" fill="#fff" font-size="12" font-weight="900" letter-spacing="2">🚨 BREAKING</text>
+  <text x="170" y="75" fill="#7c8a80" font-size="10" font-weight="700">CIRCLE COURT DAILY · No. 42</text>
+
+  <!-- headline banner -->
+  <text x="24" y="126" fill="#fff" font-size="27" font-weight="900" letter-spacing="-0.5">GOA TRIP RUINED:</text>
+  <text x="24" y="156" fill="#fda4af" font-size="27" font-weight="900" letter-spacing="-0.5">RAHUL ON TRIAL 🧳</text>
+  <text x="24" y="178" fill="#7c8a80" font-size="11" font-weight="600">14 friends in attendance · Judge Priya presiding · Day 1</text>
+
+  <!-- ── COURTROOM-SKETCH PANEL (newspaper style) ── -->
+  <rect x="20" y="196" width="350" height="264" rx="10" fill="#f5efdf" stroke="#ffffff22" stroke-width="2"/>
+  <rect x="20" y="196" width="350" height="264" rx="10" fill="url(#ttDots)" opacity="0.25"/>
+  <text x="34" y="220" fill="#6b6353" font-size="8" font-weight="800" letter-spacing="2">COURTROOM SKETCH · LIVE</text>
+
+  <!-- judge in sketch -->
+  <g transform="translate(195,262)">
+    <circle r="17" fill="#facc15"/>
+    <circle r="14" fill="#fffbe8"/>
+    <text y="5" text-anchor="middle" fill="#a16207" font-size="13" font-weight="900">P</text>
+    <use href="#ttBody" y="17" transform="scale(0.9)"/>
+  </g>
+  <path d="M130 322 L142 310 L248 310 L260 322 Z" fill="#d9cdb0" stroke="#17211d55"/>
+  <rect x="130" y="322" width="130" height="24" rx="4" fill="#c9bb98" stroke="#17211d55"/>
+  <text x="195" y="338" text-anchor="middle" fill="#5c5342" font-size="9" font-weight="900" letter-spacing="2">THE BENCH</text>
+
+  <!-- accuser pointing (sketch) -->
+  <g transform="translate(96,378)">
+    <circle r="16" fill="#fb7185"/>
+    <circle r="13" fill="#fff1f2"/>
+    <text y="5" text-anchor="middle" fill="#be123c" font-size="12" font-weight="900">A</text>
+    <g stroke="#17211d" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="16" x2="0" y2="36"/>
+      <line x1="0" y1="22" x2="16" y2="14"/>
+      <line x1="0" y1="24" x2="-10" y2="32"/>
+      <line x1="0" y1="36" x2="-9" y2="49"/>
+      <line x1="0" y1="36" x2="9" y2="49"/>
+    </g>
+    <!-- accusation burst -->
+    <g transform="translate(52,-24)">
+      <path d="M0 0 L8 -12 L12 -2 L26 -8 L20 4 L34 8 L18 12 L22 24 L8 16 L0 28 L-2 14 L-16 16 L-6 6 L-14 -4 L-2 -2 Z" fill="#facc15" stroke="#17211d" stroke-width="1.5"/>
+      <text x="9" y="9" text-anchor="middle" fill="#17211d" font-size="8" font-weight="900">HIM!</text>
+    </g>
+    <text y="64" text-anchor="middle" fill="#5c5342" font-size="8.5" font-weight="900">AAKASH · ACCUSER</text>
+  </g>
+
+  <!-- accused sweating (sketch) -->
+  <g transform="translate(294,378)">
+    <circle r="16" fill="#38bdf8"/>
+    <circle r="13" fill="#eff8ff"/>
+    <text y="5" text-anchor="middle" fill="#0369a1" font-size="12" font-weight="900">R</text>
+    <g stroke="#17211d" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="16" x2="0" y2="36"/>
+      <line x1="0" y1="23" x2="-10" y2="32"/>
+      <line x1="0" y1="23" x2="10" y2="32"/>
+      <line x1="0" y1="36" x2="-9" y2="49"/>
+      <line x1="0" y1="36" x2="9" y2="49"/>
+    </g>
+    <text x="24" y="-14" font-size="12">💦</text>
+    <text y="64" text-anchor="middle" fill="#5c5342" font-size="8.5" font-weight="900">RAHUL · ACCUSED</text>
+  </g>
+
+  <!-- jury row in sketch -->
+  <g transform="translate(195,398)">
+    <g transform="translate(-24,0) scale(0.55)">
+      <circle r="14" fill="#c084fc"/><circle r="11" fill="#faf5ff"/>
+      <text y="4" text-anchor="middle" fill="#7e22ce" font-size="10" font-weight="900">M</text>
+      <use href="#ttBody" y="14"/>
+    </g>
+    <g transform="translate(0,4) scale(0.55)">
+      <circle r="14" fill="#4ade80"/><circle r="11" fill="#f0fdf4"/>
+      <text y="4" text-anchor="middle" fill="#15803d" font-size="10" font-weight="900">K</text>
+      <use href="#ttBody" y="14"/>
+    </g>
+    <g transform="translate(24,0) scale(0.55)">
+      <circle r="14" fill="#facc15"/><circle r="11" fill="#fffbe8"/>
+      <text y="4" text-anchor="middle" fill="#a16207" font-size="10" font-weight="900">S</text>
+      <use href="#ttBody" y="14"/>
+    </g>
+    <text y="46" text-anchor="middle" fill="#5c5342" font-size="8" font-weight="900" letter-spacing="1.5">THE JURY (YOUR CIRCLE)</text>
+  </g>
+
+  <!-- photo credit strip -->
+  <text x="356" y="450" text-anchor="end" fill="#8a8064" font-size="7" font-weight="600" font-style="italic">sketch: circle court artist 🎨</text>
+
+  <!-- ── FRONT PAGE POLL ── -->
+  <rect x="20" y="476" width="350" height="92" rx="12" fill="#ffffff06" stroke="#ffffff12"/>
+  <text x="36" y="500" fill="#facc15" font-size="9" font-weight="900" letter-spacing="2">📊 PUBLIC OPINION POLL</text>
+  <text x="36" y="522" fill="#fff" font-size="12" font-weight="800">GUILTY</text>
+  <rect x="100" y="510" width="220" height="16" rx="8" fill="url(#ttDots)" stroke="#fb718544"/>
+  <rect x="100" y="510" width="126" height="16" rx="8" fill="#fb7185"/>
+  <text x="330" y="522" fill="#fda4af" font-size="11" font-weight="900">57%</text>
+  <text x="36" y="550" fill="#fff" font-size="12" font-weight="800">FREE HIM</text>
+  <rect x="100" y="538" width="220" height="16" rx="8" fill="url(#ttDotsSky)" stroke="#38bdf844"/>
+  <rect x="100" y="538" width="95" height="16" rx="8" fill="#38bdf8"/>
+  <text x="330" y="550" fill="#7dd3fc" font-size="11" font-weight="900">43%</text>
+
+  <!-- hot take ticker -->
+  <rect x="0" y="584" width="390" height="30" fill="#facc15"/>
+  <text x="12" y="604" fill="#17211d" font-size="11" font-weight="900">HOT TAKES ⚡ "zero alarms set" · "the app crashed!!" · "he did this in Manali too" · "FREE RAH…</text>
+
+  <!-- witness queue -->
+  <text x="24" y="642" fill="#7c8a80" font-size="9" font-weight="900" letter-spacing="2">NEXT ON THE STAND</text>
+  <g transform="translate(44,672)">
+    <circle r="14" fill="#c084fc"/><circle r="11" fill="#231328"/>
+    <text y="4" text-anchor="middle" fill="#e9d5ff" font-size="10" font-weight="900">M</text>
+  </g>
+  <text x="68" y="668" fill="#fff" font-size="12" font-weight="800">Meera · eyewitness 👁️</text>
+  <text x="68" y="684" fill="#7c8a80" font-size="10" font-weight="600">claims to have "the group chat receipts"</text>
+  <rect x="288" y="656" width="82" height="32" rx="16" fill="#c084fc22" stroke="#c084fc66"/>
+  <text x="329" y="676" text-anchor="middle" fill="#e9d5ff" font-size="10" font-weight="900">SUBPOENA</text>
+
+  <!-- composer -->
+  <rect x="20" y="712" width="244" height="48" rx="24" fill="#ffffff0a" stroke="#4ade8055"/>
+  <text x="40" y="742" fill="#94a3b8" font-size="14">📎</text>
+  <text x="64" y="741" fill="#5b6b60" font-size="13" font-weight="600">Leak your story to the press…</text>
+  <rect x="272" y="712" width="98" height="48" rx="24" fill="url(#ttSlam)"/>
+  <text x="321" y="742" text-anchor="middle" fill="#04170c" font-size="13" font-weight="900">PUBLISH 🗞️</text>
+
+  <text x="195" y="792" text-anchor="middle" fill="#7c8a80" font-size="9" font-weight="600">Verdict edition drops when the judge slams the gavel 🔨</text>
+  <rect x="128" y="822" width="134" height="5" rx="2.5" fill="#ffffff33"/>
+</svg>

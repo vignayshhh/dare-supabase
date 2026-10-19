@@ -2,6 +2,32 @@
 
 import { useState } from "react";
 import { Eye, EyeOff, Lock, Mail, User } from "lucide-react";
+import { CourtStickman } from "../court/CourtStickman";
+
+function DareAuthCast({ mode }: { mode: "signin" | "signup" }) {
+  const joining = mode === "signup";
+
+  return (
+    <div className={`auth-cast auth-cast--${mode}`} aria-hidden="true">
+      <div className="auth-cast-orbit auth-cast-orbit--left" />
+      <div className="auth-cast-orbit auth-cast-orbit--right" />
+      <CourtStickman
+        name={joining ? "you" : "dare"}
+        role={joining ? "main character" : "your crew"}
+        color={joining ? "#fb7185" : "#67e8f9"}
+        mood={joining ? "✦" : "!"}
+        size={50}
+        active
+      />
+      <div className="auth-cast-friend auth-cast-friend--left">
+        <CourtStickman name="mika" color="#facc15" size={27} />
+      </div>
+      <div className="auth-cast-friend auth-cast-friend--right">
+        <CourtStickman name="rio" color="#5eead4" size={27} />
+      </div>
+    </div>
+  );
+}
 
 type AuthAction =
   | {
@@ -21,7 +47,9 @@ export function AuthScreen({
   onLogin,
   onContinueAsGuest,
 }: {
-  onLogin: (action: AuthAction) => Promise<void>;
+  onLogin: (action: AuthAction) => Promise<{
+    requiresEmailConfirmation?: boolean;
+  } | void>;
   onContinueAsGuest?: () => void;
 }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -92,13 +120,20 @@ export function AuthScreen({
     try {
       if (mode === "signup") {
         console.log("Calling onLogin for signup");
-        await onLogin({
+        const result = await onLogin({
           type: "signup",
           email: email.trim(),
           password,
           username: username.trim(),
           displayName: nickname.trim(),
         });
+        if (result?.requiresEmailConfirmation) {
+          setStatusMessage(
+            "Account created. Check your email to verify it, then sign in.",
+          );
+          setIsSubmitting(false);
+          return;
+        }
       } else {
         console.log("Calling onLogin for signin");
         await onLogin({
@@ -108,7 +143,10 @@ export function AuthScreen({
         });
       }
     } catch (submitError) {
-      console.error("Submit error:", submitError);
+      console.warn(
+        "Authentication failed:",
+        submitError instanceof Error ? submitError.message : submitError,
+      );
       setError(
         submitError instanceof Error
           ? submitError.message
@@ -124,7 +162,6 @@ export function AuthScreen({
 
   const handleButtonClick = () => {
     console.log("Button click handler called");
-    setStatusMessage("Button clicked!");
     void submitAuthForm();
   };
 
@@ -137,200 +174,235 @@ export function AuthScreen({
   };
 
   return (
-    <div className="app-viewport safe-area-top safe-area-bottom relative bg-[#0a0f0a] flex flex-col items-center justify-center px-4 py-6">
-      <div className="w-full max-w-sm mx-auto pt-4 pb-8">
-        <h1 className="auth-title mb-4">DARE</h1>
-        <p className="text-[#94a3b8] text-sm mb-10 text-center">
-          Accept and complete risky{"\n"}dares with your friends.
-        </p>
+    <div className={`auth-screen auth-screen--${mode} app-viewport safe-area-top safe-area-bottom relative flex min-h-0 flex-col overflow-hidden bg-[#090909] px-4 py-5 text-white`}>
+      <div className="auth-atmosphere pointer-events-none absolute inset-0" />
+      <div className="auth-grid pointer-events-none absolute inset-0" />
 
-        {error && (
-          <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-red-500 text-sm text-center">{error}</p>
-          </div>
-        )}
-
-        {statusMessage && !error && (
-          <div className="w-full mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
-            <p className="text-[#cbd5e1] text-sm text-center">
-              {statusMessage}
-            </p>
-          </div>
-        )}
-
-        <div className="w-full space-y-4">
-          {mode === "signup" && (
-            <>
-              <div className="auth-input-wrap">
-                <User size={18} className="text-[#64748b] mr-3 shrink-0" />
-                <input
-                  type="text"
-                  name="username"
-                  placeholder="Choose username"
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(
-                      e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""),
-                    );
-                    if (fieldErrors.username) {
-                      setFieldErrors((prev) => ({ ...prev, username: "" }));
-                    }
-                  }}
-                  className={`auth-input ${fieldErrors.username ? "border-red-500/50" : ""}`}
-                  autoComplete="username"
-                  disabled={isSubmitting}
-                  minLength={3}
-                  maxLength={20}
-                />
-              </div>
-              {fieldErrors.username && (
-                <p className="text-red-500 text-xs mt-1">
-                  {fieldErrors.username}
-                </p>
-              )}
-
-              <div className="auth-input-wrap">
-                <User size={18} className="text-[#64748b] mr-3 shrink-0" />
-                <input
-                  type="text"
-                  name="nickname"
-                  placeholder="Your nickname"
-                  value={nickname}
-                  onChange={(e) => {
-                    setNickname(e.target.value);
-                    if (fieldErrors.nickname) {
-                      setFieldErrors((prev) => ({ ...prev, nickname: "" }));
-                    }
-                  }}
-                  className={`auth-input ${fieldErrors.nickname ? "border-red-500/50" : ""}`}
-                  autoComplete="nickname"
-                  disabled={isSubmitting}
-                  minLength={2}
-                />
-              </div>
-              {fieldErrors.nickname && (
-                <p className="text-red-500 text-xs mt-1">
-                  {fieldErrors.nickname}
-                </p>
-              )}
-            </>
-          )}
-
-          <div className="auth-input-wrap">
-            <Mail size={18} className="text-[#64748b] mr-3 shrink-0" />
-            <input
-              type="email"
-              name="email"
-              placeholder="emma.davis@email.com"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (fieldErrors.email) {
-                  setFieldErrors((prev) => ({ ...prev, email: "" }));
-                }
-              }}
-              className={`auth-input ${fieldErrors.email ? "border-red-500/50" : ""}`}
-              autoComplete="email"
-              disabled={isSubmitting}
-            />
-          </div>
-          {fieldErrors.email && (
-            <p className="text-red-500 text-xs mt-1">{fieldErrors.email}</p>
-          )}
-
-          <div className="auth-input-wrap">
-            <Lock size={18} className="text-[#64748b] mr-3 shrink-0" />
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (fieldErrors.password) {
-                  setFieldErrors((prev) => ({ ...prev, password: "" }));
-                }
-              }}
-              className={`auth-input ${fieldErrors.password ? "border-red-500/50" : ""}`}
-              autoComplete={
-                mode === "signin" ? "current-password" : "new-password"
-              }
-              disabled={isSubmitting}
-              minLength={mode === "signin" ? 1 : 12}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="text-[#64748b] hover:text-white transition-colors"
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-          {fieldErrors.password && (
-            <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>
-          )}
-
-          <button
-            type="button"
-            disabled={isSubmitting}
-            className="w-full bg-[#4ade80] hover:bg-[#22c55e] disabled:bg-[#2a2a2a] disabled:text-[#64748b] text-black font-bold py-3.5 rounded-full text-base transition-colors mt-2 flex items-center justify-center gap-2 min-h-[52px] cursor-pointer"
-            onClick={handleButtonClick}
-          >
-            {isSubmitting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                {mode === "signin" ? "Signing in..." : "Creating account..."}
-              </>
-            ) : (
-              <>{mode === "signin" ? "Sign In" : "Sign Up"}</>
-            )}
-          </button>
-
-          {onContinueAsGuest ? (
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={onContinueAsGuest}
-              className="w-full border border-[#2a2a2a] bg-[#121812] text-white font-medium py-3.5 rounded-full text-base transition-colors hover:bg-[#172117] disabled:bg-[#121812] disabled:text-[#64748b] min-h-[52px]"
-            >
-              Continue in Guest Mode
-            </button>
-          ) : null}
-
-          <div className="flex items-center gap-3 my-4">
-            <div className="flex-1 h-px bg-[#2a2a2a]"></div>
-            <span className="text-[#94a3b8] text-xs">OR</span>
-            <div className="flex-1 h-px bg-[#2a2a2a]"></div>
-          </div>
-
-          <button
-            type="button"
-            disabled
-            className="w-full bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#64748b] border border-[#2a2a2a] text-white font-medium py-3.5 rounded-full text-base transition-colors flex items-center justify-center gap-2 min-h-[52px]"
-          >
-            Continue with Google
-          </button>
-        </div>
-
-        <div className="flex items-center justify-center gap-4 mt-6 text-sm">
-          <button
-            type="button"
-            onClick={handleModeToggle}
-            className="text-[#94a3b8] hover:text-white transition-colors px-4 py-2 min-h-[44px] min-w-[44px] bg-transparent border-none cursor-pointer"
-            disabled={isSubmitting}
-            style={{ touchAction: "manipulation" }}
-          >
-            {mode === "signin" ? "Sign Up" : "Sign In"}
-          </button>
-        </div>
-
-        <div className="mt-8 text-center pb-4">
-          <p className="text-[#64748b] text-xs mb-2">Secure authentication</p>
-          <p className="text-[#94a3b8] text-xs max-w-xs mx-auto">
-            Your password is handled by Firebase Authentication and never stored
-            in this app&apos;s Firestore profile documents.
+      <div className="auth-shell relative z-10 mx-auto flex w-full max-w-[420px] flex-1 flex-col justify-center">
+        <header className="auth-hero text-center">
+          <div className="auth-hero-mark"><DareAuthCast mode={mode} /></div>
+          <p className="auth-kicker">
+            {mode === "signin" ? "Your crew is waiting" : "Start your Dare era"}
           </p>
+          <h1 className="auth-title">
+            {mode === "signin" ? "Back in the" : "Get in the"} <span>room.</span>
+          </h1>
+          <p className="auth-subtitle">
+            {mode === "signin"
+              ? "Pick up conversations, dares, and stories exactly where you left them."
+              : "Build your profile first. Your people and every bold opinion come next."
+            }
+          </p>
+          <div className="auth-ritual" aria-label="How Dare works">
+            <span><i>01</i> pick a side</span>
+            <span><i>02</i> make a move</span>
+            <span><i>03</i> own the story</span>
+          </div>
+        </header>
+
+        <div className="auth-panel mt-6">
+          <div className="auth-panel-heading">
+            <span>{mode === "signin" ? "01 / return" : "01 / claim your spot"}</span>
+            <b>{mode === "signin" ? "Welcome home" : "Make it yours"}</b>
+          </div>
+          <div className="auth-mode-switch">
+            <button
+              type="button"
+              onClick={() => {
+                if (mode !== "signin") handleModeToggle();
+              }}
+              disabled={isSubmitting}
+              className={mode === "signin" ? "is-active" : ""}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (mode !== "signup") handleModeToggle();
+              }}
+              disabled={isSubmitting}
+              className={mode === "signup" ? "is-active" : ""}
+            >
+              Sign up
+            </button>
+          </div>
+
+          {error && (
+            <div className="auth-alert auth-alert-error">
+              <p>{error}</p>
+            </div>
+          )}
+
+          {statusMessage && !error && (
+            <div className="auth-alert auth-alert-status">
+              <p>{statusMessage}</p>
+            </div>
+          )}
+
+          <form
+            className="auth-form mt-5 w-full space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleButtonClick();
+            }}
+          >
+            {mode === "signup" && (
+              <>
+                <label className="auth-field">
+                  <span>your @</span>
+                <div className="auth-input-wrap">
+                  <User size={18} className="auth-input-icon" />
+                  <input
+                    type="text"
+                    name="username"
+                    placeholder="Username"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9_]/g, ""),
+                      );
+                      if (fieldErrors.username) {
+                        setFieldErrors((prev) => ({ ...prev, username: "" }));
+                      }
+                    }}
+                    className="auth-input"
+                    autoComplete="username"
+                    disabled={isSubmitting}
+                    minLength={3}
+                    maxLength={20}
+                  />
+                </div>
+                </label>
+                {fieldErrors.username && (
+                  <p className="auth-field-error">{fieldErrors.username}</p>
+                )}
+
+                <label className="auth-field">
+                  <span>display name</span>
+                <div className="auth-input-wrap">
+                  <User size={18} className="auth-input-icon" />
+                  <input
+                    type="text"
+                    name="nickname"
+                    placeholder="Display name"
+                    value={nickname}
+                    onChange={(e) => {
+                      setNickname(e.target.value);
+                      if (fieldErrors.nickname) {
+                        setFieldErrors((prev) => ({ ...prev, nickname: "" }));
+                      }
+                    }}
+                    className="auth-input"
+                    autoComplete="nickname"
+                    disabled={isSubmitting}
+                    minLength={2}
+                  />
+                </div>
+                </label>
+                {fieldErrors.nickname && (
+                  <p className="auth-field-error">{fieldErrors.nickname}</p>
+                )}
+              </>
+            )}
+
+            <label className="auth-field">
+              <span>email</span>
+            <div className="auth-input-wrap">
+              <Mail size={18} className="auth-input-icon" />
+              <input
+                type="email"
+                name="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (fieldErrors.email) {
+                    setFieldErrors((prev) => ({ ...prev, email: "" }));
+                  }
+                }}
+                className="auth-input"
+                autoComplete="email"
+                disabled={isSubmitting}
+              />
+            </div>
+            </label>
+            {fieldErrors.email && (
+              <p className="auth-field-error">{fieldErrors.email}</p>
+            )}
+
+            <label className="auth-field">
+              <span>{mode === "signup" ? "make a password" : "password"}</span>
+            <div className="auth-input-wrap">
+              <Lock size={18} className="auth-input-icon" />
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) {
+                    setFieldErrors((prev) => ({ ...prev, password: "" }));
+                  }
+                }}
+                className="auth-input"
+                autoComplete={
+                  mode === "signin" ? "current-password" : "new-password"
+                }
+                disabled={isSubmitting}
+                minLength={mode === "signin" ? 1 : 12}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="auth-icon-button"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            </label>
+            {fieldErrors.password && (
+              <p className="auth-field-error">{fieldErrors.password}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="auth-primary-button"
+              aria-label={mode === "signin" ? "Sign in" : "Create account"}
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="h-4 w-4 rounded-full border-2 border-[#031008] border-t-transparent animate-spin" />
+                  {mode === "signin" ? "Signing in" : "Creating account"}
+                </>
+              ) : mode === "signin" ? (
+                "Enter Dare"
+              ) : (
+                "Create my profile"
+              )}
+            </button>
+
+            {onContinueAsGuest ? (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={onContinueAsGuest}
+                className="auth-secondary-button"
+              >
+                Peek around as guest
+              </button>
+            ) : null}
+          </form>
         </div>
+
+        <p className="auth-footer-copy">
+          Private sign-in. Your profile starts with you.
+        </p>
       </div>
     </div>
   );

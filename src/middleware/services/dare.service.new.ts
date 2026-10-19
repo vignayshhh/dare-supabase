@@ -1,3 +1,4 @@
+import { getChatSource } from "@/lib/chatContext";
 import {
   IDareRepository,
   Dare,
@@ -5,7 +6,6 @@ import {
 import { DareRepository } from "@/backend/repositories/DareRepository";
 import {
   DareEntity,
-  DareState,
   VoteType,
 } from "@/backend/domain/entities/Dare";
 import { IFriendshipRepository } from "@/backend/domain/interfaces/IFriendshipRepository";
@@ -20,7 +20,6 @@ import { AlertEntity } from "@/backend/domain/entities/Alert";
 import { AlertService } from "./alert.service.new";
 import { UserRepository } from "@/backend/repositories/UserRepository";
 import { friendsService } from "./friends.service";
-import { ghostModeService } from "./ghost-mode.service";
 import {
   requireAuthenticatedUser,
   secureLogError,
@@ -81,8 +80,47 @@ class DareService {
     this.userRepository = new UserRepository();
   }
 
+  private invalidateServerSocialCache(
+    ...userIds: Array<string | undefined>
+  ): void {
+    const validIds = userIds.filter((id): id is string => !!id);
+    if (validIds.length === 0 || typeof window === "undefined") return;
+
+    import("@/lib/apiClient")
+      .then(({ apiFetch }) =>
+        apiFetch("/api/cache/social", {
+          method: "POST",
+          body: JSON.stringify({ userIds: validIds }),
+        }),
+      )
+      .catch(() => {});
+  }
+
   async createDare(request: CreateDareRequest): Promise<DareResponse> {
+    const sourceId = getChatSource()?.id;
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; dare: any }>(
+            "/api/dares",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                receiverId: request.receiverId,
+                description: request.description,
+              }),
+            },
+          );
+          if (response.dare) {
+            return { success: true, dare: DareEntity.create(response.dare) };
+          }
+        } catch (apiError) {
+          if (sourceId) throw apiError;
+          console.warn("[dareService] createDare API fallback:", apiError);
+        }
+      }
+
       const authenticatedUserId = requireAuthenticatedUser(request.challengerId);
       const sanitizedDescription = validateRequiredText(
         request.description,
@@ -176,6 +214,8 @@ class DareService {
         },
       });
 
+      this.invalidateServerSocialCache(authenticatedUserId, request.receiverId);
+
       return { success: true, dare: dareEntity };
     } catch (error) {
       secureLogError("createDare failed", error);
@@ -229,6 +269,21 @@ class DareService {
 
   async acceptDare(dareId: string, userId: string): Promise<DareResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; dare: any }>(
+            `/api/dares/${encodeURIComponent(dareId)}/accept`,
+            { method: "POST" },
+          );
+          if (response.dare) {
+            return { success: true, dare: DareEntity.create(response.dare) };
+          }
+        } catch (apiError) {
+          console.warn("[dareService] acceptDare API fallback:", apiError);
+        }
+      }
+
       const dareResponse = await this.getDareById(dareId);
 
       if (!dareResponse.success || !dareResponse.dare) {
@@ -265,6 +320,8 @@ class DareService {
         },
       });
 
+      this.invalidateServerSocialCache(dare.challengerId, dare.receiverId);
+
       return { success: true, dare: updatedDareEntity };
     } catch (error) {
       const errorMessage =
@@ -275,6 +332,21 @@ class DareService {
 
   async chickenOut(dareId: string, userId: string): Promise<DareResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; dare: any }>(
+            `/api/dares/${encodeURIComponent(dareId)}/chicken-out`,
+            { method: "POST" },
+          );
+          if (response.dare) {
+            return { success: true, dare: DareEntity.create(response.dare) };
+          }
+        } catch (apiError) {
+          console.warn("[dareService] chickenOut API fallback:", apiError);
+        }
+      }
+
       const dareResponse = await this.getDareById(dareId);
 
       if (!dareResponse.success || !dareResponse.dare) {
@@ -304,6 +376,8 @@ class DareService {
 
       const updatedDareEntity = DareEntity.create(updatedDareData);
 
+      this.invalidateServerSocialCache(dare.challengerId, dare.receiverId);
+
       return { success: true, dare: updatedDareEntity };
     } catch (error) {
       const errorMessage =
@@ -320,6 +394,35 @@ class DareService {
     thumbnailUrl?: string,
   ): Promise<DareResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; dare: any }>(
+            `/api/dares/${encodeURIComponent(dareId)}/proof`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                mediaUrl,
+                mediaType,
+                thumbnailUrl,
+              }),
+            },
+          );
+          if (response.dare) {
+            return { success: true, dare: DareEntity.create(response.dare) };
+          }
+        } catch (apiError) {
+          console.error("[dareService] submitProof API failed:", apiError);
+          return {
+            success: false,
+            error:
+              apiError instanceof Error
+                ? apiError.message
+                : "Failed to submit proof",
+          };
+        }
+      }
+
       const dareResponse = await this.getDareById(dareId);
 
       if (!dareResponse.success || !dareResponse.dare) {
@@ -349,15 +452,26 @@ class DareService {
         thumbnailUrl,
       );
       const updatedDareEntity = DareEntity.create(updatedDareData);
-
-      const validationDare = updatedDareEntity.moveToValidation();
+      const completedDare = updatedDareEntity.completeAsReal();
       await this.dareRepository.updateDare(dareId, {
-        state: validationDare.state,
+        state: completedDare.state,
       });
 
       const finalDareEntity = DareEntity.create({
         ...updatedDareData,
-        state: validationDare.state,
+        state: completedDare.state,
+        completedAt: new Date().toISOString(),
+      });
+
+      await this.feedRepository.createFeedEvent({
+        userId,
+        eventType: "dare_completed",
+        relatedDareId: dareId,
+        eventData: {
+          challengerId: dare.challengerId,
+          receiverId: dare.receiverId,
+          result: "REAL",
+        },
       });
 
       // Notify the challenger that the receiver completed the dare submission.
@@ -404,6 +518,8 @@ class DareService {
 
       await this.alertRepository.createAlert(completedAlert);
 
+      this.invalidateServerSocialCache(dare.challengerId, dare.receiverId);
+
       return { success: true, dare: finalDareEntity };
     } catch (error) {
       const errorMessage =
@@ -418,6 +534,26 @@ class DareService {
     vote: VoteType,
   ): Promise<VoteResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          await apiFetch(`/api/dares/${encodeURIComponent(dareId)}/vote`, {
+            method: "POST",
+            body: JSON.stringify({ vote }),
+          });
+          return { success: true };
+        } catch (apiError) {
+          console.warn("[dareService] voteOnDare API failed:", apiError);
+          return {
+            success: false,
+            error:
+              apiError instanceof Error
+                ? apiError.message
+                : "Dare vote could not be saved",
+          };
+        }
+      }
+
       const dareResponse = await this.getDareById(dareId);
 
       if (!dareResponse.success || !dareResponse.dare) {
@@ -460,7 +596,6 @@ class DareService {
           },
         });
 
-        // Activate ghost mode for the receiver if the dare was completed as REAL
         if (isReal) {
           await this.challengeAlertService.createFriendChallengeActivityAlerts({
             challengeKind: "dare",
@@ -471,21 +606,10 @@ class DareService {
             activityType: "completed",
           });
 
-          try {
-            await ghostModeService.activateGhostMode({
-              userId: dare.receiverId,
-              dareId: dareId,
-              durationMinutes: 15,
-            });
-            console.log(
-              `Ghost mode activated for user ${dare.receiverId} after dare completion via friends validation`,
-            );
-          } catch (ghostError) {
-            console.error("Failed to activate ghost mode:", ghostError);
-            // Don't fail the dare completion if ghost mode fails
-          }
         }
       }
+
+      this.invalidateServerSocialCache(dare.challengerId, dare.receiverId);
 
       return { success: true };
     } catch (error) {
@@ -501,6 +625,34 @@ class DareService {
     decision: "ACCEPT" | "REJECT",
   ): Promise<DareResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; dare: any }>(
+            `/api/dares/${encodeURIComponent(dareId)}/review`,
+            {
+              method: "POST",
+              body: JSON.stringify({ decision }),
+            },
+          );
+          if (response.dare) {
+            return { success: true, dare: DareEntity.create(response.dare) };
+          }
+        } catch (apiError) {
+          console.warn(
+            "[dareService] challengerReviewDare API failed:",
+            apiError,
+          );
+          return {
+            success: false,
+            error:
+              apiError instanceof Error
+                ? apiError.message
+                : "Dare review could not be saved",
+          };
+        }
+      }
+
       const dareResponse = await this.getDareById(dareId);
 
       if (!dareResponse.success || !dareResponse.dare) {
@@ -600,21 +752,9 @@ class DareService {
           }),
         );
 
-        // Activate ghost mode for the receiver who completed the dare
-        try {
-          await ghostModeService.activateGhostMode({
-            userId: dare.receiverId,
-            dareId: dareId,
-            durationMinutes: 15,
-          });
-          console.log(
-            `Ghost mode activated for user ${dare.receiverId} after dare completion`,
-          );
-        } catch (ghostError) {
-          console.error("Failed to activate ghost mode:", ghostError);
-          // Don't fail the dare completion if ghost mode fails
-        }
       }
+
+      this.invalidateServerSocialCache(dare.challengerId, dare.receiverId);
 
       return { success: true, dare: updatedDareEntity };
     } catch (error) {
@@ -715,7 +855,14 @@ class DareService {
 
   async deleteDare(dareId: string): Promise<DareResponse> {
     try {
+      const existingDare = await this.getDareById(dareId);
       await this.dareRepository.deleteDare(dareId);
+      if (existingDare.success && existingDare.dare) {
+        this.invalidateServerSocialCache(
+          existingDare.dare.challengerId,
+          existingDare.dare.receiverId,
+        );
+      }
       return { success: true };
     } catch (error) {
       const errorMessage =

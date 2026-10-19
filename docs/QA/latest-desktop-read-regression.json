@@ -1,0 +1,4369 @@
+{
+  "config": {
+    "argv": [
+      "D:\\Node\\node.exe",
+      "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\node_modules\\playwright\\cli.js",
+      "test",
+      "--project=chromium-desktop",
+      "--grep-invert",
+      "owner-only and admin-only",
+      "--reporter=line,json",
+      "--output=.tmp/qa-desktop-read-regression"
+    ],
+    "configFile": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\playwright.config.ts",
+    "rootDir": "C:/Users/Admin/final dare app/dare-final-version-main/tests/qa",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/Admin/final dare app/dare-final-version-main/.tmp/qa-desktop-read-regression",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-desktop",
+        "name": "chromium-desktop",
+        "testDir": "C:/Users/Admin/final dare app/dare-final-version-main/tests/qa",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "C:/Users/Admin/final dare app/dare-final-version-main/.tmp/qa-desktop-read-regression",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "mobile-360",
+        "name": "mobile-360",
+        "testDir": "C:/Users/Admin/final dare app/dare-final-version-main/tests/qa",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "C:/Users/Admin/final dare app/dare-final-version-main/.tmp/qa-desktop-read-regression",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "mobile-390",
+        "name": "mobile-390",
+        "testDir": "C:/Users/Admin/final dare app/dare-final-version-main/tests/qa",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "C:/Users/Admin/final dare app/dare-final-version-main/.tmp/qa-desktop-read-regression",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "mobile-430",
+        "name": "mobile-430",
+        "testDir": "C:/Users/Admin/final dare app/dare-final-version-main/tests/qa",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\.tmp\\qa-desktop-read-regression",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "chromium-desktop",
+        "testDir": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa",
+        "snapshotDir": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa",
+        "testIgnore": [],
+        "testMatch": "**/*.@(spec|test).?(c|m)[jt]s?(x)",
+        "timeout": 30000,
+        "use": {
+          "baseURL": "http://localhost:3000",
+          "screenshot": "only-on-failure",
+          "trace": "off",
+          "video": "off",
+          "actionTimeout": 15000,
+          "navigationTimeout": 30000,
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.4 Safari/537.36",
+          "viewport": {
+            "width": 1280,
+            "height": 720
+          },
+          "screen": {
+            "width": 1920,
+            "height": 1080
+          },
+          "deviceScaleFactor": 1,
+          "isMobile": false,
+          "hasTouch": false,
+          "defaultBrowserType": "chromium"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": "chromium-desktop"
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.64.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "auth.spec.ts",
+      "file": "auth.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "QA account access",
+          "file": "auth.spec.ts",
+          "line": 4,
+          "column": 6,
+          "specs": [
+            {
+              "title": "A can establish an isolated authenticated session",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3536,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-15T06:41:17.193Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d748ac400d08b85935ef-394e05c7803451a72995",
+              "file": "auth.spec.ts",
+              "line": 6,
+              "column": 9
+            },
+            {
+              "title": "B can establish an isolated authenticated session",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2534,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-15T06:41:20.850Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d748ac400d08b85935ef-8995fc331933f38371a3",
+              "file": "auth.spec.ts",
+              "line": 6,
+              "column": 9
+            },
+            {
+              "title": "C can establish an isolated authenticated session",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2443,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-15T06:41:23.395Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d748ac400d08b85935ef-368fbc3f0049854a6360",
+              "file": "auth.spec.ts",
+              "line": 6,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "community-batch-activation.spec.ts",
+      "file": "community-batch-activation.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A joins B's waiting official challenge through the normal UI",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_COMMUNITY_JOIN_ONCE=true for the authorized activation fixture.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-batch-activation.spec.ts",
+                    "line": 8,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 107,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:25.851Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_COMMUNITY_JOIN_ONCE=true for the authorized activation fixture.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-batch-activation.spec.ts",
+                        "line": 8,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "78e589d3bd61712fc0af-fe6f1038193dd777a8b5",
+          "file": "community-batch-activation.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "community-join.spec.ts",
+      "file": "community-join.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B joins an official community dare through the normal UI",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_COMMUNITY_JOIN_ONCE=true for the authorized one-shot community join check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-join.spec.ts",
+                    "line": 8,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 88,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:25.970Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_COMMUNITY_JOIN_ONCE=true for the authorized one-shot community join check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-join.spec.ts",
+                        "line": 8,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3d1add4b7227b65cd2cf-2d1f34cda186d44c0fb1",
+          "file": "community-join.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "community-proof-comment-cross-account.spec.ts",
+      "file": "community-proof-comment-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A's proof comment is visible to B in the active community room",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_COMMUNITY_COMMENT_WRITE_ONCE=true for the authorized proof-comment fixture.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-proof-comment-cross-account.spec.ts",
+                    "line": 24,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:26.067Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_COMMUNITY_COMMENT_WRITE_ONCE=true for the authorized proof-comment fixture.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-proof-comment-cross-account.spec.ts",
+                        "line": 24,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "a08a2ab7ee254159aaf8-e7e28fd5c19901defe57",
+          "file": "community-proof-comment-cross-account.spec.ts",
+          "line": 23,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "community-proof-vote-cross-account.spec.ts",
+      "file": "community-proof-vote-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B submits one real community proof and A's real vote persists",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_COMMUNITY_PROOF_WRITE_ONCE=true for the authorized proof/vote fixture.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-proof-vote-cross-account.spec.ts",
+                    "line": 24,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:26.079Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_COMMUNITY_PROOF_WRITE_ONCE=true for the authorized proof/vote fixture.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-proof-vote-cross-account.spec.ts",
+                        "line": 24,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "96f22871e114e69289cf-8245173efe5f9d2c8b61",
+          "file": "community-proof-vote-cross-account.spec.ts",
+          "line": 23,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "community-room-chat-cross-account.spec.ts",
+      "file": "community-room-chat-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B's community room chat message is visible to A",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_COMMUNITY_CHAT_WRITE_ONCE=true for the authorized room-chat fixture.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-room-chat-cross-account.spec.ts",
+                    "line": 22,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:26.086Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_COMMUNITY_CHAT_WRITE_ONCE=true for the authorized room-chat fixture.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-room-chat-cross-account.spec.ts",
+                        "line": 22,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "ca67ceb937809480e9e5-f3e4657dbad21db07065",
+          "file": "community-room-chat-cross-account.spec.ts",
+          "line": 21,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "community-room-read.spec.ts",
+      "file": "community-room-read.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B opens the active community challenge room without a write",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 20639,
+                  "error": {
+                    "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Open Read 10 pages every day for 7 days', exact: true })\u001b[22m\n",
+                    "stack": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Open Read 10 pages every day for 7 days', exact: true })\u001b[22m\n\n    at C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-room-read.spec.ts:15:83",
+                    "location": {
+                      "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-room-read.spec.ts",
+                      "column": 83,
+                      "line": 15
+                    },
+                    "snippet": "  13 |   await page.getByRole(\"button\", { name: `Preview ${challengeTitle}`, exact: true }).click();\n  14 |   await page.getByRole(\"button\", { name: \"Joined\", exact: true }).last().click();\n> 15 |   await page.getByRole(\"button\", { name: `Open ${challengeTitle}`, exact: true }).click({ timeout: 15_000 });\n     |                                                                                   ^\n  16 |\n  17 |   await expect(page.getByRole(\"heading\", { name: challengeTitle, exact: true })).toBeVisible({ timeout: 15_000 });\n  18 |   await expect(page.getByRole(\"button\", { name: \"Submit proof\", exact: true })).toBeVisible();"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-room-read.spec.ts",
+                        "column": 83,
+                        "line": 15
+                      },
+                      "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Open Read 10 pages every day for 7 days', exact: true })\u001b[22m\n\n\n  13 |   await page.getByRole(\"button\", { name: `Preview ${challengeTitle}`, exact: true }).click();\n  14 |   await page.getByRole(\"button\", { name: \"Joined\", exact: true }).last().click();\n> 15 |   await page.getByRole(\"button\", { name: `Open ${challengeTitle}`, exact: true }).click({ timeout: 15_000 });\n     |                                                                                   ^\n  16 |\n  17 |   await expect(page.getByRole(\"heading\", { name: challengeTitle, exact: true })).toBeVisible({ timeout: 15_000 });\n  18 |   await expect(page.getByRole(\"button\", { name: \"Submit proof\", exact: true })).toBeVisible();\n    at C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-room-read.spec.ts:15:83"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:26.092Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\.tmp\\qa-desktop-read-regression\\community-room-read-B-open-4ed18-llenge-room-without-a-write-chromium-desktop\\test-failed-1.png"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\.tmp\\qa-desktop-read-regression\\community-room-read-B-open-4ed18-llenge-room-without-a-write-chromium-desktop\\error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\community-room-read.spec.ts",
+                    "column": 83,
+                    "line": 15
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "76438677594bcd4b5bef-f4cc3e9e85d2242ad94a",
+          "file": "community-room-read.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dare-acceptance.spec.ts",
+      "file": "dare-acceptance.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can accept an existing A-to-B QA dare",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_DARE_ACCEPT_ONCE=true for the authorized one-shot acceptance check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-acceptance.spec.ts",
+                    "line": 8,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 115,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:47.163Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_DARE_ACCEPT_ONCE=true for the authorized one-shot acceptance check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-acceptance.spec.ts",
+                        "line": 8,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "cc8d6f5ea7345c3a35c6-06c45cc4318fe5ed59f0",
+          "file": "dare-acceptance.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dare-chicken-out-cross-account-read.spec.ts",
+      "file": "dare-chicken-out-cross-account-read.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A sees B's persisted chicken-out state for the retained QA dare",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4517,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:47.388Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dba55f7e5a84dff76b39-667df9b1f27fa4a0aaab",
+          "file": "dare-chicken-out-cross-account-read.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dare-chicken-out-replay.spec.ts",
+      "file": "dare-chicken-out-replay.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can persist refusal for the retained pending QA dare",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the explicit Dare refusal write gates.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-chicken-out-replay.spec.ts",
+                    "line": 8,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 105,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:51.918Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the explicit Dare refusal write gates.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-chicken-out-replay.spec.ts",
+                        "line": 8,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "69df2fdc0f8684d9fab6-db15625c7ab88a9459b0",
+          "file": "dare-chicken-out-replay.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dare-chicken-out.spec.ts",
+      "file": "dare-chicken-out.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can refuse a fresh A-to-B dare and the state persists",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Chicken-out writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_DARE_CHICKEN_OUT_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-chicken-out.spec.ts",
+                    "line": 18,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:52.041Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Chicken-out writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_DARE_CHICKEN_OUT_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-chicken-out.spec.ts",
+                        "line": 18,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "d9fdf8951d84f42c6f4f-4bc1b890fbeb918ea0a2",
+          "file": "dare-chicken-out.spec.ts",
+          "line": 17,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dare-cross-account.spec.ts",
+      "file": "dare-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A can send a dare to B and B can accept it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized cross-account dare check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-cross-account.spec.ts",
+                    "line": 18,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:52.051Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized cross-account dare check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-cross-account.spec.ts",
+                        "line": 18,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "34aef90138938772d0f2-2cfcbaa27dfa42c06ecc",
+          "file": "dare-cross-account.spec.ts",
+          "line": 17,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dare-proof-submission.spec.ts",
+      "file": "dare-proof-submission.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A sends, B proves, and A approves a fresh QA dare",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Proof writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_DARE_PROOF_WRITE_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-proof-submission.spec.ts",
+                    "line": 22,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:52.062Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Proof writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_DARE_PROOF_WRITE_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\dare-proof-submission.spec.ts",
+                        "line": 22,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "4afe7f084e71ad6ab0e0-00bbb4b5bd0160802fb2",
+          "file": "dare-proof-submission.spec.ts",
+          "line": 21,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dare-public-vote-diagnostics.spec.ts",
+      "file": "dare-public-vote-diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A can inspect the authenticated public Dares reel vote surface",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5134,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_PUBLIC_DARES_REEL {\"body\":\"Friends Community DARE QA A DARED D DARE QA B DARE-QA-20261013-a1c-dare-proof-1792008407980 0 voted 0% Real Score Real Fake DARE QA A DARED D DARE QA B DARE-QA-20261013-a1c-dare-proof-1792002748015 0 voted 0% Real Score Real Fake DARE QA A DARED D DARE QA B DARE-QA-20261013-a1c-dare-proof-1792002680746 0 voted 0% Real Score Real Fake 3:13 am\",\"controls\":[\"friends\",\"community\",\"DARE QA ADAREDDDARE QA BDARE-QA-20261013-a1c-dare-proof-17920084079800 voted0% Real Score\",\"Real\",\"Fake\",\"DARE QA ADAREDDDARE QA BDARE-QA-20261013-a1c-dare-proof-17920027480150 voted0% Real Score\",\"Real\",\"Fake\",\"DARE QA ADAREDDDARE QA BDARE-QA-20261013-a1c-dare-proof-17920026807460 voted0% Real Score\",\"Real\",\"Fake\",\"DARE QA ADAREDDDARE QA BDARE-QA-20261014-expansion-dare-proof-17919253938610 voted0% Real Score\",\"Real\",\"Fake\",\"DARE QA ADAREDDDARE QA BDARE-QA-20261013-a1c-dare-proof-17919249961430 voted0% Real Score\",\"Real\",\"Fake\",\"DARE QA ADAREDDDARE QA BDARE-QA-20261013-a1c-dare-proof-17919249637510 voted0% Real Score\",\"Real\",\"Fake\",\"DARE QA ADAREDDDARE QA BDARE-QA-20261013-a1c-dare-010 voted0% Real Score\",\"Real\",\"Fake\",\"\",\"\",\"\",\"\",\"\",\"\"]}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:52.068Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "08c27f58d62674bb74a6-10ae15ebc1b008a63b2f",
+          "file": "dare-public-vote-diagnostics.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dare-recipient-routing.spec.ts",
+      "file": "dare-recipient-routing.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can reach a received dare from its alert organizer",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 45000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4329,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:41:57.211Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c914e99911be5355e208-595a5cd7a9ca6598f18a",
+          "file": "dare-recipient-routing.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "dares-navigation-diagnostics.spec.ts",
+      "file": "dares-navigation-diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Dares navigation records browser errors",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4629,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_DARES_NAVIGATION {\"consoleErrors\":[\"Failed to load resource: the server responded with a status of 400 ()\",\"Failed to load resource: the server responded with a status of 400 ()\"],\"pageErrors\":[],\"failedRequests\":[{\"path\":\"/storage/v1/object/sign/avatars/avatars/80442491-3024-4f05-91f7-ec908cd50074/1791905669109-8453b04f-dare-qa-verdict.png\",\"error\":\"net::ERR_BLOCKED_BY_ORB\",\"resourceType\":\"image\"}],\"avatarResponses\":[200,200,200],\"errorBoundary\":false}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:01.551Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4dc19ae4e5272ddbd193-499e219e1e122dd7e682",
+          "file": "dares-navigation-diagnostics.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "diagnostics.spec.ts",
+      "file": "diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "authenticated feed captures sanitized request diagnostics",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5522,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_NETWORK_DIAGNOSTICS {\"failures\":[],\"feedPages\":[{\"status\":200,\"cached\":true,\"containsQaMarker\":true}],\"markerStorageCheck\":{\"status\":0,\"count\":-1},\"visibleButtons\":[\"Dares received\",\"Vignesh is in jail. Open event rooms\",\"Notifications\",\"Messages\",\"Open your story\",\"DARE QA A\",\"Post options\",\"This post started 0 predictions, 0 rumours\",\"Like post\",\"Open likes\",\"Open comments\",\"Share to DM\",\"DARE QA A\",\"Post options\",\"This post started 0 predictions, 0 rumours\",\"Like post\",\"Open likes\",\"Open comments\",\"Share to DM\",\"DARE QA A\",\"Post options\",\"This post started 0 predictions, 0 rumours\",\"Like post\",\"Open likes\",\"Open comments\",\"Share to DM\",\"Explore social dares\",\"Open dare DARE-QA-20261013-a1c-dare-proof-1792008407980\",\"Open dare DARE-QA-20261013-a1c-dare-proof-1792002748015\",\"Open dare DARE-QA-20261013-a1c-dare-proof-1792002680746\",\"Open dare DARE-QA-20261014-expansion-dare-proof-1791925393861\",\"Open dare DARE-QA-20261013-a1c-dare-proof-1791924996143\",\"Open dare DARE-QA-20261013-a1c-dare-proof-1791924963751\",\"Open dare DARE-QA-20261013-a1c-dare-01\",\"DARE QA A\",\"Post options\",\"This post started 0 predictions, 0 rumours\",\"Like post\",\"Open likes\",\"Open comments\",\"Share to DM\",\"Keep\",\"Change\",\"Feed\",\"Dares\",\"Home\",\"Verdicts\",\"Circle\",\"Open Next.js Dev Tools\"]}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:06.195Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "80bb835772e7bc2f1ed9-517513725b85190f3540",
+          "file": "diagnostics.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "direct-dare-audience-discovery.spec.ts",
+      "file": "direct-dare-audience-discovery.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "C can reach and vote on an approved direct Dare after a fresh A/C friendship",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Relationship setup requires DARE_QA_ALLOW_WRITES=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-audience-discovery.spec.ts",
+                    "line": 6,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:11.732Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Relationship setup requires DARE_QA_ALLOW_WRITES=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-audience-discovery.spec.ts",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "ab6f76922e036b755f42-94cc7ff2d0bfeda349eb",
+          "file": "direct-dare-audience-discovery.spec.ts",
+          "line": 5,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "direct-dare-audience-fake-vote.spec.ts",
+      "file": "direct-dare-audience-fake-vote.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "C can vote Fake on a second approved direct Dare",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-audience-fake-vote.spec.ts",
+                    "line": 6,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 99,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:11.743Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-audience-fake-vote.spec.ts",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "235df5bc91c497b7a1de-2cfb1218fe374a37799a",
+          "file": "direct-dare-audience-fake-vote.spec.ts",
+          "line": 5,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "direct-dare-audience-read.spec.ts",
+      "file": "direct-dare-audience-read.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "C can read the persisted approved direct Dare in the public reel",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 13625,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:11.850Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "29eb46b150587e7d31ba-d9210c3cc9d29b791b17",
+          "file": "direct-dare-audience-read.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "direct-dare-audience-vote.spec.ts",
+      "file": "direct-dare-audience-vote.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "C can vote Real on an approved direct Dare",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-audience-vote.spec.ts",
+                    "line": 6,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 88,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:25.484Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-audience-vote.spec.ts",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3267af7f085150645f67-3451430f4675dbf703aa",
+          "file": "direct-dare-audience-vote.spec.ts",
+          "line": 5,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "direct-dare-comment-persistence.spec.ts",
+      "file": "direct-dare-comment-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "C direct-Dare comment persists after reload and is visible to B",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-comment-persistence.spec.ts",
+                    "line": 30,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 89,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:25.583Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-comment-persistence.spec.ts",
+                        "line": 30,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "a711b75c12e84bc58edb-6bd808189db7a892fa90",
+          "file": "direct-dare-comment-persistence.spec.ts",
+          "line": 29,
+          "column": 5
+        },
+        {
+          "title": "A's direct-Dare comment reaches B's already-open comments sheet",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-comment-persistence.spec.ts",
+                    "line": 84,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:25.679Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-comment-persistence.spec.ts",
+                        "line": 84,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "a711b75c12e84bc58edb-24192518407ff291eb8d",
+          "file": "direct-dare-comment-persistence.spec.ts",
+          "line": 83,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "direct-dare-proof-media.spec.ts",
+      "file": "direct-dare-proof-media.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B's direct-Dare proof like and view persist",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-proof-media.spec.ts",
+                    "line": 18,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 105,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:25.686Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\direct-dare-proof-media.spec.ts",
+                        "line": 18,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "4f6d564659b550bdc625-613b6b5d2e87e997bd54",
+          "file": "direct-dare-proof-media.spec.ts",
+          "line": 17,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-card-types-read.spec.ts",
+      "file": "drama-card-types-read.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A can read B's persisted Deal, Rumour, Promise, and Custom cards",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4131,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:25.800Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "fef2bf24c3103c8d3eb1-8dc1e333e57573bf7ef5",
+          "file": "drama-card-types-read.spec.ts",
+          "line": 9,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-card-types.spec.ts",
+      "file": "drama-card-types.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B creates Deal, Rumour, Promise, and Custom cards and A sees/votes them",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Drama card writes require DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_DRAMA_WRITE_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-card-types.spec.ts",
+                    "line": 41,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:29.943Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Drama card writes require DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_DRAMA_WRITE_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-card-types.spec.ts",
+                        "line": 41,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "ee5e905848ac8870b687-7c3b8b62da4ec38f8971",
+          "file": "drama-card-types.spec.ts",
+          "line": 40,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-custom-vote-persistence.spec.ts",
+      "file": "drama-custom-vote-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A votes on B's retained Custom card and B reads the durable vote",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-custom-vote-persistence.spec.ts",
+                    "line": 29,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:29.953Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-custom-vote-persistence.spec.ts",
+                        "line": 29,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "21bc4ba073754a2ace2a-c3c1d8a5ccf25918d54c",
+          "file": "drama-custom-vote-persistence.spec.ts",
+          "line": 28,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-deadline-transition.spec.ts",
+      "file": "drama-deadline-transition.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A sees four B text cards move from Upcoming to Happened already at expiry",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 43134,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:42:29.960Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "92d4f1f509c3f28c22ea-983698f395c7705040c0",
+          "file": "drama-deadline-transition.spec.ts",
+          "line": 6,
+          "column": 5
+        },
+        {
+          "title": "B sees four B text cards move from Upcoming to Happened already at expiry",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 36388,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:13.102Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "92d4f1f509c3f28c22ea-cd2feb51732b8fe4ddcf",
+          "file": "drama-deadline-transition.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-deal-outcome-cross-account.spec.ts",
+      "file": "drama-deal-outcome-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A resolves an expired Deal and B sees the persisted Happened already result",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-deal-outcome-cross-account.spec.ts",
+                    "line": 8,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:49.502Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-deal-outcome-cross-account.spec.ts",
+                        "line": 8,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "2e348606e9139d3bfd05-5b36bc1356276f2897ea",
+          "file": "drama-deal-outcome-cross-account.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-four-kind-votes.spec.ts",
+      "file": "drama-four-kind-votes.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A votes on B's four open text-card kinds and B reads each persisted vote",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-four-kind-votes.spec.ts",
+                    "line": 21,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:49.509Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-four-kind-votes.spec.ts",
+                        "line": 21,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "df031d75369c17ae5d9e-413b98c50935bc877b57",
+          "file": "drama-four-kind-votes.spec.ts",
+          "line": 20,
+          "column": 5
+        },
+        {
+          "title": "B votes on A's four open text-card kinds and A reads each persisted vote",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-four-kind-votes.spec.ts",
+                    "line": 21,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:49.515Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-four-kind-votes.spec.ts",
+                        "line": 21,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "df031d75369c17ae5d9e-553840a75a504da18471",
+          "file": "drama-four-kind-votes.spec.ts",
+          "line": 20,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-prediction-outcome-cross-account.spec.ts",
+      "file": "drama-prediction-outcome-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A resolves an expired prediction and B sees the persisted Happened already result",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-prediction-outcome-cross-account.spec.ts",
+                    "line": 8,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:49.522Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-prediction-outcome-cross-account.spec.ts",
+                        "line": 8,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "bbb6372333a8370e6f18-3fc58e9e0db78f127a3d",
+          "file": "drama-prediction-outcome-cross-account.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-promise-outcome-cross-account.spec.ts",
+      "file": "drama-promise-outcome-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A resolves an expired Promise and B sees the persisted result",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-promise-outcome-cross-account.spec.ts",
+                    "line": 7,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:49.530Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-promise-outcome-cross-account.spec.ts",
+                        "line": 7,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "ba53af7d95641c174ba6-036b7f7d70a1cbf7306e",
+          "file": "drama-promise-outcome-cross-account.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-rumour-outcome-cross-account.spec.ts",
+      "file": "drama-rumour-outcome-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A resolves an expired Rumour and B sees the persisted result",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-rumour-outcome-cross-account.spec.ts",
+                    "line": 7,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:49.537Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-rumour-outcome-cross-account.spec.ts",
+                        "line": 7,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "dd31240383eddd41f8cc-c0fd08cefe6387f4cd15",
+          "file": "drama-rumour-outcome-cross-account.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "drama-vote-live.spec.ts",
+      "file": "drama-vote-live.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B's open Custom card receives A's vote removal and new vote",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-vote-live.spec.ts",
+                    "line": 13,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:49.548Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires DARE_QA_ALLOW_WRITES=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\drama-vote-live.spec.ts",
+                        "line": 13,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "7eb39b7243695892ef27-5bb27cf1adb6ae4d6ef0",
+          "file": "drama-vote-live.spec.ts",
+          "line": 12,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "feed-caption-cross-account.spec.ts",
+      "file": "feed-caption-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B receives and renders A's persisted feed caption",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 45000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 12980,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:43:49.555Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c8fffe3d019575bfc20d-f3015e1b1cf5e8496ea2",
+          "file": "feed-caption-cross-account.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "feed-comment-persistence.spec.ts",
+      "file": "feed-comment-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B comment persists on A's post and is visible to A",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_COMMENT_WRITE_ONCE=true for the authorized one-shot comment check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\feed-comment-persistence.spec.ts",
+                    "line": 8,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:02.547Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_COMMENT_WRITE_ONCE=true for the authorized one-shot comment check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\feed-comment-persistence.spec.ts",
+                        "line": 8,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "4fdf2906e2aeaa794e1f-dc82e5a201feab15b23e",
+          "file": "feed-comment-persistence.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "feed-like-persistence.spec.ts",
+      "file": "feed-like-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B's repeat likes on A's marked post persist and are visible to A",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized persistent-like check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\feed-like-persistence.spec.ts",
+                    "line": 20,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:02.554Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized persistent-like check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\feed-like-persistence.spec.ts",
+                        "line": 20,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "376e9db576bdbf3e840f-63740864d53cdab80433",
+          "file": "feed-like-persistence.spec.ts",
+          "line": 19,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "feed-like-toggle.spec.ts",
+      "file": "feed-like-toggle.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can add repeat likes to A's QA post",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized repeat-like check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\feed-like-toggle.spec.ts",
+                    "line": 8,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 91,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:02.563Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized repeat-like check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\feed-like-toggle.spec.ts",
+                        "line": 8,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "b4815d5261835f56253e-58181bc9a793313c38a8",
+          "file": "feed-like-toggle.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "feed-post.spec.ts",
+      "file": "feed-post.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "feed publishing",
+          "file": "feed-post.spec.ts",
+          "line": 5,
+          "column": 6,
+          "specs": [
+            {
+              "title": "A publishes one identifiable text post through the composer",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Post writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_POST_WRITE_ONCE=true in ignored .env.qa.local.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\feed-post.spec.ts",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-15T06:44:02.663Z",
+                      "annotations": [
+                        {
+                          "type": "skip",
+                          "description": "Post writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_POST_WRITE_ONCE=true in ignored .env.qa.local.",
+                          "location": {
+                            "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\feed-post.spec.ts",
+                            "line": 6,
+                            "column": 8
+                          }
+                        }
+                      ],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "82853e8f6f152c98fcf3-f9da1fc3868d76aad9e5",
+              "file": "feed-post.spec.ts",
+              "line": 11,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "friendship-accept.spec.ts",
+      "file": "friendship-accept.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "friendship workflow",
+          "file": "friendship-accept.spec.ts",
+          "line": 5,
+          "column": 6,
+          "specs": [
+            {
+              "title": "B accepts A's pending friend request from notifications",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true in ignored .env.qa.local to run relationship checks.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship-accept.spec.ts",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-15T06:44:02.663Z",
+                      "annotations": [
+                        {
+                          "type": "skip",
+                          "description": "Set DARE_QA_ALLOW_WRITES=true in ignored .env.qa.local to run relationship checks.",
+                          "location": {
+                            "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship-accept.spec.ts",
+                            "line": 6,
+                            "column": 8
+                          }
+                        }
+                      ],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "0e625dcac3a08e27cd7d-d08c9fda3ec4ce76c024",
+              "file": "friendship-accept.spec.ts",
+              "line": 8,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "friendship-received.spec.ts",
+      "file": "friendship-received.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B sees the established A friendship in notifications",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 8988,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByText(/you are now friends/i)\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByText(/you are now friends/i) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByText(/you are now friends/i)\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByText(/you are now friends/i)\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByText(/you are now friends/i) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByText(/you are now friends/i)\u001b[22m\n\n    at C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship-received.spec.ts:9:56",
+                    "location": {
+                      "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship-received.spec.ts",
+                      "column": 56,
+                      "line": 9
+                    },
+                    "snippet": "   7 |\n   8 |   await page.getByRole(\"button\", { name: \"Notifications\", exact: true }).click();\n>  9 |   await expect(page.getByText(/you are now friends/i)).toBeVisible();\n     |                                                        ^\n  10 | });\n  11 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship-received.spec.ts",
+                        "column": 56,
+                        "line": 9
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByText(/you are now friends/i)\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByText(/you are now friends/i) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByText(/you are now friends/i)\u001b[22m\n\n\n   7 |\n   8 |   await page.getByRole(\"button\", { name: \"Notifications\", exact: true }).click();\n>  9 |   await expect(page.getByText(/you are now friends/i)).toBeVisible();\n     |                                                        ^\n  10 | });\n  11 |\n    at C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship-received.spec.ts:9:56"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:02.664Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\.tmp\\qa-desktop-read-regression\\friendship-received-B-sees-220fe-friendship-in-notifications-chromium-desktop\\test-failed-1.png"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\.tmp\\qa-desktop-read-regression\\friendship-received-B-sees-220fe-friendship-in-notifications-chromium-desktop\\error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship-received.spec.ts",
+                    "column": 56,
+                    "line": 9
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "917d943253054ca9ee38-71870270c8746fce22ac",
+          "file": "friendship-received.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "friendship-status-diagnostics.spec.ts",
+      "file": "friendship-status-diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "friendship notification rehydration records sanitized diagnostics",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6680,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_FRIENDSHIP_REHYDRATION {\"responses\":[{\"path\":\"/rest/v1/friendships\",\"status\":200},{\"path\":\"/rest/v1/rpc/get_alert_page\",\"status\":200,\"itemTypes\":[\"COMMENT_RECEIVED\",\"COMMENT_RECEIVED\",\"DARE_APPROVED\",\"DARE_POSTED\",\"DARE_RECEIVED\"]},{\"path\":\"/rest/v1/rpc/get_alert_page\",\"status\":200,\"itemTypes\":[\"COMMENT_RECEIVED\",\"COMMENT_RECEIVED\",\"DARE_APPROVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_APPROVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_APPROVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"DARE_RECEIVED\",\"DARE_RECEIVED\"]},{\"path\":\"/rest/v1/rpc/get_alert_page\",\"status\":200,\"itemTypes\":[\"COMMENT_RECEIVED\",\"COMMENT_RECEIVED\",\"DARE_APPROVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_APPROVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_APPROVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"DARE_POSTED\",\"DARE_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"TRUTH_RECEIVED\",\"DARE_RECEIVED\",\"DARE_RECEIVED\"]}],\"buttons\":[\"\",\"D\",\"1\",\"Personal\",\"Friends\",\"\"]}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:12.103Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "205ff783edf926215b5d-34b89468d21a592f9198",
+          "file": "friendship-status-diagnostics.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "friendship.spec.ts",
+      "file": "friendship.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "friendship workflow",
+          "file": "friendship.spec.ts",
+          "line": 5,
+          "column": 6,
+          "specs": [
+            {
+              "title": "A sends B a friend request through profile search",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true in ignored .env.qa.local to run relationship checks.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship.spec.ts",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-15T06:44:18.906Z",
+                      "annotations": [
+                        {
+                          "type": "skip",
+                          "description": "Set DARE_QA_ALLOW_WRITES=true in ignored .env.qa.local to run relationship checks.",
+                          "location": {
+                            "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\friendship.spec.ts",
+                            "line": 6,
+                            "column": 8
+                          }
+                        }
+                      ],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "ee2f4f7e547b418e7288-269c632cecb908ee2a8e",
+              "file": "friendship.spec.ts",
+              "line": 8,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "messaging-compose-diagnostics.spec.ts",
+      "file": "messaging-compose-diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can open the new-message chooser",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 15432,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_NEW_MESSAGE_CHOOSER {\"text\":\"messages YO You Around DA DARE QA A Around recent chats Darren AI The app is watching with you D DARE QA A 3:13 am Replied to your story: DARE QA Story reply 775222 Start New Chat Loading friends...\",\"controls\":[\"\",\"\",\"\",\"YOYouAround\",\"DADARE QA AAround\",\"DarrenAIThe app is watching with you\",\"DDARE QA A3:13 amReplied to your story: DARE QA Story reply 775222\",\"\",\"\"]}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:18.912Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "82a59b1af8ac6c03adb3-2bba7b8fe596e30aa8c8",
+          "file": "messaging-compose-diagnostics.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "messaging-conversation-diagnostics.spec.ts",
+      "file": "messaging-conversation-diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can open A's message composer without sending",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9803,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_MESSAGE_COMPOSER {\"text\":\"messages YO You Around DA DARE QA A Around recent chats Darren AI The app is watching with you D DARE QA A 3:13 am Replied to your story: DARE QA Story reply 775222 D DARE QA A OFFLINE â€¢â€¢â€¢ TODAY â³ Loading messages... +\",\"inputs\":[{\"placeholder\":null,\"type\":\"file\"},{\"placeholder\":null,\"type\":\"file\"},{\"placeholder\":\"Message...\",\"type\":null}],\"controls\":[\"\",\"\",\"\",\"YOYouAround\",\"DADARE QA AAround\",\"DarrenAIThe app is watching with you\",\"DDARE QA A3:13 amReplied to your story: DARE QA Story reply 775222\",\"â€¢â€¢â€¢\",\"\",\"\"]}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:34.356Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "410d8479effb7e1844bf-951b90cb27ce71595041",
+          "file": "messaging-conversation-diagnostics.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "messaging-delivery.spec.ts",
+      "file": "messaging-delivery.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can send one QA-marked message and A receives it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized bounded message check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\messaging-delivery.spec.ts",
+                    "line": 16,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:44.173Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized bounded message check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\messaging-delivery.spec.ts",
+                        "line": 16,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "fb47cc6c34a9d026349b-5bd2d0f158ff2365ee3f",
+          "file": "messaging-delivery.spec.ts",
+          "line": 15,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "messaging-diagnostics.spec.ts",
+      "file": "messaging-diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B can open the messaging surface and report its safe initial state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4648,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_MESSAGING_SURFACE {\"text\":\"messages YO You Around recent chats Darren AI The app is watching with you No conversations yet Start a new chat to get messaging!\",\"controls\":[\"Community dare hub\",\"Invite alerts\",\"Start new chat\",\"Set your status. Current status: Around\",\"Darren AI\",\"Feed\",\"Dares\",\"Home\",\"Verdicts\",\"Circle\",\"Open Next.js Dev Tools\"]}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:44.186Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4d434997f278c656e2da-da22b62130b522c9e8eb",
+          "file": "messaging-diagnostics.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "messaging-read-diagnostics.spec.ts",
+      "file": "messaging-read-diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "diagnoses A/B durable message reads without writing",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 28132,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_MESSAGE_READS [{\"actor\":\"B\",\"status\":200,\"query\":\"?select=id%2Cconversation_id%2Csender_id%2Cbody%2Cmedia_path%2Ccreated_at%2Cupdated_at&conversation_id=eq.e9dcb5af-6c80-4711-86b6-e6a9a01c96d9&order=created_at.desc%2Cid.desc&limit=50\",\"response\":\"[{\\\"id\\\":\\\"5c42531b-b07f-493b-ac5b-2162a716aeb0\\\",\\\"conversation_id\\\":\\\"e9dcb5af-6c80-4711-86b6-e6a9a01c96d9\\\",\\\"sender_id\\\":\\\"3eb783dd-5521-4c61-97ae-c1636760b5c3\\\",\\\"body\\\":\\\"Replied to your story: DARE QA Story reply 775222\\\",\\\"media_path\\\":\\\"shared-story:%7B%22storyId%22%3A%227c1ab199-66fa-4362-bcfa-256e6ef16f42%22%2C%22authorId%22%3A%2280442491-3024-4f05-91f7-ec908cd50074%22%2C%22authorName%22%3A%22DARE%20QA%20A%22%2C%22authorUsername%22%3A%22dareqa_a1ca2%22%2C%22authorAvatar%22%3A%22https%3A%2F%2Fwpbcaiotyxgkuxbcwqda.supabase.co%2Fstorage%2Fv1%2Fobject%2Fsign%2Favatars%2Favatars%2F80442491-3024-4f05-91f7-e\"},{\"actor\":\"B\",\"status\":200,\"query\":\"?select=id%2Cconversation_id%2Csender_id%2Cbody%2Cmedia_path%2Ccreated_at%2Cupdated_at&conversation_id=eq.e9dcb5af-6c80-4711-86b6-e6a9a01c96d9&order=created_at.desc%2Cid.desc&limit=50\",\"response\":\"[{\\\"id\\\":\\\"5c42531b-b07f-493b-ac5b-2162a716aeb0\\\",\\\"conversation_id\\\":\\\"e9dcb5af-6c80-4711-86b6-e6a9a01c96d9\\\",\\\"sender_id\\\":\\\"3eb783dd-5521-4c61-97ae-c1636760b5c3\\\",\\\"body\\\":\\\"Replied to your story: DARE QA Story reply 775222\\\",\\\"media_path\\\":\\\"shared-story:%7B%22storyId%22%3A%227c1ab199-66fa-4362-bcfa-256e6ef16f42%22%2C%22authorId%22%3A%2280442491-3024-4f05-91f7-ec908cd50074%22%2C%22authorName%22%3A%22DARE%20QA%20A%22%2C%22authorUsername%22%3A%22dareqa_a1ca2%22%2C%22authorAvatar%22%3A%22https%3A%2F%2Fwpbcaiotyxgkuxbcwqda.supabase.co%2Fstorage%2Fv1%2Fobject%2Fsign%2Favatars%2Favatars%2F80442491-3024-4f05-91f7-e\"},{\"actor\":\"A\",\"status\":200,\"query\":\"?select=id%2Cconversation_id%2Csender_id%2Cbody%2Cmedia_path%2Ccreated_at%2Cupdated_at&conversation_id=eq.e9dcb5af-6c80-4711-86b6-e6a9a01c96d9&order=created_at.desc%2Cid.desc&limit=50\",\"response\":\"[{\\\"id\\\":\\\"5c42531b-b07f-493b-ac5b-2162a716aeb0\\\",\\\"conversation_id\\\":\\\"e9dcb5af-6c80-4711-86b6-e6a9a01c96d9\\\",\\\"sender_id\\\":\\\"3eb783dd-5521-4c61-97ae-c1636760b5c3\\\",\\\"body\\\":\\\"Replied to your story: DARE QA Story reply 775222\\\",\\\"media_path\\\":\\\"shared-story:%7B%22storyId%22%3A%227c1ab199-66fa-4362-bcfa-256e6ef16f42%22%2C%22authorId%22%3A%2280442491-3024-4f05-91f7-ec908cd50074%22%2C%22authorName%22%3A%22DARE%20QA%20A%22%2C%22authorUsername%22%3A%22dareqa_a1ca2%22%2C%22authorAvatar%22%3A%22https%3A%2F%2Fwpbcaiotyxgkuxbcwqda.supabase.co%2Fstorage%2Fv1%2Fobject%2Fsign%2Favatars%2Favatars%2F80442491-3024-4f05-91f7-e\"},{\"actor\":\"A\",\"status\":200,\"query\":\"?select=id%2Cconversation_id%2Csender_id%2Cbody%2Cmedia_path%2Ccreated_at%2Cupdated_at&conversation_id=eq.e9dcb5af-6c80-4711-86b6-e6a9a01c96d9&order=created_at.desc%2Cid.desc&limit=50\",\"response\":\"[{\\\"id\\\":\\\"5c42531b-b07f-493b-ac5b-2162a716aeb0\\\",\\\"conversation_id\\\":\\\"e9dcb5af-6c80-4711-86b6-e6a9a01c96d9\\\",\\\"sender_id\\\":\\\"3eb783dd-5521-4c61-97ae-c1636760b5c3\\\",\\\"body\\\":\\\"Replied to your story: DARE QA Story reply 775222\\\",\\\"media_path\\\":\\\"shared-story:%7B%22storyId%22%3A%227c1ab199-66fa-4362-bcfa-256e6ef16f42%22%2C%22authorId%22%3A%2280442491-3024-4f05-91f7-ec908cd50074%22%2C%22authorName%22%3A%22DARE%20QA%20A%22%2C%22authorUsername%22%3A%22dareqa_a1ca2%22%2C%22authorAvatar%22%3A%22https%3A%2F%2Fwpbcaiotyxgkuxbcwqda.supabase.co%2Fstorage%2Fv1%2Fobject%2Fsign%2Favatars%2Favatars%2F80442491-3024-4f05-91f7-e\"}]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:44:48.851Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3337a561a2fb8f043e08-4fe5f31451639b7cec05",
+          "file": "messaging-read-diagnostics.spec.ts",
+          "line": 12,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "messaging-typing-presence.spec.ts",
+      "file": "messaging-typing-presence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B typing state is visible to A and clears after the draft is cleared",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 24020,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:16.994Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ea1b0be26e0e3bd94059-4a104d90033c286db371",
+          "file": "messaging-typing-presence.spec.ts",
+          "line": 12,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "mobile-composer.spec.ts",
+      "file": "mobile-composer.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "mobile feed composer opens with a safe initial submit state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "This audit is specific to the requested mobile viewports.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\mobile-composer.spec.ts",
+                    "line": 5,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 95,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:41.026Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "This audit is specific to the requested mobile viewports.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\mobile-composer.spec.ts",
+                        "line": 5,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "51583898d1e4ada5b1ab-be28077c22d912b3e627",
+          "file": "mobile-composer.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "mobile-navigation.spec.ts",
+      "file": "mobile-navigation.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "mobile primary navigation remains reachable without horizontal overflow",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "This audit is specific to the requested mobile viewports.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\mobile-navigation.spec.ts",
+                    "line": 5,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 103,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:41.131Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "This audit is specific to the requested mobile viewports.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\mobile-navigation.spec.ts",
+                        "line": 5,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "c5769ca8d3a9eeb2f0b2-0ab322934aece2bc08d4",
+          "file": "mobile-navigation.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "prediction-comment-persistence.spec.ts",
+      "file": "prediction-comment-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B's Prediction comment persists after reload",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\prediction-comment-persistence.spec.ts",
+                    "line": 21,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 88,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:41.244Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\prediction-comment-persistence.spec.ts",
+                        "line": 21,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "aea316ec7c09d7998e1f-a5417ed72bc5c82eefc1",
+          "file": "prediction-comment-persistence.spec.ts",
+          "line": 20,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "prediction-cross-account.spec.ts",
+      "file": "prediction-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A's prediction about B persists and is visible to B",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized cross-account prediction check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\prediction-cross-account.spec.ts",
+                    "line": 38,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:41.342Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_WRITES=true for the authorized cross-account prediction check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\prediction-cross-account.spec.ts",
+                        "line": 38,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "6b3a91ec7f54572284a7-2878f12ba5c808db0cfa",
+          "file": "prediction-cross-account.spec.ts",
+          "line": 37,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "profile-bio-cross-account.spec.ts",
+      "file": "profile-bio-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A owner bio edit is visible to B and is restored",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Profile edits require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_PROFILE_EDIT_WRITE_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\profile-bio-cross-account.spec.ts",
+                    "line": 23,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:41.349Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Profile edits require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_PROFILE_EDIT_WRITE_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\profile-bio-cross-account.spec.ts",
+                        "line": 23,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "49a741e21c230c563461-fecc01dd5628bf370672",
+          "file": "profile-bio-cross-account.spec.ts",
+          "line": 22,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "profile-edit-cross-account.spec.ts",
+      "file": "profile-edit-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A owner display-name edit is visible to B and is restored",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Profile edits require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_PROFILE_EDIT_WRITE_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\profile-edit-cross-account.spec.ts",
+                    "line": 23,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:41.356Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Profile edits require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_PROFILE_EDIT_WRITE_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\profile-edit-cross-account.spec.ts",
+                        "line": 23,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "70b4c261ea69cc7eb942-4fff4fedff7c1ceed177",
+          "file": "profile-edit-cross-account.spec.ts",
+          "line": 22,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "profile-navigation-diagnostics.spec.ts",
+      "file": "profile-navigation-diagnostics.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B reports rendered profile-navigation controls",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6469,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "QA_PROFILE_NAV_CONTROLS [{\"index\":0,\"label\":null,\"text\":\"Upcoming\",\"title\":null},{\"index\":1,\"label\":null,\"text\":\"Happened already\",\"title\":null},{\"index\":2,\"label\":\"Filter cards: All cards\",\"text\":\"\",\"title\":null},{\"index\":3,\"label\":null,\"text\":\"friends\",\"title\":null},{\"index\":4,\"label\":null,\"text\":\"community\",\"title\":null},{\"index\":5,\"label\":null,\"text\":\"Received\",\"title\":null},{\"index\":6,\"label\":null,\"text\":\"Sent\",\"title\":null},{\"index\":7,\"label\":\"Toggle appearance theme\",\"text\":\"\",\"title\":null},{\"index\":8,\"label\":\"Find people\",\"text\":\"\",\"title\":null},{\"index\":9,\"label\":\"Profile settings\",\"text\":\"\",\"title\":null},{\"index\":10,\"label\":\"Change profile photo\",\"text\":\"\",\"title\":null},{\"index\":11,\"label\":\"Open Aura details. Aura 100\",\"text\":\"100Aura\",\"title\":null},{\"index\":12,\"label\":null,\"text\":\"0Posts\",\"title\":null},{\"index\":13,\"label\":null,\"text\":\"0Friends\",\"title\":null},{\"index\":14,\"label\":null,\"text\":\"Posts\",\"title\":null},{\"index\":15,\"label\":null,\"text\":\"Drama\",\"title\":null},{\"index\":16,\"label\":null,\"text\":\"D??No labels yetBesties, rivals, and everything in between\",\"title\":null},{\"index\":17,\"label\":null,\"text\":\"Log out\",\"title\":null},{\"index\":18,\"label\":\"Toggle appearance theme\",\"text\":\"\",\"title\":null},{\"index\":19,\"label\":\"Search users\",\"text\":\"\",\"title\":\"Search users\"},{\"index\":20,\"label\":\"Profile options\",\"text\":\"\",\"title\":\"Profile options\"},{\"index\":21,\"label\":\"Change avatar\",\"text\":\"\",\"title\":null},{\"index\":22,\"label\":null,\"text\":\"0Friends\",\"title\":null},{\"index\":23,\"label\":null,\"text\":\"0Truths\",\"title\":null},{\"index\":24,\"label\":null,\"text\":\"0Dares\",\"title\":null},{\"index\":25,\"label\":null,\"text\":\"RelationshipsConflicts, allies, rivals\",\"title\":null},{\"index\":26,\"label\":null,\"text\":\"Posts\",\"title\":null},{\"index\":27,\"label\":null,\"text\":\"Truths\",\"title\":null},{\"index\":28,\"label\":null,\"text\":\"Dares\",\"title\":null},{\"index\":29,\"label\":null,\"text\":\"Logout\",\"title\":null},{\"index\":30,\"label\":\"Dares received\",\"text\":\"\",\"title\":null},{\"index\":31,\"label\":\"Vignesh is in jail. Open event rooms\",\"text\":\"\",\"title\":null},{\"index\":32,\"label\":\"Notifications\",\"text\":\"\",\"title\":null},{\"index\":33,\"label\":\"Messages\",\"text\":\"\",\"title\":null},{\"index\":34,\"label\":\"Open your story\",\"text\":\"Your story\",\"title\":null},{\"index\":35,\"label\":\"Create story\",\"text\":\"\",\"title\":null},{\"index\":36,\"label\":null,\"text\":\"Friends\",\"title\":null},{\"index\":37,\"label\":null,\"text\":\"Topics\",\"title\":null},{\"index\":38,\"label\":\"Invite\",\"text\":\"\",\"title\":null},{\"index\":39,\"label\":\"Settings\",\"text\":\"\",\"title\":null},{\"index\":40,\"label\":\"More\",\"text\":\"\",\"title\":null},{\"index\":41,\"label\":\"View members\",\"text\":\"D+15\",\"title\":null},{\"index\":42,\"label\":null,\"text\":\"See all\",\"title\":null},{\"index\":43,\"label\":\"Go to Court #27\",\"text\":\"\",\"title\":null},{\"index\":44,\"label\":\"Go to Roast Jail #4\",\"text\":\"\",\"title\":null},{\"index\":45,\"label\":\"Go to Called It\",\"text\":\"\",\"title\":null},{\"index\":46,\"label\":\"Go to Brutal Truths\",\"text\":\"\",\"title\":null},{\"index\":47,\"label\":null,\"text\":\"See all\",\"title\":null},{\"index\":48,\"label\":\"Go to Goa Trip 2024\",\"text\":\"\",\"title\":null},{\"index\":49,\"label\":\"Go to Sunday cricket\",\"text\":\"\",\"title\":null},{\"index\":50,\"label\":\"Go to Farewell night\",\"text\":\"\",\"title\":null},{\"index\":51,\"label\":\"Go to Highway road trip\",\"text\":\"\",\"title\":null},{\"index\":52,\"label\":\"Go to Night out\",\"text\":\"\",\"title\":null},{\"index\":53,\"label\":\"Go to Sam turned 21\",\"text\":\"\",\"title\":null},{\"index\":54,\"label\":null,\"text\":\"See all\",\"title\":null},{\"index\":55,\"label\":null,\"text\":\"PredictionCalled itNeha's breakup prediction landed\",\"title\":null},{\"index\":56,\"label\":null,\"text\":\"BirthdaySam turned 21Surprise cake at midnight\",\"title\":null},{\"index\":57,\"label\":null,\"text\":\"See all\",\"title\":null},{\"index\":58,\"label\":null,\"text\":\"Roast JailRoast Jail #3\",\"title\":null},{\"index\":59,\"label\":null,\"text\":\"TruthBrutal truth night\",\"title\":null},{\"index\":60,\"label\":null,\"text\":\"DarrenDarren roasted Dev\",\"title\":null},{\"index\":61,\"label\":null,\"text\":\"CourtCourt #26\",\"title\":null},{\"index\":62,\"label\":null,\"text\":\"See all\",\"title\":null},{\"index\":63,\"label\":null,\"text\":\"MatchSunday cricket\",\"title\":null},{\"index\":64,\"label\":null,\"text\":\"EventFarewell night\",\"title\":null},{\"index\":65,\"label\":null,\"text\":\"TripHighway road trip\",\"title\":null},{\"index\":66,\"label\":null,\"text\":\"AlbumNight out\",\"title\":null},{\"index\":67,\"label\":\"Back\",\"text\":\"\",\"title\":null},{\"index\":68,\"label\":null,\"text\":\"Temporary skip wait\",\"title\":null},{\"index\":69,\"label\":null,\"text\":\"Opens in 7h 44m\",\"title\":null},{\"index\":70,\"label\":\"Community dare hub\",\"text\":\"\",\"title\":null},{\"index\":71,\"label\":\"Invite alerts\",\"text\":\"\",\"title\":null},{\"index\":72,\"label\":\"Start new chat\",\"text\":\"\",\"title\":null},{\"index\":73,\"label\":\"Set your status. Current status: Around\",\"text\":\"YOYouAround\",\"title\":null},{\"index\":74,\"label\":\"Feed\",\"text\":\"\",\"title\":null},{\"index\":75,\"label\":\"Dares\",\"text\":\"\",\"title\":null},{\"index\":76,\"label\":\"Home\",\"text\":\"\",\"title\":null},{\"index\":77,\"label\":\"Verdicts\",\"text\":\"\",\"title\":null},{\"index\":78,\"label\":\"Circle\",\"text\":\"\",\"title\":null},{\"index\":79,\"label\":\"Open Next.js Dev Tools\",\"text\":\"\",\"title\":null}]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:41.368Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f80d9dd91a630d3693d7-15896cef43583787ec81",
+          "file": "profile-navigation-diagnostics.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "promise-reply-persistence.spec.ts",
+      "file": "promise-reply-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B's Promise reply persists after reload",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\promise-reply-persistence.spec.ts",
+                    "line": 16,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 101,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:47.848Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\promise-reply-persistence.spec.ts",
+                        "line": 16,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "69fa2e7e4f2d0d56a122-0a14e7bd56e6e002daaf",
+          "file": "promise-reply-persistence.spec.ts",
+          "line": 15,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "realtime-feed-cross-account.spec.ts",
+      "file": "realtime-feed-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B sees A's realtime feed marker without a manual refresh",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Realtime write testing requires DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_REALTIME_WRITE_ONCE=true; set DARE_QA_REALTIME_MARKER for a read-only replay.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\realtime-feed-cross-account.spec.ts",
+                    "line": 7,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:47.959Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Realtime write testing requires DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_REALTIME_WRITE_ONCE=true; set DARE_QA_REALTIME_MARKER for a read-only replay.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\realtime-feed-cross-account.spec.ts",
+                        "line": 7,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "e8455045c12fa75bf5c0-0adf4bf630dbfe691109",
+          "file": "realtime-feed-cross-account.spec.ts",
+          "line": 5,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "rumour-reply-persistence.spec.ts",
+      "file": "rumour-reply-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B's Rumour reply persists after reload",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Requires the authorized drama fixture gate.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\rumour-reply-persistence.spec.ts",
+                    "line": 18,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 95,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:47.970Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires the authorized drama fixture gate.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\rumour-reply-persistence.spec.ts",
+                        "line": 18,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "b1f7f6afbcee154ce2c7-49b984f6414b98fee9d1",
+          "file": "rumour-reply-persistence.spec.ts",
+          "line": 17,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "social-navigation.spec.ts",
+      "file": "social-navigation.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A can reach people search from an authenticated profile surface",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 10477,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:48.075Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "679aaffb12493bf6b5ac-a9b6aee0510c2ed7c4ad",
+          "file": "social-navigation.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "story-cross-account.spec.ts",
+      "file": "story-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A posts a dedication story addressed to B and B opens it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_STORY_WRITE_ONCE=true for the authorized one-shot story check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts",
+                    "line": 11,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:58.565Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_STORY_WRITE_ONCE=true for the authorized one-shot story check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts",
+                        "line": 11,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "9d3f4430aacf82801f15-fe0efaad0f3d378fd850",
+          "file": "story-cross-account.spec.ts",
+          "line": 10,
+          "column": 5
+        },
+        {
+          "title": "A posts a synthetic image story and B opens it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_STORY_WRITE_ONCE=true for the authorized one-shot story check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts",
+                    "line": 53,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:58.574Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_STORY_WRITE_ONCE=true for the authorized one-shot story check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts",
+                        "line": 53,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "9d3f4430aacf82801f15-e7945edd503ee968854f",
+          "file": "story-cross-account.spec.ts",
+          "line": 52,
+          "column": 5
+        },
+        {
+          "title": "B can open A's existing QA story viewer",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 45000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 24833,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByLabel(/Open DARE QA A.*story/i).first()\nExpected: visible\nTimeout: 20000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByLabel(/Open DARE QA A.*story/i).first() with timeout 20000ms\u001b[22m\n\u001b[2m  - waiting for getByLabel(/Open DARE QA A.*story/i).first()\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByLabel(/Open DARE QA A.*story/i).first()\nExpected: visible\nTimeout: 20000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByLabel(/Open DARE QA A.*story/i).first() with timeout 20000ms\u001b[22m\n\u001b[2m  - waiting for getByLabel(/Open DARE QA A.*story/i).first()\u001b[22m\n\n    at C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts:97:25",
+                    "location": {
+                      "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts",
+                      "column": 25,
+                      "line": 97
+                    },
+                    "snippet": "   95 |     await completeOnboardingIfShown(page);\n   96 |     const story = page.getByLabel(/Open DARE QA A.*story/i).first();\n>  97 |     await expect(story).toBeVisible({ timeout: 20_000 });\n      |                         ^\n   98 |     await story.click();\n   99 |     await expect(page.locator('[data-story-media=\"true\"]')).toBeVisible({ timeout: 5_000 });\n  100 |     await expect.poll(() => page.locator('[data-story-media=\"true\"]').evaluate((media) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts",
+                        "column": 25,
+                        "line": 97
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByLabel(/Open DARE QA A.*story/i).first()\nExpected: visible\nTimeout: 20000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByLabel(/Open DARE QA A.*story/i).first() with timeout 20000ms\u001b[22m\n\u001b[2m  - waiting for getByLabel(/Open DARE QA A.*story/i).first()\u001b[22m\n\n\n   95 |     await completeOnboardingIfShown(page);\n   96 |     const story = page.getByLabel(/Open DARE QA A.*story/i).first();\n>  97 |     await expect(story).toBeVisible({ timeout: 20_000 });\n      |                         ^\n   98 |     await story.click();\n   99 |     await expect(page.locator('[data-story-media=\"true\"]')).toBeVisible({ timeout: 5_000 });\n  100 |     await expect.poll(() => page.locator('[data-story-media=\"true\"]').evaluate((media) => {\n    at C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts:97:25"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:45:58.586Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\.tmp\\qa-desktop-read-regression\\story-cross-account-B-can-open-A-s-existing-QA-story-viewer-chromium-desktop\\test-failed-1.png"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\.tmp\\qa-desktop-read-regression\\story-cross-account-B-can-open-A-s-existing-QA-story-viewer-chromium-desktop\\error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-cross-account.spec.ts",
+                    "column": 25,
+                    "line": 97
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "9d3f4430aacf82801f15-f53e38856af1e16d0e14",
+          "file": "story-cross-account.spec.ts",
+          "line": 89,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "story-reaction-reply-cross-account.spec.ts",
+      "file": "story-reaction-reply-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B reacts to A's Story and A receives B's marked Story reply",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Story interaction writes require DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_STORY_INTERACTION_WRITE_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-reaction-reply-cross-account.spec.ts",
+                    "line": 14,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 2,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:46:23.891Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Story interaction writes require DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_STORY_INTERACTION_WRITE_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\story-reaction-reply-cross-account.spec.ts",
+                        "line": 14,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "628109b6f88f495d8c19-1fad0ba7227d29a0de76",
+          "file": "story-reaction-reply-cross-account.spec.ts",
+          "line": 13,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "truth-create-and-answer.spec.ts",
+      "file": "truth-create-and-answer.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A asks and B answers a fresh QA Truth",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Truth writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_TRUTH_WRITE_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\truth-create-and-answer.spec.ts",
+                    "line": 19,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:46:24.006Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Truth writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_TRUTH_WRITE_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\truth-create-and-answer.spec.ts",
+                        "line": 19,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "014c186cf4ff6f88c7ce-10e66bf7f16acd271d9b",
+          "file": "truth-create-and-answer.spec.ts",
+          "line": 18,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "truth-cross-account.spec.ts",
+      "file": "truth-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B receives A's QA truth and submits an answer",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_TRUTH_WRITE_ONCE=true for the authorized one-shot truth check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\truth-cross-account.spec.ts",
+                    "line": 9,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:46:24.018Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_TRUTH_WRITE_ONCE=true for the authorized one-shot truth check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\truth-cross-account.spec.ts",
+                        "line": 9,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "859bbaa20c9b2250ccd2-5c7300b2d54fcbdc92c8",
+          "file": "truth-cross-account.spec.ts",
+          "line": 8,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "truth-refusal-cross-account.spec.ts",
+      "file": "truth-refusal-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B refuses A's fresh Truth and A receives the persisted result",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Truth writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_TRUTH_WRITE_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\truth-refusal-cross-account.spec.ts",
+                    "line": 18,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:46:24.029Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Truth writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_TRUTH_WRITE_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\truth-refusal-cross-account.spec.ts",
+                        "line": 18,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "2c9b9c0aa7ea8cd59b6a-d9f24f7ee087854478d2",
+          "file": "truth-refusal-cross-account.spec.ts",
+          "line": 17,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "truth-vote-and-comment-cross-account.spec.ts",
+      "file": "truth-vote-and-comment-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B's completed-Truth vote reconciles in A's open modal",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Truth writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_TRUTH_WRITE_ONCE=true.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\truth-vote-and-comment-cross-account.spec.ts",
+                    "line": 46,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:46:24.040Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Truth writes require both DARE_QA_ALLOW_WRITES=true and DARE_QA_ALLOW_TRUTH_WRITE_ONCE=true.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\truth-vote-and-comment-cross-account.spec.ts",
+                        "line": 46,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "4bde0619fb8db73abb57-4356c2a53dcdcda9ecdf",
+          "file": "truth-vote-and-comment-cross-account.spec.ts",
+          "line": 45,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "verdict-cross-account.spec.ts",
+      "file": "verdict-cross-account.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A creates a media verdict and B votes on it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Set DARE_QA_ALLOW_VERDICT_WRITE_ONCE=true for the authorized one-shot verdict check.",
+                  "location": {
+                    "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\verdict-cross-account.spec.ts",
+                    "line": 24,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:46:24.055Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Set DARE_QA_ALLOW_VERDICT_WRITE_ONCE=true for the authorized one-shot verdict check.",
+                      "location": {
+                        "file": "C:\\Users\\Admin\\final dare app\\dare-final-version-main\\tests\\qa\\verdict-cross-account.spec.ts",
+                        "line": 24,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "4710c5cad1e73cc79753-94618fb14c4d26855d8a",
+          "file": "verdict-cross-account.spec.ts",
+          "line": 23,
+          "column": 5
+        },
+        {
+          "title": "B can view the existing QA Verdict on mobile",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 25719,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-15T06:46:24.063Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4710c5cad1e73cc79753-a1b926638525799cda0a",
+          "file": "verdict-cross-account.spec.ts",
+          "line": 69,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-15T06:41:15.560Z",
+    "duration": 334314.93200000003,
+    "expected": 22,
+    "skipped": 49,
+    "unexpected": 3,
+    "flaky": 0
+  }
+}

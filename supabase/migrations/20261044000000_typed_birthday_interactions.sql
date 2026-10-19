@@ -1,0 +1,14 @@
+alter table public.birthday_rooms add column if not exists local_date date;
+alter table public.birthday_rooms add column if not exists starts_at timestamptz;
+alter table public.birthday_rooms add column if not exists status text not null default 'preview';
+alter table public.birthday_rooms add column if not exists is_preview boolean not null default false;
+alter table public.birthday_rooms add column if not exists drop_count integer not null default 0;
+alter table public.birthday_rooms add column if not exists participant_count integer not null default 0;
+alter table public.birthday_rooms add column if not exists reaction_count integer not null default 0;
+create table if not exists public.birthday_drops(id uuid primary key default gen_random_uuid(),room_id uuid not null references public.birthday_rooms(id) on delete cascade,birthday_user_id uuid not null references public.profiles(id) on delete cascade,real_author_id uuid references public.profiles(id) on delete set null,type text not null,text text not null default '',media_url text,media_type text,anonymous boolean not null default false,sealed boolean not null default false,reaction_count integer not null default 0,reply_count integer not null default 0,created_at timestamptz not null default timezone('utc',now()),updated_at timestamptz not null default timezone('utc',now()));
+create table if not exists public.birthday_drop_reactions(drop_id uuid not null references public.birthday_drops(id) on delete cascade,user_id uuid not null references public.profiles(id) on delete cascade,reaction text not null,created_at timestamptz not null default timezone('utc',now()),primary key(drop_id,user_id,reaction));
+create table if not exists public.birthday_drop_comments(id uuid primary key default gen_random_uuid(),drop_id uuid not null references public.birthday_drops(id) on delete cascade,user_id uuid not null references public.profiles(id) on delete cascade,body text not null,created_at timestamptz not null default timezone('utc',now()));
+create table if not exists public.birthday_room_participants(room_id uuid not null references public.birthday_rooms(id) on delete cascade,user_id uuid not null references public.profiles(id) on delete cascade,created_at timestamptz not null default timezone('utc',now()),last_active_at timestamptz not null default timezone('utc',now()),primary key(room_id,user_id));
+create index if not exists birthday_drops_room_created on public.birthday_drops(room_id,created_at desc,id desc);
+alter table public.birthday_drops enable row level security;alter table public.birthday_drop_reactions enable row level security;alter table public.birthday_drop_comments enable row level security;alter table public.birthday_room_participants enable row level security;
+grant all on public.birthday_drops,public.birthday_drop_reactions,public.birthday_drop_comments,public.birthday_room_participants to service_role;

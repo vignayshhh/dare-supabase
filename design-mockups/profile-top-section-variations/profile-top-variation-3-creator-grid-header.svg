@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1440" viewBox="0 0 1080 1440">
+  <defs>
+    <radialGradient id="pageBg" cx="50%" cy="-10%" r="88%">
+      <stop offset="0" stop-color="#15311d"/>
+      <stop offset="38%" stop-color="#0a0f0a"/>
+      <stop offset="100%" stop-color="#030403"/>
+    </radialGradient>
+    <linearGradient id="surface" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#121b15"/>
+      <stop offset="1" stop-color="#060907"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#000000" flood-opacity="0.44"/>
+    </filter>
+    <style>
+      .title { fill:#ffffff; font:900 38px Inter, Arial, sans-serif; letter-spacing:-0.02em; }
+      .subtitle { fill:#94a3b8; font:700 22px Inter, Arial, sans-serif; }
+      .body { fill:#ffffff; font:800 25px Inter, Arial, sans-serif; }
+      .muted { fill:#94a3b8; font:700 20px Inter, Arial, sans-serif; }
+      .tiny { fill:#64748b; font:900 15px Inter, Arial, sans-serif; letter-spacing:2.5px; }
+      .greenText { fill:#86efac; font:900 15px Inter, Arial, sans-serif; letter-spacing:2.3px; }
+      .dark { fill:#061006; font:900 20px Inter, Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1080" height="1440" fill="url(#pageBg)"/>
+  <circle cx="540" cy="-60" r="390" fill="#4ade80" opacity="0.10"/>
+  <circle cx="114" cy="390" r="250" fill="#38bdf8" opacity="0.06"/>
+
+  <text x="72" y="96" class="title">Variation 3</text>
+  <text x="72" y="132" class="subtitle">Creator Grid Header</text>
+
+  <g transform="translate(90 190)" filter="url(#softShadow)">
+    <rect width="900" height="960" rx="56" fill="#020403" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+    <rect x="26" y="26" width="848" height="908" rx="42" fill="#050806" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+
+    <g transform="translate(68 72)">
+      <text x="0" y="28" class="body">@aarav.dares</text>
+      <rect x="642" y="-10" width="136" height="48" rx="24" fill="rgba(255,255,255,0.045)" stroke="rgba(255,255,255,0.08)"/>
+      <text x="710" y="20" text-anchor="middle" class="tiny">MENU</text>
+    </g>
+
+    <g transform="translate(68 150)">
+      <rect width="778" height="228" rx="36" fill="url(#surface)" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+      <path d="M0 0 H778" stroke="url(#green)" stroke-width="2" opacity="0.5"/>
+
+      <circle cx="94" cy="104" r="68" fill="url(#ring)"/>
+      <circle cx="94" cy="104" r="58" fill="#07100b"/>
+      <circle cx="94" cy="90" r="28" fill="#d7ffe6"/>
+      <path d="M50 142 C62 112 126 112 138 142" fill="#d7ffe6"/>
+
+      <text x="200" y="76" class="title" font-size="36">Aarav Sharma</text>
+      <text x="200" y="112" class="muted">@aarav.dares</text>
+      <text x="200" y="158" class="body" font-size="22">Proof-first posts. Real or fake?</text>
+      <rect x="580" y="62" width="146" height="54" rx="27" fill="url(#green)"/>
+      <text x="653" y="96" text-anchor="middle" class="dark">Edit</text>
+    </g>
+
+    <g transform="translate(68 416)">
+      <rect width="778" height="112" rx="34" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.08)"/>
+      <text x="54" y="45" class="title" font-size="34">48</text><text x="50" y="78" class="tiny">POSTS</text>
+      <text x="214" y="45" class="title" font-size="34">82%</text><text x="210" y="78" class="tiny">REAL</text>
+      <text x="394" y="45" class="title" font-size="34">12</text><text x="386" y="78" class="tiny">STREAK</text>
+      <text x="574" y="45" class="title" font-size="34">8.7K</text><text x="572" y="78" class="tiny">VIEWS</text>
+    </g>
+
+    <g transform="translate(68 568)">
+      <rect width="778" height="76" rx="38" fill="#07100b" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+      <rect x="8" y="8" width="188" height="60" rx="30" fill="url(#green)"/>
+      <text x="102" y="47" text-anchor="middle" class="dark">Grid</text>
+      <text x="294" y="47" text-anchor="middle" class="muted">Dares</text>
+      <text x="486" y="47" text-anchor="middle" class="muted">Truths</text>
+      <text x="676" y="47" text-anchor="middle" class="muted">Tagged</text>
+    </g>
+
+    <g transform="translate(68 704)">
+      <rect width="246" height="246" rx="26" fill="#132119"/>
+      <rect x="266" width="246" height="246" rx="26" fill="#0e2024"/>
+      <rect x="532" width="246" height="246" rx="26" fill="#121813"/>
+      <rect y="266" width="246" height="246" rx="26" fill="#111b16"/>
+      <rect x="266" y="266" width="246" height="246" rx="26" fill="#15241b"/>
+      <rect x="532" y="266" width="246" height="246" rx="26" fill="#102017"/>
+      <circle cx="214" cy="34" r="18" fill="#4ade80"/>
+      <circle cx="480" cy="34" r="18" fill="#38bdf8"/>
+      <circle cx="746" cy="34" r="18" fill="#facc15"/>
+      <text x="24" y="214" class="greenText">POST</text>
+      <text x="290" y="214" class="greenText">DARE</text>
+      <text x="556" y="214" class="greenText">TRUTH</text>
+    </g>
+  </g>
+</svg>

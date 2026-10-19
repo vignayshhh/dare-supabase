@@ -1,0 +1,236 @@
+<svg width="1900" height="1260" viewBox="0 0 1900 1260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1900" y2="1260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#030504"/>
+      <stop offset="0.42" stop-color="#11120d"/>
+      <stop offset="1" stop-color="#050507"/>
+    </linearGradient>
+    <radialGradient id="ambient" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(980 -60) rotate(90) scale(860 1220)">
+      <stop stop-color="#4ade80" stop-opacity="0.2"/>
+      <stop offset="0.34" stop-color="#22d3ee" stop-opacity="0.09"/>
+      <stop offset="0.7" stop-color="#ff4b8b" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#191c18"/>
+      <stop offset="1" stop-color="#070907"/>
+    </linearGradient>
+    <linearGradient id="skin1" x1="0" y1="0" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f3c49d"/>
+      <stop offset="1" stop-color="#9a5a42"/>
+    </linearGradient>
+    <linearGradient id="skin2" x1="0" y1="0" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d7aa87"/>
+      <stop offset="1" stop-color="#654138"/>
+    </linearGradient>
+    <linearGradient id="skin3" x1="0" y1="0" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#b47b5d"/>
+      <stop offset="1" stop-color="#3f241f"/>
+    </linearGradient>
+    <linearGradient id="skin4" x1="0" y1="0" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd9b0"/>
+      <stop offset="1" stop-color="#b36b48"/>
+    </linearGradient>
+    <linearGradient id="skin5" x1="0" y1="0" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c89778"/>
+      <stop offset="1" stop-color="#4c302d"/>
+    </linearGradient>
+    <linearGradient id="skin6" x1="0" y1="0" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#efc4a2"/>
+      <stop offset="1" stop-color="#815443"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="20" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="greenGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#4ade80" flood-opacity="0.58"/>
+    </filter>
+    <filter id="blueGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#22d3ee" flood-opacity="0.45"/>
+    </filter>
+    <filter id="pinkGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#ff4b8b" flood-opacity="0.45"/>
+    </filter>
+    <style>
+      .title { font: 950 58px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .sub { font: 650 19px Inter, SF Pro Display, Arial, sans-serif; fill: #a3aab5; letter-spacing: 0; }
+      .name { font: 920 25px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .desc { font: 650 15px Inter, SF Pro Display, Arial, sans-serif; fill: #9ca3af; letter-spacing: 0; }
+      .tag { font: 900 12px Inter, SF Pro Display, Arial, sans-serif; fill: #86efac; letter-spacing: 1.7px; }
+      .line { stroke: #1b0f0d; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
+      .thin { stroke: #111; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .sketch { stroke: #050505; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .neon { stroke: #4ade80; stroke-width: 3; stroke-linecap: round; }
+      .cyan { stroke: #22d3ee; stroke-width: 3; stroke-linecap: round; }
+      .pink { stroke: #ff4b8b; stroke-width: 3; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <rect width="1900" height="1260" fill="url(#page)"/>
+  <rect width="1900" height="1260" fill="url(#ambient)"/>
+  <path d="M0 950 C250 830 482 966 760 870 C1045 772 1262 900 1900 810 V1260 H0 Z" fill="#07110a"/>
+  <path d="M0 984 C355 890 582 1050 848 940 C1170 807 1442 940 1900 886" stroke="#4ade80" stroke-opacity="0.14" stroke-width="2"/>
+
+  <text x="78" y="104" class="title">Steve Human Cast Variations</text>
+  <text x="78" y="142" class="sub">Different humans, different faces, different bodies, different drawing styles. Pick the person Steve should become.</text>
+
+  <!-- 1: lanky indie -->
+  <g transform="translate(70 210)" filter="url(#shadow)">
+    <rect width="560" height="500" rx="34" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">1. Lanky Indie Steve</text>
+    <text x="34" y="84" class="desc">Tall, wiry, messy hair, amused by everything.</text>
+    <g transform="translate(120 112)">
+      <ellipse cx="160" cy="322" rx="122" ry="18" fill="#000" opacity="0.28"/>
+      <path d="M102 340 L118 250 H144 L136 340 Z" fill="#101214"/>
+      <path d="M178 340 L166 250 H193 L206 340 Z" fill="#101214"/>
+      <path d="M76 246 C92 174 116 134 159 134 C202 134 226 174 243 246 C208 267 120 267 76 246 Z" fill="#1d2a22"/>
+      <path d="M105 154 C114 206 111 247 96 286" stroke="#4ade80" stroke-opacity="0.25" stroke-width="10" stroke-linecap="round"/>
+      <path d="M221 154 C211 206 215 247 230 286" stroke="#4ade80" stroke-opacity="0.25" stroke-width="10" stroke-linecap="round"/>
+      <path d="M117 121 C114 82 137 55 162 55 C190 55 211 83 207 122 C203 156 184 174 162 174 C139 174 121 155 117 121 Z" fill="url(#skin1)"/>
+      <path d="M110 101 C118 45 146 26 183 36 C216 45 227 79 211 112 C189 83 146 77 110 101 Z" fill="#17100b"/>
+      <path d="M120 92 C143 68 178 65 210 89" class="neon" opacity="0.3"/>
+      <path d="M132 121 C141 115 151 116 158 123" class="line"/>
+      <path d="M172 123 C181 116 191 115 199 121" class="line"/>
+      <circle cx="149" cy="132" r="3.8" fill="#050505"/>
+      <circle cx="184" cy="132" r="3.8" fill="#050505"/>
+      <path d="M152 151 C163 158 179 157 190 149" stroke="#2b1510" stroke-width="4" stroke-linecap="round"/>
+      <path d="M83 206 C51 197 38 174 46 152" class="sketch"/>
+      <path d="M238 205 C272 194 286 169 278 144" class="sketch"/>
+      <rect x="227" y="122" width="45" height="69" rx="13" fill="#08120d" stroke="#4ade80" stroke-width="2"/>
+      <path d="M236 142 H262 M236 158 H257 M236 174 H264" stroke="#4ade80" stroke-width="2"/>
+    </g>
+    <text x="34" y="454" class="tag">STYLE: INDIE EDITORIAL</text>
+  </g>
+
+  <!-- 2: stocky older brother -->
+  <g transform="translate(670 210)" filter="url(#shadow)">
+    <rect width="560" height="500" rx="34" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">2. Older-Brother Steve</text>
+    <text x="34" y="84" class="desc">Broader build, calmer face, more protective.</text>
+    <g transform="translate(120 112)">
+      <ellipse cx="160" cy="322" rx="132" ry="18" fill="#000" opacity="0.3"/>
+      <path d="M75 253 C76 182 111 135 160 135 C210 135 244 182 246 253 C211 289 109 289 75 253 Z" fill="#20242a"/>
+      <path d="M92 258 C111 206 123 169 160 169 C198 169 211 206 229 258" fill="#111827"/>
+      <path d="M96 341 L111 261 H140 L135 341 Z" fill="#111111"/>
+      <path d="M184 341 L176 261 H207 L221 341 Z" fill="#111111"/>
+      <path d="M116 119 C113 79 139 53 160 53 C190 53 216 80 213 121 C211 157 190 178 160 178 C132 178 119 156 116 119 Z" fill="url(#skin2)"/>
+      <path d="M108 105 C116 65 141 40 171 42 C201 44 222 72 221 109 C193 90 139 89 108 105 Z" fill="#080808"/>
+      <path d="M124 123 C135 116 146 117 155 125" class="line"/>
+      <path d="M173 125 C183 117 195 116 205 123" class="line"/>
+      <circle cx="145" cy="135" r="4" fill="#050505"/>
+      <circle cx="193" cy="135" r="4" fill="#050505"/>
+      <path d="M144 154 C158 163 178 162 192 153" stroke="#21100e" stroke-width="4" stroke-linecap="round"/>
+      <path d="M103 196 C65 207 52 233 67 261" stroke="#20242a" stroke-width="26" stroke-linecap="round"/>
+      <path d="M237 197 C278 207 293 234 275 263" stroke="#20242a" stroke-width="26" stroke-linecap="round"/>
+      <circle cx="160" cy="223" r="28" fill="#0b100c" stroke="#4ade80" stroke-width="3"/>
+      <path d="M145 223 H175 M160 208 V238" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <text x="34" y="454" class="tag">STYLE: GROUNDED SOCIAL DRAMA</text>
+  </g>
+
+  <!-- 3: sharp fashion -->
+  <g transform="translate(1270 210)" filter="url(#shadow)">
+    <rect width="560" height="500" rx="34" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">3. Fashion Steve</text>
+    <text x="34" y="84" class="desc">Angular face, statement jacket, premium chaos.</text>
+    <g transform="translate(120 112)">
+      <ellipse cx="160" cy="322" rx="124" ry="18" fill="#000" opacity="0.28"/>
+      <path d="M96 340 L110 247 H141 L136 340 Z" fill="#090909"/>
+      <path d="M184 340 L176 247 H207 L221 340 Z" fill="#090909"/>
+      <path d="M61 260 L95 151 L160 133 L226 151 L261 260 C211 281 111 281 61 260 Z" fill="#1b1119"/>
+      <path d="M103 150 L160 238 L217 150" stroke="#ff4b8b" stroke-width="9" stroke-linejoin="round"/>
+      <path d="M119 116 C113 80 132 53 158 49 C192 44 219 74 214 117 C209 152 188 175 159 174 C132 173 122 148 119 116 Z" fill="url(#skin3)"/>
+      <path d="M105 103 C123 59 151 28 196 42 C216 49 228 71 224 94 C187 82 144 86 105 103 Z" fill="#050505"/>
+      <path d="M129 121 C140 113 151 114 159 122" stroke="#050505" stroke-width="5" stroke-linecap="round"/>
+      <path d="M172 123 C183 114 196 113 207 121" stroke="#050505" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="148" cy="133" r="3.8" fill="#050505"/>
+      <circle cx="193" cy="133" r="3.8" fill="#050505"/>
+      <path d="M150 153 C163 160 179 159 191 151" stroke="#120909" stroke-width="4" stroke-linecap="round"/>
+      <path d="M79 210 L39 169" class="pink"/>
+      <path d="M243 210 L285 169" class="cyan"/>
+      <path d="M74 118 C123 86 196 86 241 119" stroke="#22d3ee" stroke-width="2" opacity="0.28"/>
+      <circle cx="231" cy="82" r="12" fill="#ff4b8b" filter="url(#pinkGlow)"/>
+    </g>
+    <text x="34" y="454" class="tag">STYLE: FASHION ILLUSTRATION</text>
+  </g>
+
+  <!-- 4: soft round cartoon -->
+  <g transform="translate(70 750)" filter="url(#shadow)">
+    <rect width="560" height="500" rx="34" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">4. Soft Cartoon Steve</text>
+    <text x="34" y="84" class="desc">Rounder, expressive, friendly enough to trust.</text>
+    <g transform="translate(120 112)">
+      <ellipse cx="160" cy="322" rx="130" ry="18" fill="#000" opacity="0.24"/>
+      <path d="M102 340 L112 254 H145 L143 340 Z" fill="#202020"/>
+      <path d="M177 340 L174 254 H207 L220 340 Z" fill="#202020"/>
+      <path d="M75 259 C80 187 112 139 160 139 C209 139 240 187 246 259 C218 287 102 287 75 259 Z" fill="#d9ff3f"/>
+      <path d="M116 124 C113 78 137 48 160 48 C190 48 214 79 211 124 C208 162 188 183 160 183 C132 183 119 162 116 124 Z" fill="url(#skin4)"/>
+      <path d="M103 103 C111 58 135 35 160 35 C197 35 222 67 219 108 C195 91 129 91 103 103 Z" fill="#1b120d"/>
+      <path d="M125 124 C138 116 150 117 160 126" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+      <path d="M172 126 C183 117 196 116 208 124" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="145" cy="139" r="5" fill="#111"/>
+      <circle cx="191" cy="139" r="5" fill="#111"/>
+      <path d="M139 160 C155 177 185 174 201 156" stroke="#111" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="105" cy="149" r="12" fill="#ff9fbd" opacity="0.5"/>
+      <circle cx="217" cy="149" r="12" fill="#ff9fbd" opacity="0.5"/>
+      <path d="M88 217 C51 217 42 184 59 162" stroke="#d9ff3f" stroke-width="24" stroke-linecap="round"/>
+      <path d="M233 217 C271 217 281 184 263 162" stroke="#d9ff3f" stroke-width="24" stroke-linecap="round"/>
+    </g>
+    <text x="34" y="454" class="tag">STYLE: SOCIAL APP CHARACTER</text>
+  </g>
+
+  <!-- 5: sketchy black and white -->
+  <g transform="translate(670 750)" filter="url(#shadow)">
+    <rect width="560" height="500" rx="34" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">5. Sketchbook Steve</text>
+    <text x="34" y="84" class="desc">Raw, hand-drawn, almost like a diary margin.</text>
+    <g transform="translate(120 112)">
+      <ellipse cx="160" cy="322" rx="122" ry="18" fill="#000" opacity="0.26"/>
+      <path d="M101 339 L116 251 H142 L135 339" class="sketch"/>
+      <path d="M183 339 L174 251 H205 L219 339" class="sketch"/>
+      <path d="M78 260 C88 176 114 132 160 132 C205 132 236 177 246 260 C207 276 118 277 78 260 Z" fill="#f5f3eb"/>
+      <path d="M78 260 C88 176 114 132 160 132 C205 132 236 177 246 260" class="sketch"/>
+      <path d="M119 119 C115 75 136 51 160 51 C189 51 211 76 207 120 C204 157 185 176 160 176 C136 176 122 157 119 119 Z" fill="#f5f3eb"/>
+      <path d="M119 119 C115 75 136 51 160 51 C189 51 211 76 207 120 C204 157 185 176 160 176 C136 176 122 157 119 119 Z" class="sketch"/>
+      <path d="M108 104 C116 66 135 39 164 41 C194 43 219 69 217 105 C187 87 139 87 108 104 Z" fill="#111"/>
+      <path d="M125 123 C139 115 152 116 160 125" class="sketch"/>
+      <path d="M174 125 C184 116 198 115 209 123" class="sketch"/>
+      <circle cx="146" cy="137" r="4" fill="#111"/>
+      <circle cx="194" cy="137" r="4" fill="#111"/>
+      <path d="M140 158 C157 167 180 166 196 156" class="sketch"/>
+      <path d="M83 198 C43 190 33 160 46 135" class="sketch"/>
+      <path d="M237 198 C279 189 290 160 277 135" class="sketch"/>
+      <path d="M231 82 L254 62" class="neon"/>
+      <path d="M238 102 L268 96" class="neon"/>
+      <circle cx="268" cy="96" r="7" fill="#4ade80" filter="url(#greenGlow)"/>
+    </g>
+    <text x="34" y="454" class="tag">STYLE: HAND-DRAWN ZINE</text>
+  </g>
+
+  <!-- 6: athletic dare host -->
+  <g transform="translate(1270 750)" filter="url(#shadow)">
+    <rect width="560" height="500" rx="34" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">6. Athletic Dare Steve</text>
+    <text x="34" y="84" class="desc">Confident body language, challenge-host vibe.</text>
+    <g transform="translate(120 112)">
+      <ellipse cx="160" cy="322" rx="134" ry="18" fill="#000" opacity="0.3"/>
+      <path d="M98 340 L109 250 H142 L138 340 Z" fill="#0d0d0d"/>
+      <path d="M184 340 L177 250 H211 L223 340 Z" fill="#0d0d0d"/>
+      <path d="M69 255 C76 184 112 137 160 137 C209 137 247 184 254 255 C218 278 105 278 69 255 Z" fill="#0b1510"/>
+      <path d="M99 154 L132 251 H91 C72 214 69 181 99 154 Z" fill="#17241d"/>
+      <path d="M221 154 L188 251 H230 C249 214 251 181 221 154 Z" fill="#17241d"/>
+      <path d="M118 117 C115 80 137 55 160 55 C187 55 210 80 207 117 C204 153 187 173 160 173 C134 173 121 153 118 117 Z" fill="url(#skin6)"/>
+      <path d="M109 102 C116 61 139 39 165 39 C197 39 217 67 215 105 C186 90 139 90 109 102 Z" fill="#0b0b0b"/>
+      <path d="M128 123 C139 116 151 117 160 125" class="line"/>
+      <path d="M173 125 C183 117 196 116 206 123" class="line"/>
+      <circle cx="147" cy="136" r="4" fill="#050505"/>
+      <circle cx="193" cy="136" r="4" fill="#050505"/>
+      <path d="M142 155 C158 163 179 162 194 153" stroke="#28120f" stroke-width="4" stroke-linecap="round"/>
+      <path d="M74 191 C36 184 25 151 44 124" stroke="#17241d" stroke-width="22" stroke-linecap="round"/>
+      <path d="M244 191 C283 184 296 151 276 124" stroke="#17241d" stroke-width="22" stroke-linecap="round"/>
+      <path d="M119 222 H201" stroke="#4ade80" stroke-width="6" stroke-linecap="round"/>
+      <path d="M129 239 H191" stroke="#22d3ee" stroke-width="4" stroke-linecap="round" opacity="0.82"/>
+    </g>
+    <text x="34" y="454" class="tag">STYLE: PREMIUM GAME HOST</text>
+  </g>
+</svg>

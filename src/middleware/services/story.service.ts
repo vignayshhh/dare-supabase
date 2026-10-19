@@ -1,11 +1,5 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  documentId,
-} from "firebase/firestore";
+import { guardCircleResult } from "./guardCircleResult";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   Story,
   CreateStoryRequest,
@@ -13,12 +7,14 @@ import {
   StoryMediaType,
   StoryTextOverlay,
   StoryMusic,
+  StoryDrawPath,
 } from "../../backend/domain/interfaces/IStoryRepository";
 import { StoryRepository } from "../../backend/repositories/StoryRepository";
 import { userService, UserProfile } from "./user.service";
 import { storyReactionService } from "./story-reaction.service";
-import { closeFriendsService } from "./close-friends.service";
 import { getDefaultAvatarUrl } from "@/utils/placeholderImages";
+import { uploadOptimizedMedia } from "@/utils/mediaUpload";
+const pendingStoryAssets = new Map<string, string>();
 
 export type StoryType = "personal" | "dedication";
 
@@ -44,6 +40,8 @@ export interface StoryDTO {
   storyText?: StoryTextOverlay | null;
   storyFilter?: string | null;
   storyMusic?: StoryMusic | null;
+  storyDrawPaths?: StoryDrawPath[];
+  visibility?: "PUBLIC" | "FRIENDS" | "PRIVATE" | "CLOSE_FRIENDS";
   caption: string | null;
   createdAt: string;
   expiresAt: string;
@@ -59,6 +57,8 @@ export interface CreateStoryDTO {
   storyText?: StoryTextOverlay | null;
   storyFilter?: string | null;
   storyMusic?: StoryMusic | null;
+  storyDrawPaths?: StoryDrawPath[];
+  visibility?: "PUBLIC" | "FRIENDS" | "PRIVATE" | "CLOSE_FRIENDS";
   caption?: string;
 }
 
@@ -74,11 +74,34 @@ export interface StoryAudienceDTO {
   viewers: StoryAudienceEntry[];
   likes: StoryAudienceEntry[];
   hates: StoryAudienceEntry[];
+  viewersNextCursor?: string;
+  viewersHasMore?: boolean;
+  reactionsNextCursor?: string;
+  reactionsHasMore?: boolean;
 }
 
 export type StoryAudienceScope = "views" | "likes" | "hates" | "all";
+export interface StoryAudienceOptions {
+  cursor?: string;
+  limit?: number;
+}
+
+const encodeAudienceCursor = (value: string) => {
+  if (typeof btoa !== "undefined") return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return value;
+};
+const decodeAudienceCursor = (value: string | undefined) => {
+  if (!value) return undefined;
+  try {
+    if (typeof atob === "undefined") return value;
+    return atob(value.replace(/-/g, "+").replace(/_/g, "/"));
+  } catch { return undefined; }
+};
 
 class StoryService {
+  private get client() {
+    return getSupabaseBrowserClient();
+  }
   private storyRepository: StoryRepository;
   private audienceCache = new Map<
     string,
@@ -118,10 +141,21 @@ class StoryService {
         storyText: request.storyText || null,
         storyFilter: request.storyFilter || "original",
         storyMusic: request.storyMusic || null,
+        storyDrawPaths: request.storyDrawPaths || [],
+        visibility: request.visibility || "FRIENDS",
         caption: request.caption,
       };
 
       const story = await this.storyRepository.createStory(storyRequest);
+      const pendingAssetId = pendingStoryAssets.get(request.mediaUrl);
+      if (pendingAssetId) {
+        await getSupabaseBrowserClient().rpc("attach_media_asset", {
+          p_asset_id: pendingAssetId,
+          p_reference_type: "story",
+          p_reference_id: story.id,
+        });
+        pendingStoryAssets.delete(request.mediaUrl);
+      }
 
       const [userProfile, dedicatedProfile] = await Promise.all([
         userService.getProfile(userId),
@@ -139,31 +173,6 @@ class StoryService {
         dedicatedProfile,
       );
 
-      if (story.storyType === "dedication" && story.dedicatedToUserId) {
-        void closeFriendsService
-          .trackDedicatedStoryActivity({
-            actorId: userId,
-            actorName: userProfile.display_name || userProfile.username,
-            actorUsername: userProfile.username,
-            actorAvatar: userProfile.avatar_url || getDefaultAvatarUrl(userId),
-            storyId: story.id,
-            dedicatedToUserId: story.dedicatedToUserId,
-            dedicatedToUsername:
-              dedicatedProfile?.username ||
-              `user_${story.dedicatedToUserId.slice(-6)}`,
-            dedicatedToName:
-              dedicatedProfile?.display_name ||
-              dedicatedProfile?.username ||
-              "someone",
-            dedicatedToAvatar:
-              dedicatedProfile?.avatar_url ||
-              getDefaultAvatarUrl(story.dedicatedToUserId),
-            storyThumbnail: story.mediaType === "image" ? story.mediaUrl : "",
-          })
-          .catch((error) => {
-            console.error("Error creating dedicated story sus alert:", error);
-          });
-      }
 
       return storyDTO;
     } catch (error) {
@@ -176,6 +185,29 @@ class StoryService {
     try {
       const storiesWithViewerInfo =
         await this.storyRepository.getFriendsStories(userId);
+
+      // Native story-feed rows already include the authorized author projection.
+      // Reuse it instead of issuing another profile batch request for every feed
+      // open. The fallback below remains for older repository implementations.
+      if (storiesWithViewerInfo.every((story) => Boolean(story.author))) {
+        return storiesWithViewerInfo.map((story) => ({
+          id: story.id,
+          author: story.author,
+          media: { type: story.mediaType, url: story.mediaUrl },
+          storyType: story.storyType || "personal",
+          dedicatedTo: story.dedicatedTo || null,
+          storyText: story.storyText || null,
+          storyFilter: story.storyFilter || "original",
+          storyMusic: story.storyMusic || null,
+          storyDrawPaths: story.storyDrawPaths || [],
+          visibility: story.visibility,
+          caption: story.caption,
+          createdAt: story.createdAt,
+          expiresAt: story.expiresAt,
+          viewCount: story.viewCount,
+          hasViewed: story.hasViewed,
+        }));
+      }
 
       const authorIds = [
         ...new Set(
@@ -199,10 +231,10 @@ class StoryService {
           : null;
 
         console.log(
-          `🔍 Processing story ${story.id} - Looking for profile with userId: ${story.userId}`,
+          `ðŸ” Processing story ${story.id} - Looking for profile with userId: ${story.userId}`,
         );
         console.log(
-          `🔍 Available profiles:`,
+          `ðŸ” Available profiles:`,
           authorProfiles.map((p) => ({
             user_id: p.user_id,
             id: p.id,
@@ -210,12 +242,12 @@ class StoryService {
             display_name: p.display_name,
           })),
         );
-        console.log(`🔍 Found author profile by user_id:`, authorProfile);
+        console.log(`ðŸ” Found author profile by user_id:`, authorProfile);
 
         // Fallback: try matching by id field if user_id doesn't match
         if (!authorProfile) {
           authorProfile = authorProfiles.find((p) => p.id === story.userId);
-          console.log(`🔍 Found author profile by id:`, authorProfile);
+          console.log(`ðŸ” Found author profile by id:`, authorProfile);
         }
 
         // Final fallback: try partial matching
@@ -226,14 +258,14 @@ class StoryService {
               story.userId.includes(p.user_id || ""),
           );
           console.log(
-            `🔍 Found author profile by partial match:`,
+            `ðŸ” Found author profile by partial match:`,
             authorProfile,
           );
         }
 
         if (!authorProfile) {
           console.warn(
-            `⚠️ No profile found for story author ${story.userId}, using fallback`,
+            `âš ï¸ No profile found for story author ${story.userId}, using fallback`,
           );
           return {
             id: story.id,
@@ -255,6 +287,8 @@ class StoryService {
             storyText: story.storyText || null,
             storyFilter: story.storyFilter || "original",
             storyMusic: story.storyMusic || null,
+            storyDrawPaths: story.storyDrawPaths || [],
+            visibility: story.visibility,
             caption: story.caption,
             createdAt: story.createdAt,
             expiresAt: story.expiresAt,
@@ -264,7 +298,7 @@ class StoryService {
         }
 
         console.log(
-          `✅ Using real profile for ${story.userId}:`,
+          `âœ… Using real profile for ${story.userId}:`,
           authorProfile.display_name || authorProfile.username,
         );
         return this.convertToStoryDTO(story, authorProfile, dedicatedProfile);
@@ -289,6 +323,9 @@ class StoryService {
         userService.getProfile(userId),
         this.getProfilesByIdsBatch(dedicatedIds),
       ]);
+      const viewCounts = await this.getStoryViewCounts(
+        stories.map((story) => story.id),
+      );
 
       if (!userProfile) {
         return [];
@@ -296,7 +333,10 @@ class StoryService {
 
       return stories.map((story) =>
         this.convertToStoryDTO(
-          story,
+          {
+            ...story,
+            viewCount: viewCounts.get(story.id) ?? story.viewCount,
+          },
           userProfile,
           story.dedicatedToUserId
             ? profilesById.get(story.dedicatedToUserId) || null
@@ -339,8 +379,11 @@ class StoryService {
   async getStoryAudience(
     storyId: string,
     scope: StoryAudienceScope = "all",
+    options: StoryAudienceOptions = {},
   ): Promise<StoryAudienceDTO> {
-    const cacheKey = `${storyId}:${scope}`;
+    const limit = Math.min(Math.max(options.limit ?? 100, 1), 200);
+    const cursor = decodeAudienceCursor(options.cursor);
+    const cacheKey = `${storyId}:${scope}:${options.cursor ?? "first"}:${limit}`;
     const cached = this.audienceCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
@@ -349,19 +392,51 @@ class StoryService {
     try {
       const needsViewers = scope === "views" || scope === "all";
       const story = needsViewers
-        ? await this.storyRepository.getStoryById(storyId)
+        ? (await this.client.from("stories").select("id").eq("id", storyId).maybeSingle()).data
         : null;
 
       if (needsViewers && !story) {
         return { viewers: [], likes: [], hates: [] };
       }
 
+      let viewEntries: Array<{ userId: string; viewCount: number }> = [];
+      let viewersNextCursor: string | undefined;
+      let viewersHasMore = false;
+      if (needsViewers) {
+        let viewQuery = this.client.from("story_views")
+          .select("viewer_id").eq("story_id", storyId)
+          .order("viewer_id", { ascending: true })
+          .limit(limit + 1);
+        if (cursor) viewQuery = viewQuery.gt("viewer_id", cursor);
+        const { data: rows, error } = await viewQuery;
+        if (error) throw error;
+        const pageRows = rows ?? [];
+        viewersHasMore = pageRows.length > limit;
+        const visibleRows = pageRows.slice(0, limit);
+        if (viewersHasMore && visibleRows.length) {
+          viewersNextCursor = encodeAudienceCursor(String(visibleRows[visibleRows.length - 1].viewer_id));
+        }
+        viewEntries = visibleRows
+          .map((data) => {
+            return {
+              userId: data.viewer_id,
+              viewCount: 1,
+            };
+          })
+          .filter((entry) => Boolean(entry.userId));
+      }
+
       const needsLikes = scope === "likes" || scope === "all";
       const needsHates = scope === "hates" || scope === "all";
-      const reactions =
+      const reactionPage =
         needsLikes || needsHates
-          ? await storyReactionService.getStoryReactions(storyId)
-          : [];
+          ? await storyReactionService.getStoryReactionPage(storyId, {
+              cursor: options.cursor,
+              limit,
+              type: scope === "likes" || scope === "hates" ? scope.slice(0, -1) as "like" | "hate" : undefined,
+            })
+          : { reactions: [], hasMore: false };
+      const reactions = reactionPage.reactions;
       const likeUserIds = needsLikes
         ? reactions
             .filter((reaction) => reaction.type === "like")
@@ -374,7 +449,7 @@ class StoryService {
         : [];
       const allUserIds = [
         ...new Set([
-          ...(story ? story.viewers : []),
+          ...viewEntries.map((entry) => entry.userId),
           ...likeUserIds,
           ...hateUserIds,
         ]),
@@ -386,8 +461,7 @@ class StoryService {
         const profile = profilesById.get(userId);
         if (!profile) return null;
         const viewCount =
-          story?.viewerViewCounts[userId] ??
-          (story?.viewers.includes(userId) ? 1 : 0);
+          viewEntries.find((entry) => entry.userId === userId)?.viewCount ?? 1;
 
         return {
           userId,
@@ -401,17 +475,20 @@ class StoryService {
       };
 
       const audience: StoryAudienceDTO = {
-        viewers: story
-          ? story.viewers
-              .map((userId) => toEntry(userId))
-              .filter((entry): entry is StoryAudienceEntry => Boolean(entry))
-          : [],
+        viewers:
+          viewEntries
+            .map((entry) => toEntry(entry.userId))
+            .filter((entry): entry is StoryAudienceEntry => Boolean(entry)),
         likes: [...new Set(likeUserIds)]
           .map((userId) => toEntry(userId))
           .filter((entry): entry is StoryAudienceEntry => Boolean(entry)),
         hates: [...new Set(hateUserIds)]
           .map((userId) => toEntry(userId))
           .filter((entry): entry is StoryAudienceEntry => Boolean(entry)),
+        viewersNextCursor,
+        viewersHasMore,
+        reactionsNextCursor: reactionPage.nextCursor,
+        reactionsHasMore: reactionPage.hasMore,
       };
 
       this.audienceCache.set(cacheKey, {
@@ -426,80 +503,61 @@ class StoryService {
     }
   }
 
-  /**
-   * Converts a file to base64 data URL (same approach as profile avatars and feed posts)
-   * This avoids Firebase Storage CORS issues entirely
-   */
   async uploadStoryMedia(
     file: File,
+    userId: string,
     onProgress?: (percent: number) => void,
   ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      try {
-        console.log(
-          "🖼️ Converting story media to base64 (same as profile avatars & feed posts)",
-        );
-        onProgress?.(10);
+    if (!userId || userId === "me") {
+      throw new Error("Please log in before posting a story.");
+    }
 
-        const reader = new FileReader();
+    try {
+      onProgress?.(5);
+      const mediaKind = file.type.startsWith("video/") ? "video" : "image";
+      const uploadedStoryMedia = await uploadOptimizedMedia({
+        source: file,
+        userId,
+        context: "story",
+        fileName: file.name,
+        mediaKind,
+      });
 
-        reader.onprogress = (event) => {
-          if (event.lengthComputable) {
-            const percent = (event.loaded / event.total) * 100;
-            onProgress?.(Math.round(percent));
-          }
-        };
-
-        reader.onload = () => {
-          try {
-            const base64Data = reader.result as string;
-            console.log("✅ Story media converted to base64 successfully");
-            onProgress?.(100);
-            resolve(base64Data);
-          } catch (error) {
-            console.error("Error processing base64 data:", error);
-            reject(new Error("Failed to process image data"));
-          }
-        };
-
-        reader.onerror = () => {
-          console.error("Error reading file:");
-          reject(new Error("Failed to read file"));
-        };
-
-        // Read file as base64 data URL (same as CreateFeedPostScreen)
-        reader.readAsDataURL(file);
-      } catch (error) {
-        console.error("Error initiating file read:", error);
-        reject(new Error("Failed to initiate file upload"));
-      }
-    });
+      onProgress?.(100);
+      if (uploadedStoryMedia.assetId) pendingStoryAssets.set(uploadedStoryMedia.url, uploadedStoryMedia.assetId);
+      return uploadedStoryMedia.url;
+    } catch (error) {
+      console.error("Story media upload failed:", error);
+      throw error instanceof Error
+        ? error
+        : new Error("Failed to upload story media");
+    }
   }
 
   private async getAuthorProfiles(authorIds: string[]): Promise<UserProfile[]> {
     const profiles: UserProfile[] = [];
 
-    console.log("🔍 getAuthorProfiles - Fetching profiles for IDs:", authorIds);
+    console.log("ðŸ” getAuthorProfiles - Fetching profiles for IDs:", authorIds);
 
     for (const authorId of authorIds) {
       console.log(
-        `🔍 getAuthorProfiles - Fetching profile for author: ${authorId}`,
+        `ðŸ” getAuthorProfiles - Fetching profile for author: ${authorId}`,
       );
       const profile = await userService.getProfile(authorId);
       console.log(
-        `🔍 getAuthorProfiles - Profile result for ${authorId}:`,
+        `ðŸ” getAuthorProfiles - Profile result for ${authorId}:`,
         profile,
       );
       if (profile) {
         profiles.push(profile);
       } else {
         console.warn(
-          `⚠️ getAuthorProfiles - No profile found for author: ${authorId}`,
+          `âš ï¸ getAuthorProfiles - No profile found for author: ${authorId}`,
         );
       }
     }
 
-    console.log("🔍 getAuthorProfiles - Final profiles array:", profiles);
+    console.log("ðŸ” getAuthorProfiles - Final profiles array:", profiles);
     return profiles;
   }
 
@@ -537,17 +595,10 @@ class StoryService {
 
     await Promise.all(
       chunks.map(async (chunk) => {
-        const usersRef = collection(db, "users");
-        const usersQuery = query(usersRef, where(documentId(), "in", chunk));
-        const snapshot = await getDocs(usersQuery);
-
-        snapshot.forEach((userDoc) => {
-          const profile = {
-            id: userDoc.id,
-            ...userDoc.data(),
-          } as UserProfile;
-          profiles.set(userDoc.id, profile);
-          this.profileCache.set(userDoc.id, {
+        const batch = await userService.getProfiles(chunk);
+        batch.forEach((profile, id) => {
+          profiles.set(id, profile);
+          this.profileCache.set(id, {
             data: profile,
             expiresAt: Date.now() + this.profileCacheTtlMs,
           });
@@ -566,6 +617,38 @@ class StoryService {
     );
 
     return profiles;
+  }
+
+  private async getStoryViewCounts(
+    storyIds: string[],
+  ): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+
+    for (let i = 0; i < storyIds.length; i += 30) {
+      const chunk = storyIds.slice(i, i + 30);
+      if (chunk.length === 0) continue;
+
+      try {
+        const { data: rows, error } = await this.client.rpc("get_story_view_counts", {
+          p_story_ids: chunk,
+        });
+        if (error) throw error;
+        for (const row of rows ?? []) counts.set(String(row.story_id), Number(row.view_count) || 0);
+        continue;
+      } catch (error) {
+        console.warn("Unable to read grouped story view counts; using bounded compatibility paging:", error);
+        const fallback = new Map<string, number>();
+        for (let page = 0;; page += 1) {
+          const result = await this.client.from("story_views").select("story_id").in("story_id", chunk).range(page * 500, (page + 1) * 500 - 1);
+          if (result.error) throw result.error;
+          for (const row of result.data ?? []) fallback.set(String(row.story_id), (fallback.get(String(row.story_id)) ?? 0) + 1);
+          if ((result.data ?? []).length < 500) break;
+        }
+        fallback.forEach((count, storyId) => counts.set(storyId, count));
+      }
+    }
+
+    return counts;
   }
 
   private convertToStoryDTO(
@@ -599,6 +682,8 @@ class StoryService {
       storyText: baseStory.storyText || null,
       storyFilter: baseStory.storyFilter || "original",
       storyMusic: baseStory.storyMusic || null,
+      storyDrawPaths: baseStory.storyDrawPaths || [],
+      visibility: baseStory.visibility,
       caption: baseStory.caption,
       createdAt: baseStory.createdAt,
       expiresAt: baseStory.expiresAt,
@@ -643,4 +728,4 @@ class StoryService {
   }
 }
 
-export const storyService = new StoryService();
+export const storyService = guardCircleResult(new StoryService());

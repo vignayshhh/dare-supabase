@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import DebugConsoleFilter from "../components/DebugConsoleFilter";
+import NativeMobileChromeHider from "../components/NativeMobileChromeHider";
 import ServiceWorkerRegistration from "../components/ServiceWorkerRegistration";
 
 const geistSans = Geist({
@@ -97,6 +99,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <DebugConsoleFilter />
+        <NativeMobileChromeHider />
         <ServiceWorkerRegistration />
         {children}
       </body>

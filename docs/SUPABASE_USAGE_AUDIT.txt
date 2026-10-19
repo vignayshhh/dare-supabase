@@ -1,0 +1,278 @@
+SUPABASE USAGE AUDIT — 2026-10-19
+
+Verdict: this codebase is NOT optimized for the lowest practical Supabase usage.
+There are substantial opportunities to reduce database requests, writes, compute,
+Realtime work, Storage signing calls, stored bytes, and downloaded media.
+
+Scope and evidence
+------------------
+Automated text scan: 831 files / 203,279 lines, including 117 SQL files.
+The existing source audit separately scanned 360 runtime JS/TS files and found
+475 .from() occurrences, 94 .rpc() occurrences, 67 channel creation occurrences,
+50 Postgres Changes handlers, and 46 intervals. These are syntax counts, NOT
+executed request totals. For example, Array.from and UI animation timers can
+match; storage calls also overlap .from counts. Do not treat these as billing.
+
+SUPABASE_USAGE_SCAN.json records each scanned path, hash, line count, matching
+line numbers, and exclusions. Dependencies, build output, tool metadata, binary
+assets, logs, and secret environment contents were excluded from source review.
+Native wrapper configuration was included; Capacitor points at the hosted app.
+
+Manual review traced high-impact client/service/repository/API paths and SQL
+definitions, including later migrations that replace earlier functions. This
+is not a claim that every line received an individual manual semantic review.
+No live database, deployed migration history, query plans, production traffic,
+Storage inventory, or billing metrics were inspected. All schema findings below
+describe the repository's migration sequence, not verified deployed state.
+Existing application changes were left intact. Only audit artifacts were added.
+
+Priority findings
+-----------------
+
+1. HIGH — The Redis-named cache and rate limiter themselves consume Supabase.
+   src/services/redisCache.server.ts:40,101,128,145
+   src/app/api/_lib/redis.ts:5-27
+   Cache reads outside the process-local front cache SELECT cache_entries; sets
+   UPSERT it; increments invoke PostgreSQL; pattern invalidation DELETEs rows.
+   The security shim has no comparable front cache and mget performs one read
+   per key. Cold instances and distributed instances therefore keep using the
+   database even for cached content. This can reduce expensive query compute,
+   but it is not a zero-Supabase cache hit.
+   Fix: measure front-cache hit rates and move shared transient cache/rate-limit
+   state to an actual external cache if minimizing Supabase is the objective.
+   If staying PostgreSQL-only, batch cache operations and compare cache overhead
+   with the cost of the underlying query. Keep authorization and abuse controls.
+
+2. HIGH — Cache invalidation expands into many individual database operations.
+   src/app/api/_lib/socialCache.ts:211,310,325
+   src/app/api/_lib/socialMutations.ts:162
+   bumpFeedCacheVersions issues one increment RPC per user per feed kind.
+   invalidateSocialCachesForUsers adds three pattern deletes per network user,
+   plus three key deletes per directly affected user. Thus N audience members
+   can mean 3N increment RPCs + 3N pattern DELETE requests + 3K direct deletes,
+   before membership/profile lookups. Challenge publishing invokes fanout's
+   version bump and then this broader invalidation again.
+   In Circle scope, getCachedFriendIds at line 136 queries the same circle member
+   list on each call instead of reusing a request-local result. Profile cache
+   population also writes each missing profile with an individual UPSERT.
+   Fix: use Circle-scoped shared generations with explicit per-user state where
+   needed; batch increments/deletes/cache writes; resolve audience once per
+   request. Old pattern deletes use kind:uid:* while current page cache keys use
+   kind:circle:circleId:uid:..., so those deletes do not match the current format.
+
+3. HIGH — Materialized feed writes remain after the feed stopped reading them.
+   src/app/api/_lib/feedFanout.ts:77,109
+   src/app/api/posts/route.ts:128
+   src/app/api/_lib/socialMutations.ts:163
+   supabase/migrations/20261124000000_circle_content_boundaries.sql:118
+   The latest get_ranked_feed_page reads posts directly; it no longer references
+   feed_items. The source lookup helper has no callers in src. Publishing still
+   resolves an audience, upserts one feed_items row per member, and bumps cache
+   versions. vercel.json selects inline fanout. These writes add storage, index
+   maintenance and WAL without serving the current feed read path.
+   Fix: retire unused materialization while retaining necessary cache updates,
+   or deliberately restore a reader that benefits from it. Confirm deployed
+   functions and external consumers before retiring the table.
+
+4. HIGH — Truth subscriptions poll every five seconds alongside Realtime.
+   src/middleware/services/truth-interactions.service.ts:49,90,109,166
+   A vote refresh issues preview + own-vote + two exact-count queries: FOUR
+   requests every five seconds, even with no changes. That is 48 requests/minute
+   or 2,880/hour per continuously subscribed card, excluding initialization and
+   profile hydration. An open comment subscription adds 12/minute or 720/hour.
+   MainScreen.tsx:4991 gates one card variant on isActive, which helps; the
+   service still has no document visibility gate or in-flight refresh guard.
+   Fix: apply verified event deltas, reconcile on reconnect/focus, and use a
+   slower bounded fallback only when Realtime is degraded. Preserve the missed
+   event recovery these timers were introduced to provide. Use authoritative
+   counts plus a small voter preview rather than repeatedly recounting both sets.
+
+5. HIGH — Drama feeds fetch all child votes/comments for every page.
+   src/app/api/_lib/drama.ts:382-400
+   src/app/api/drama/feed/route.ts:34-43
+   src/stores/dramaBackend.ts:93-99
+   The page defaults to 60 cards, then fetches votes, comments, confirmations and
+   voter/commenter profiles for all of them. Child queries have no explicit page
+   limit. The server's row cap is not pagination and can silently truncate data.
+   A single visible card event triggers a reload of the entire 60-card feed.
+   Fix: return aggregate counts, current-user state and a small preview; load
+   voter/comment pages on demand. Patch or refetch only affected card IDs.
+
+6. HIGH — Several realtime events cause whole-list rereads.
+   src/middleware/services/challenge-room-chat.service.ts:80-90
+   src/middleware/services/impersonation.service.ts:48-49
+   src/middleware/services/birthday-room.service.ts:431-433
+   src/middleware/services/conversation-games.service.ts:27-28
+   src/lib/realtime/scheduleRefresh.ts:7
+   Community chat rereads up to 80 messages for each change; impersonation chat
+   rereads up to 200. Birthday drops and game rounds follow the same pattern.
+   A 40ms coalescing window only combines very close events and does not prevent
+   a second read while the first is in flight. With V viewers and M separated
+   chat events this can approach V*M requests and 80*V*M returned message rows.
+   Fix: apply INSERT/UPDATE/DELETE payloads to bounded local pages, use scoped
+   Broadcast where appropriate, and add single-flight reconnect reconciliation.
+   Pause nonessential subscriptions when their screen/document is inactive.
+
+7. HIGH — Dare voter hydration is still an N+1 query path.
+   src/middleware/services/dare-interactions.service.ts:407,417,460
+   The vote preview reads up to 100 rows, then invokes getUserProfile separately
+   for each voter. A cold cache can cause 1 + 100 requests. The five-minute cache
+   helps later reads but does not batch misses or deduplicate concurrent misses.
+   Fix: collect missing IDs into a bounded profiles IN query, with a shared
+   in-flight cache. Separate total counts/current-user vote from the preview;
+   deriving totals from the first 100 voters is also a correctness limitation.
+
+8. HIGH — Expired media are re-signed individually on repeated feed responses.
+   src/app/api/_lib/storedMediaUrl.ts:38-49
+   src/app/api/posts/feed/route.ts:15-34,77-79,114-122
+   The signing helper has no URL cache or in-flight deduplication. The feed caches
+   the raw page before hydration; cache-hit hydration revisits its original
+   expired URLs. Every repeated response can therefore invoke createSignedUrl
+   per occurrence, even for duplicate avatars/media. Browser-side signed URL
+   caching does not eliminate these server-side calls.
+   Fix: deduplicate bucket/path references, batch signing, and reuse refreshed
+   URLs until shortly before expiry with authorization-aware cache scoping.
+   Preserve private-bucket access checks and membership revocation behavior.
+
+9. HIGH — Community proof uploads bypass the image optimizer.
+   src/middleware/services/challenge-room.service.ts:77-83
+   src/components/screens/ChallengeRoomScreen.tsx:2494
+   This active path uploads the original file up to 100MB and returns the same
+   URL as the thumbnail. It does not use uploadOptimizedMedia, even though that
+   helper has a challenge-room-proof configuration. Large phone photos retain
+   their original size and the preview reference is not a smaller derivative.
+   Fix: route images through shared optimization and generate actual small
+   previews; use a video poster for video previews.
+
+10. MEDIUM — Shared uploads only optimize images, and PNG stays lossless PNG.
+    src/utils/mediaUpload.ts:66,266,355,438-465
+    Videos/audio pass through unchanged, with several contexts accepting 100MB.
+    PNG explicitly overrides preferred WebP; GIF passes through unchanged.
+    These are concrete byte-reduction opportunities, with media-dependent impact.
+    Fix: enforce duration/resolution/bitrate budgets, create suitable derivatives,
+    use WebP for suitable PNG images including transparency, and preserve original
+    animation where required. Compare encoded sizes before replacing a smaller
+    original. Moving transcoding elsewhere shifts cost rather than eliminating it.
+
+11. MEDIUM — Every protected API call performs a remote Auth user lookup.
+    src/app/api/_lib/auth.ts:14
+    src/app/api/_lib/withSecurity.ts:160,231
+    verifyRequestAuth uses auth.getUser(token), before the handler's cache lookup.
+    Social requests also invoke is_circle_member. A fully warm in-process feed
+    hit therefore still has these two Supabase calls, before any signing work.
+    Fix: where token-age authorization semantics are acceptable, use validated
+    JWT claims with asymmetric-key verification and cached JWKS; retain fresh
+    user/admin checks for operations requiring current account state. Never
+    replace verification with trusting getSession or decoding a JWT alone.
+
+12. MEDIUM — Inbox refresh loads up to 100 conversations for broad member events.
+    src/middleware/services/messaging.service.ts:1354-1375
+    supabase/migrations/20261114000000_durable_message_receipts_inbox.sql:12-17
+    The app-wide inbox listens to a private broadcast AND an unfiltered
+    conversation_members Postgres Changes subscription. RLS constrains visibility,
+    but relevant peer receipts still reload the whole inbox after 2.5 seconds.
+    The RPC computes unread counts and includes all hidden-message IDs per row.
+    Fix: deliver targeted member/receipt changes through the authorized inbox
+    topic, patch the affected conversation, page inbox rows, and fetch hidden
+    message state when opening its conversation. Preserve peer read receipts;
+    simply filtering member events to self would lose them.
+
+13. MEDIUM — Some aggregate counters rescan children on every mutation.
+    supabase/migrations/20261010000000_fresh_dare_schema.sql:215-224
+    supabase/migrations/20261125000000_circle_rpc_integration.sql:20
+    Post reaction triggers SUM taps over all reactions; post comment triggers
+    COUNT all comments; verdict voting recounts all votes under the parent lock.
+    Repeated likes still update the reaction after its taps reach the 50 cap,
+    running trigger work for an unchanged value (20261086000000...sql:41).
+    Fix: maintain transactional insert/delete/update deltas, skip no-op writes,
+    and reconcile counts separately. Validate intended unique-user versus tap
+    semantics before changing reaction_count. Hot-row contention remains a
+    separate concern even after replacing full recounts.
+
+14. MEDIUM — Expiration and deletion do not establish media/cache retention.
+    src/backend/repositories/StoryRepository.ts:155-163
+    src/utils/mediaUpload.ts:410-417
+    src/services/redisCache.server.ts:48-52
+    vercel.json: crons is empty
+    Story deletion removes database rows, not Storage objects. Upload success
+    followed by signing/content-write failure has no compensating cleanup here.
+    Cache TTL checks ignore expired rows; version/cursor keys can accumulate.
+    No general storage cleanup or scheduled cache purge was found in reviewed
+    source/migrations. Externally configured jobs were not inspected.
+    Fix: establish reference-aware media cleanup, abandoned-upload expiry and
+    batched expired-cache deletion. Preserve intentionally retained proofs and
+    shared references. Verify existing external jobs before adding duplicates.
+
+15. INVESTIGATE — Circle feed filtering and cursor predicates need query plans.
+    supabase/migrations/20261124000000_circle_content_boundaries.sql:6,70,118
+    The latest query uses has_circle_access(p.circle_id) and extracts epoch from
+    created_at in the cursor predicate. Added Circle indexes are single-column;
+    existing time indexes are separate. This structure may examine excess rows
+    as the number of Circles grows; a LIMIT alone does not guarantee cheap work.
+    Fix candidate: explicit circle_id equality plus a timestamp/id keyset and
+    composite (circle_id,created_at DESC,id DESC) index, retaining RLS. Confirm
+    with EXPLAIN (ANALYZE, BUFFERS) on representative data before adding indexes.
+    This is a plan-dependent risk, not a measured sequential-scan finding.
+
+16. MEDIUM — Current resource metrics miss major portions of usage.
+    src/lib/observability/resourceMetrics.ts:41-62
+    src/lib/supabase/requestContext.ts:24
+    src/app/api/_lib/redis.ts:5
+    The request-scoped Circle client and separate security cache client do not
+    use instrumentSupabaseFetch. The instrumenter counts REST calls but not Auth
+    calls or Storage signing/download bytes; Realtime accounting is manually
+    wired only in selected paths. Runtime metrics can substantially undercount
+    server work, especially the current social routes.
+    Fix: instrument every client factory and classify Auth/REST/RPC/Storage;
+    record response bytes and complete channel lifecycle/message counts. Compare
+    these with database query statistics and Supabase usage reports.
+
+Existing optimizations worth retaining
+-------------------------------------
+Singleton browser client; explicit selected fields on most reads; bounded pages
+and keyset-style cursors; cached/coalesced client requests; batch profile loading
+in some services; process-local cache fronting the database cache; production
+feed realtime disabled in vercel.json; private message broadcasts and presence
+instead of durable writes for every presence signal; image resizing in the
+shared upload path; fixed immutable object paths with long Cache-Control.
+Many intervals only drive animation/countdowns and do not query Supabase.
+Unused legacy helpers must not be counted as production traffic just because
+their definitions contain calls. In particular, enrichPostsWithBatchData has no
+callers in the scanned source, so its cache-bypassing author helper is not listed
+as an active high-impact issue.
+
+Order of work and verification
+-----------------------------
+First measure and fix 1-5 and 8-9: shared cache overhead, fanout/invalidation,
+idle truth polling, drama payload expansion, and repeated signing/raw media.
+Then batch dare profile hydration and apply realtime deltas in active rooms.
+Next address counter maintenance, retention, and query plans at realistic scale.
+
+Before/after scenarios: cold and warm feed; idle active truth card for one minute;
+open/closed comments; hidden tab; busy community chat with multiple viewers;
+drama card with many votes/comments; cold 100-voter dare; expired-URL feed reload;
+content publishing in small and large Circles; media upload/delete/failure.
+Count server-side calls as well as browser calls, and test reconnect, revocation,
+duplicate events and concurrent updates to preserve correctness.
+
+Code-derived examples, not production measurements:
+- Truth votes: 48 idle queries/minute/subscription, plus optional 12 for comments.
+- Cold 100-voter dare preview: up to 101 queries before caching helps.
+- Full network invalidation: 6N + 3K cache requests in the described path, plus
+  membership lookups and any additional publishing/version operations.
+- Expired media: up to one signing request per URL occurrence per feed hydration.
+
+No percentage savings or minimum monthly bill can be justified from static
+source alone. Lower request count, lower compute, lower egress and lower total
+cost are related but different objectives; moving cache/media services shifts
+usage outside Supabase. Keep required freshness and access control intact.
+
+Official references consulted
+-----------------------------
+https://supabase.com/docs/guides/auth/server-side/creating-a-client
+getUser performs a network request; verified claims can avoid repeated Auth
+lookups depending on signing-key configuration.
+https://supabase.com/docs/guides/realtime/postgres-changes
+Postgres Changes authorization work scales with subscribed users.
+https://supabase.com/docs/guides/realtime/subscribing-to-database-changes
+Database Broadcast is the documented alternative for scalable scoped events.

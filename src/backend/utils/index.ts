@@ -1,1 +1,1 @@
-export * from './firebase-test';
+export {};

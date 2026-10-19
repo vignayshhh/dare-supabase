@@ -1,30 +1,16 @@
-/**
- * Bootstrap the FIRST admin user offline.
- *
- * Usage (from a trusted machine with a service account key):
- *   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json \
- *     npx ts-node scripts/set-admin.ts <firebase-uid>
- *
- * After running once, use the `setAdminRole` callable from the app for
- * further admin grants (so you never need to re-distribute the SA key).
+/** Bootstrap an admin in a fresh Supabase project.
+ * Usage: SUPABASE_SECRET_KEY=... NEXT_PUBLIC_SUPABASE_URL=... tsx scripts/set-admin.ts <auth-user-uuid>
  */
-import { initializeApp, applicationDefault } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { createClient } from "@supabase/supabase-js";
 
 async function main() {
   const uid = process.argv[2];
-  if (!uid) {
-    console.error("Usage: ts-node scripts/set-admin.ts <uid>");
-    process.exit(1);
-  }
-
-  initializeApp({ credential: applicationDefault() });
-  await getAuth().setCustomUserClaims(uid, { admin: true });
-  await getAuth().revokeRefreshTokens(uid);
-  console.log(`Set admin:true on ${uid}. User must sign in again to get the new token.`);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!uid || !url || !secret) throw new Error("Usage: set Supabase env vars and pass an auth user UUID");
+  const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { error } = await admin.auth.admin.updateUserById(uid, { app_metadata: { role: "admin" } });
+  if (error) throw error;
+  console.log(`Granted admin role to ${uid}. User must sign in again.`);
 }
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch((error) => { console.error(error); process.exit(1); });

@@ -13,8 +13,6 @@ export interface Profile {
   consent_accepted: boolean;
   dares_completed: number;
   dares_refused: number;
-  ghost_mode_active: boolean;
-  ghost_mode_expires_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,10 +55,6 @@ export interface ProfileStore {
   updateProfile: (userId: string, updates: any) => Promise<void>;
   getProfileByUsername: (username: string) => Promise<Profile | null>;
   searchProfiles: (query: string) => Promise<Profile[]>;
-  trackProfileView: (profileId: string, viewerId: string) => Promise<void>;
-  getProfileViewers: (profileId: string) => Promise<void>;
-  activateGhostMode: (userId: string, durationHours?: number) => Promise<void>;
-  deactivateGhostMode: (userId: string) => Promise<void>;
   getUserStats: (userId: string) => Promise<void>;
   loadFriends: (userId: string) => Promise<void>;
   loadFriendRequests: (userId: string) => Promise<void>;
@@ -94,7 +88,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      // Profile loading not implemented in Firebase version
+      // Profile loading not implemented in Supabase version
       console.log(`Loading profile for user ${userId}`);
       set({ loading: false });
     } catch (error) {
@@ -108,7 +102,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     set({ updatingProfile: true, error: null });
 
     try {
-      // Profile creation not implemented in Firebase version
+      // Profile creation not implemented in Supabase version
       console.log("Creating profile:", request);
       set({ updatingProfile: false });
     } catch (error) {
@@ -122,7 +116,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     set({ updatingProfile: true, error: null });
 
     try {
-      // Profile update not implemented in Firebase version
+      // Profile update not implemented in Supabase version
       console.log(`Updating profile for user ${userId}:`, updates);
       set({ updatingProfile: false });
     } catch (error) {
@@ -134,7 +128,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   getProfileByUsername: async (username: string) => {
     try {
-      // Profile lookup not implemented in Firebase version
+      // Profile lookup not implemented in Supabase version
       console.log(`Getting profile by username: ${username}`);
       return null;
     } catch (error) {
@@ -149,7 +143,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      // Profile search not implemented in Firebase version
+      // Profile search not implemented in Supabase version
       console.log(`Searching profiles: ${query}`);
       const profiles: Profile[] = [];
       set({ loading: false });
@@ -162,47 +156,10 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     }
   },
 
-  trackProfileView: async (profileId: string, viewerId: string) => {
-    try {
-      // Profile view tracking not implemented in Firebase version
-      console.log(`Profile view tracked: ${viewerId} viewed ${profileId}`);
-    } catch (error) {
-      console.error("Error tracking profile view:", error);
-    }
-  },
-
-  getProfileViewers: async (profileId: string) => {
-    try {
-      // Get profile viewers not implemented in Firebase version
-      console.log(`Getting profile viewers for ${profileId}`);
-      const viewers: any[] = [];
-      set({ profileViewers: viewers });
-    } catch (error) {
-      console.error("Error getting profile viewers:", error);
-    }
-  },
-
-  activateGhostMode: async (userId: string, durationHours = 24) => {
-    try {
-      // Ghost mode activation not implemented in Firebase version
-      console.log(`Ghost mode activated for user ${userId} for ${durationHours} hours`);
-    } catch (error) {
-      console.error("Error activating ghost mode:", error);
-    }
-  },
-
-  deactivateGhostMode: async (userId: string) => {
-    try {
-      // Ghost mode deactivation not implemented in Firebase version
-      console.log(`Ghost mode deactivated for user ${userId}`);
-    } catch (error) {
-      console.error("Error deactivating ghost mode:", error);
-    }
-  },
 
   getUserStats: async (userId: string) => {
     try {
-      // Get user stats not implemented in Firebase version
+      // Get user stats not implemented in Supabase version
       console.log(`Getting user stats for user ${userId}`);
     } catch (error) {
       console.error("Error getting user stats:", error);
@@ -213,7 +170,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      // Load friends not implemented in Firebase version
+      // Load friends not implemented in Supabase version
       console.log(`Loading friends for user ${userId}`);
       set({ loading: false });
     } catch (error) {
@@ -227,7 +184,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      // Load friend requests not implemented in Firebase version
+      // Load friend requests not implemented in Supabase version
       console.log(`Loading friend requests for user ${userId}`);
       set({ loading: false });
     } catch (error) {
@@ -241,7 +198,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      // Load sent friend requests not implemented in Firebase version
+      // Load sent friend requests not implemented in Supabase version
       console.log(`Loading sent friend requests for user ${userId}`);
       set({ loading: false });
     } catch (error) {
@@ -253,7 +210,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   sendFriendRequest: async (userId: string, friendId: string) => {
     try {
-      // Send friend request not implemented in Firebase version
+      // Send friend request not implemented in Supabase version
       console.log(`Friend request sent from ${userId} to ${friendId}`);
     } catch (error) {
       console.error("Error sending friend request:", error);
@@ -262,7 +219,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   acceptFriendRequest: async (userId: string, requestId: string) => {
     try {
-      // Accept friend request not implemented in Firebase version
+      // Accept friend request not implemented in Supabase version
       console.log(`Friend request ${requestId} accepted by ${userId}`);
     } catch (error) {
       console.error("Error accepting friend request:", error);
@@ -271,7 +228,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   rejectFriendRequest: async (userId: string, requestId: string) => {
     try {
-      // Reject friend request not implemented in Firebase version
+      // Reject friend request not implemented in Supabase version
       console.log(`Friend request ${requestId} rejected by ${userId}`);
     } catch (error) {
       console.error("Error rejecting friend request:", error);
@@ -280,7 +237,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   removeFriend: async (userId: string, friendId: string) => {
     try {
-      // Remove friend not implemented in Firebase version
+      // Remove friend not implemented in Supabase version
       console.log(`Friend ${friendId} removed by ${userId}`);
     } catch (error) {
       console.error("Error removing friend:", error);
@@ -289,7 +246,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   getFriendSuggestions: async (userId: string) => {
     try {
-      // Get friend suggestions not implemented in Firebase version
+      // Get friend suggestions not implemented in Supabase version
       console.log(`Getting friend suggestions for user ${userId}`);
       return [];
     } catch (error) {
@@ -300,7 +257,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   getMutualFriends: async (userId: string, targetUserId: string) => {
     try {
-      // Get mutual friends not implemented in Firebase version
+      // Get mutual friends not implemented in Supabase version
       console.log(`Getting mutual friends between ${userId} and ${targetUserId}`);
       return [];
     } catch (error) {
@@ -311,7 +268,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   blockUser: async (userId: string, targetUserId: string) => {
     try {
-      // Block user not implemented in Firebase version
+      // Block user not implemented in Supabase version
       console.log(`User ${targetUserId} blocked by ${userId}`);
     } catch (error) {
       console.error("Error blocking user:", error);

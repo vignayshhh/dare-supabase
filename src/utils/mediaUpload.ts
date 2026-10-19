@@ -1,13 +1,17 @@
 "use client";
 
-import { storage } from "@/backend/lib/firebase";
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createUuid } from "@/utils/uuid";
 
 export type MediaUploadContext =
   | "avatar"
   | "feed"
+  | "verdict"
+  | "story"
   | "dare-proof"
   | "challenge-room-proof"
+  | "community-dare-thumbnail"
+  | "birthday-room"
   | "messages";
 export type MediaKind = "image" | "video" | "audio";
 
@@ -36,6 +40,9 @@ export interface UploadedMediaAsset {
   contentType: string;
   size: number;
   mediaKind: MediaKind;
+  bucket?: string;
+  objectPath?: string;
+  assetId?: string;
 }
 
 export interface LocalMediaPreview {
@@ -67,6 +74,24 @@ const CONTEXT_CONSTRAINTS: Record<MediaUploadContext, MediaConstraints> = {
       preferredType: "image/webp",
     },
   },
+  verdict: {
+    maxInputBytes: 100 * MB,
+    allowedKinds: ["image", "video"],
+    image: {
+      maxDimension: 2160,
+      quality: 0.86,
+      preferredType: "image/webp",
+    },
+  },
+  story: {
+    maxInputBytes: 100 * MB,
+    allowedKinds: ["image", "video"],
+    image: {
+      maxDimension: 1920,
+      quality: 0.86,
+      preferredType: "image/webp",
+    },
+  },
   "dare-proof": {
     maxInputBytes: 100 * MB,
     allowedKinds: ["image", "video", "audio"],
@@ -82,6 +107,24 @@ const CONTEXT_CONSTRAINTS: Record<MediaUploadContext, MediaConstraints> = {
     image: {
       maxDimension: 1920,
       quality: 0.84,
+      preferredType: "image/webp",
+    },
+  },
+  "community-dare-thumbnail": {
+    maxInputBytes: 10 * MB,
+    allowedKinds: ["image"],
+    image: {
+      maxDimension: 1600,
+      quality: 0.86,
+      preferredType: "image/webp",
+    },
+  },
+  "birthday-room": {
+    maxInputBytes: 100 * MB,
+    allowedKinds: ["image", "video", "audio"],
+    image: {
+      maxDimension: 1920,
+      quality: 0.86,
       preferredType: "image/webp",
     },
   },
@@ -227,7 +270,9 @@ const getImageOutputType = (
   sourceType: string,
   preferredType: ImageOptimizationSettings["preferredType"],
 ) => {
-  if (sourceType === "image/png") return "image/png";
+  // WebP preserves alpha and is materially smaller for suitable PNGs.
+  // Animated formats remain untouched by optimizeImage above.
+  if (sourceType === "image/png") return preferredType;
   if (sourceType === "image/webp") return "image/webp";
   return preferredType;
 };
@@ -253,18 +298,23 @@ const makeStoragePath = (
       ? "avatars"
       : context === "feed"
         ? "feed-media"
-        : context === "dare-proof"
-          ? "dare-proofs"
-          : context === "challenge-room-proof"
-            ? "challenge-room-proofs"
-            : "messages";
+        : context === "verdict"
+          ? "verdict-media"
+          : context === "story"
+            ? "stories"
+            : context === "dare-proof"
+              ? "dare-proofs"
+            : context === "challenge-room-proof"
+              ? "dare-proofs"
+              : context === "community-dare-thumbnail"
+                ? "community-dare-thumbnails"
+                : context === "birthday-room"
+                  ? "birthday-room-media"
+                  : "messages";
 
   // SECURITY FIX: Use crypto.randomUUID() instead of Math.random() for cryptographically secure random values
   // Fallback for browsers that don't support crypto.randomUUID() (e.g., older mobile browsers)
-  const randomSuffix =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID().split("-")[0]
-      : Math.random().toString(36).substring(2, 10);
+  const randomSuffix = createUuid().split("-")[0];
   return `${folder}/${userId}/${Date.now()}-${randomSuffix}-${fileName}`;
 };
 
@@ -348,6 +398,19 @@ const optimizeImage = async (
     outputType === "image/png" ? undefined : settings.quality,
   );
 
+  // Avoid increasing bytes when no resize was required. When resizing was
+  // required, the bounded dimensions are the stronger constraint.
+  if (scale === 1 && optimizedBlob.size >= source.size) {
+    return {
+      blob: source,
+      fileName: toSafeFileName(
+        fileName,
+        EXTENSION_BY_CONTENT_TYPE[source.type] || "bin",
+      ),
+      contentType: source.type || "application/octet-stream",
+    };
+  }
+
   return {
     blob: optimizedBlob,
     fileName: toSafeFileName(
@@ -363,31 +426,13 @@ const uploadBlobToStorage = async (
   blob: Blob,
   contentType: string,
 ) => {
-  const storageRef = ref(storage, storagePath);
-
-  await new Promise<void>((resolve, reject) => {
-    const uploadTask = uploadBytesResumable(storageRef, blob, {
-      contentType,
-      cacheControl: "public,max-age=31536000,immutable",
-    });
-
-    uploadTask.on(
-      "state_changed",
-      undefined,
-      (error) => {
-        console.error("❌ Storage upload failed:", error);
-        reject(error);
-      },
-      () => {
-        console.log("✅ Storage upload completed for:", storagePath);
-        resolve();
-      },
-    );
-  });
-
-  const downloadUrl = await getDownloadURL(storageRef);
-  console.log("🔗 Download URL generated:", downloadUrl);
-  return downloadUrl;
+  const bucket = storagePath.startsWith("avatars/") ? "avatars" : storagePath.startsWith("stories/") ? "story-media" : storagePath.startsWith("messages/") ? "chat-media" : storagePath.startsWith("dare-proofs/") ? "dare-proofs" : "post-media";
+  const client = getSupabaseBrowserClient();
+  const { error } = await client.storage.from(bucket).upload(storagePath, blob, { contentType, cacheControl: "31536000", upsert: false });
+  if (error) throw error;
+  const { data, error: signedError } = await client.storage.from(bucket).createSignedUrl(storagePath, 60 * 60);
+  if (signedError || !data?.signedUrl) throw signedError ?? new Error("Could not create media URL");
+  return { signedUrl: data.signedUrl, bucket, objectPath: storagePath };
 };
 
 export const uploadOptimizedMedia = async ({
@@ -435,13 +480,37 @@ export const uploadOptimizedMedia = async ({
   }
 
   const storagePath = makeStoragePath(context, userId, safeFileName);
-  const url = await uploadBlobToStorage(storagePath, blobToUpload, contentType);
+  const uploaded = await uploadBlobToStorage(storagePath, blobToUpload, contentType);
+
+  // Register only newly created objects. A failed registry write must not turn a
+  // successful user upload into a broken upload; cleanup remains reportable.
+  let assetId: string | undefined;
+  try {
+    const { data } = await getSupabaseBrowserClient()
+      .from("media_assets")
+      .insert({
+        owner_id: userId,
+        bucket: uploaded.bucket,
+        object_path: uploaded.objectPath,
+        role: "primary",
+        state: "uploaded_unattached",
+      })
+      .select("id")
+      .maybeSingle();
+    assetId = data?.id;
+  } catch {
+    // The object remains usable. The maintenance report can identify untracked
+    // historical objects; no automatic deletion is attempted for them.
+  }
 
   return {
-    url,
+    url: uploaded.signedUrl,
     contentType,
     size: blobToUpload.size,
     mediaKind: resolvedKind,
+    bucket: uploaded.bucket,
+    objectPath: uploaded.objectPath,
+    assetId,
   };
 };
 

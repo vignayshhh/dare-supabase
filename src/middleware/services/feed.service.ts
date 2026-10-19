@@ -1,28 +1,9 @@
-import { db, auth } from "@/backend/lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  deleteDoc,
-  orderBy,
-  limit,
-  startAfter,
-  Timestamp,
-  increment,
-  onSnapshot,
-  Unsubscribe,
-  documentId,
-  serverTimestamp,
-} from "firebase/firestore";
-import { friendsService } from "./friends.service";
+import { guardCircleResult } from "./guardCircleResult";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+type Unsubscribe = () => void;
+type DatabaseTimestamp = string | Date;
+import { createUuid } from "@/utils/uuid";
 import { userService } from "./user.service";
-import { redisCache } from "@/services/redisCache.server";
-import { aggregatedCounters } from "@/services/aggregatedCounters";
 import { generatePlaceholderMedia } from "@/utils/placeholderImages";
 import {
   requireAuthenticatedUser,
@@ -32,30 +13,33 @@ import {
   SECURITY_LIMITS,
 } from "@/security/appSecurity";
 
+// Browser queries target native relational columns, then alias them to the
+// legacy DTO shape consumed by existing UI code.
+export const POST_SELECT_FIELDS =
+  "id,author_id,content:body,media_url:metadata->>media_url,media_urls:metadata->media_urls,media_type:metadata->>media_type,view_count,likes_count:reaction_count,comments_count:comment_count,created_at,updated_at";
+const LIKE_FIELDS = "post_id,user_id,reaction,taps,created_at,updated_at";
+
 export interface Post {
   id: string;
   author_id: string;
   content?: string;
   media_url?: string;
+  media_urls?: string[];
   media_type?: "TEXT" | "PHOTO" | "VIDEO" | "AUDIO";
   view_count: number;
   likes_count?: number;
   comments_count?: number;
-  created_at: string | Timestamp | any;
-  updated_at: string | Timestamp | any;
+  created_at: string | DatabaseTimestamp | any;
+  updated_at: string | DatabaseTimestamp | any;
 }
 
 export interface PostLike {
-  id: string;
+  id?: string;
   post_id: string;
   user_id: string;
-  tap_count?: number;
+  taps?: number;
   created_at: string;
   updated_at?: string;
-}
-
-function getPostLikeDocId(postId: string, userId: string) {
-  return `${postId}_${userId}`;
 }
 
 export interface PostView {
@@ -76,13 +60,14 @@ export interface FeedEvent {
   related_post_id?: string;
   related_dare_id?: string;
   related_truth_id?: string;
-  created_at: string | Timestamp | any;
+  created_at: string | DatabaseTimestamp | any;
 }
 
 export interface CreatePostRequest {
   author_id: string;
   content?: string;
   media_url?: string;
+  media_urls?: string[];
   media_type?: "TEXT" | "PHOTO" | "VIDEO" | "AUDIO";
 }
 
@@ -113,10 +98,18 @@ export interface FeedEventWithUser extends FeedEvent {
 }
 
 class FeedService {
+  private get client() {
+    return getSupabaseBrowserClient();
+  }
   private readonly postEnrichmentCacheTtlMs = 5 * 60 * 1000;
+  private readonly authorDetailsCacheTtlMs = 30 * 60 * 1000;
   // Enable aggregated counters to reduce reads by ~90% for count queries
   private readonly enableAggregatedCounters = true; // Set to true to enable
   private readonly viewedPostsThisSession = new Set<string>();
+  private authorDetailsCache = new Map<
+    string,
+    { data: PostWithAuthor["author"]; expiresAt: number }
+  >();
   private postEnrichmentCache = new Map<
     string,
     {
@@ -128,16 +121,14 @@ class FeedService {
   >();
 
   private convertTimestampToISO(timestamp: any): string {
-    if (timestamp instanceof Timestamp) {
-      return timestamp.toDate().toISOString();
-    }
+    if (timestamp && typeof timestamp === "object" && "toDate" in timestamp && typeof (timestamp as { toDate?: () => Date }).toDate === "function") return (timestamp as { toDate: () => Date }).toDate().toISOString();
     if (typeof timestamp === "string") {
       return timestamp;
     }
     if (timestamp && typeof timestamp.toDate === "function") {
       return timestamp.toDate().toISOString();
     }
-    // If timestamp is a Firestore Timestamp object with seconds property
+    // If timestamp is a Postgres DatabaseTimestamp object with seconds property
     if (
       timestamp &&
       typeof timestamp === "object" &&
@@ -160,19 +151,18 @@ class FeedService {
   async createPost(request: CreatePostRequest): Promise<Post> {
     try {
       const authenticatedUserId = requireAuthenticatedUser(request.author_id);
-      console.log("🔐 Authenticated user ID:", authenticatedUserId);
-      console.log("📝 Request author_id:", request.author_id);
-      console.log("🔑 Firebase Auth UID:", auth.currentUser?.uid);
+      console.log("ðŸ” Authenticated user ID:", authenticatedUserId);
+      console.log("ðŸ“ Request author_id:", request.author_id);
       const sanitizedContent = validateOptionalText(
         request.content,
         SECURITY_LIMITS.postContent,
       );
-      console.log("🔍 Media URL before validation:", request.media_url);
+      console.log("ðŸ” Media URL before validation:", request.media_url);
       if (!sanitizedContent?.trim()) {
         throw new Error("Caption is required to create a feed post.");
       }
       const sanitizedMediaUrl = validateOptionalMediaUrl(request.media_url);
-      console.log("✅ Media URL after validation:", sanitizedMediaUrl);
+      console.log("âœ… Media URL after validation:", sanitizedMediaUrl);
       try {
         const { apiFetch } = await import("@/lib/apiClient");
         const response = await apiFetch<{ ok: boolean; post: Post }>(
@@ -182,24 +172,22 @@ class FeedService {
             body: JSON.stringify({
               content: sanitizedContent,
               media_url: sanitizedMediaUrl || null,
+              media_urls: request.media_urls || null,
               media_type: request.media_type || "TEXT",
             }),
           },
         );
 
-        if (response?.post?.id) {
-          redisCache.invalidatePattern("feed:*").catch(() => {});
-          return response.post;
-        }
+        if (response?.post?.id) return response.post;
       } catch (error) {
         secureLogError("createPost API failed", error);
-        console.error("❌ [CREATE POST API] failed:", error);
+        console.error("âŒ [CREATE POST API] failed:", error);
         if (!this.isApiAuthFailure(error)) {
           throw error;
         }
       }
 
-      const postRef = doc(collection(db, "posts"));
+      const postId = createUuid();
 
       // Fetch author profile to denormalize onto post doc
       let authorUsername = "";
@@ -223,18 +211,20 @@ class FeedService {
         author_avatar_url: authorAvatarUrl,
         content: sanitizedContent,
         media_url: sanitizedMediaUrl || null,
+        media_urls: request.media_urls?.length ? request.media_urls : null,
         media_type: request.media_type || "TEXT",
         view_count: 0,
         likes_count: 0,
         comments_count: 0,
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
-      console.log("📤 Attempting to create post with data:", postData);
-      await setDoc(postRef, postData);
-      const newPost = { id: postRef.id, ...postData } as Post;
-      console.log("✅ Post created successfully:", newPost.id);
+      console.log("ðŸ“¤ Attempting to create post with data:", postData);
+      const { error: insertError } = await this.client.from("posts").insert({ id: postId, ...postData });
+      if (insertError) throw insertError;
+      const newPost = { id: postId, ...postData } as Post;
+      console.log("âœ… Post created successfully:", newPost.id);
 
       // Create feed event
       await this.createFeedEvent({
@@ -243,8 +233,16 @@ class FeedService {
         related_post_id: newPost.id,
       });
 
-      // Invalidate feed cache so new post appears immediately
-      redisCache.invalidatePattern("feed:*").catch(() => {});
+      if (typeof window !== "undefined") {
+        import("@/lib/apiClient")
+          .then(({ apiFetch }) =>
+            apiFetch("/api/cache/social", {
+              method: "POST",
+              body: JSON.stringify({ userIds: [authenticatedUserId] }),
+            }),
+          )
+          .catch(() => {});
+      }
 
       return newPost;
     } catch (error) {
@@ -257,14 +255,15 @@ class FeedService {
     eventData: Omit<FeedEvent, "id" | "created_at">,
   ): Promise<FeedEvent> {
     try {
-      const eventRef = doc(collection(db, "feed_events"));
+      const eventId = createUuid();
       const feedEventData = {
         ...eventData,
-        created_at: serverTimestamp(),
+        created_at: new Date().toISOString(),
       };
 
-      await setDoc(eventRef, feedEventData);
-      return { id: eventRef.id, ...feedEventData } as FeedEvent;
+      const { error } = await this.client.from("feed_events").insert({ id: eventId, ...feedEventData });
+      if (error) throw error;
+      return { id: eventId, ...feedEventData } as FeedEvent;
     } catch (error) {
       secureLogError("createFeedEvent failed", error);
       throw error;
@@ -282,41 +281,37 @@ class FeedService {
         await import("./service-factory");
       const friendsResponse = await newFriendsService.getFriends(userId);
 
-      console.log("🔍 FEED - Friends response:", friendsResponse);
+      console.log("ðŸ” FEED - Friends response:", friendsResponse);
 
       let friendIds: string[];
 
       if (!friendsResponse.success || !friendsResponse.friends) {
         friendIds = [userId];
-        console.log("🔍 FEED - No friends found, using only user ID");
+        console.log("ðŸ” FEED - No friends found, using only user ID");
       } else {
         friendIds = friendsResponse.friends
           .map((friend: any) => friend?.userId || friend?.id)
           .filter((id: any): id is string => !!id && typeof id === "string");
         friendIds = [...new Set([...friendIds, userId])];
-        console.log("🔍 FEED - Friend IDs:", friendIds);
+        console.log("ðŸ” FEED - Friend IDs:", friendIds);
       }
 
-      let feedQuery = query(
-        collection(db, "posts"),
-        where("author_id", "in", friendIds),
-        orderBy("created_at", "desc"),
-        limit(limitCount),
-      );
-
-      if (lastDoc) {
-        feedQuery = query(feedQuery, startAfter(lastDoc));
+      console.log("ðŸ” FEED - Executing buildQuery for", friendIds.length, "users");
+      let query = this.client.from("posts").select(POST_SELECT_FIELDS).in("author_id", friendIds)
+        .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(limitCount);
+      if (lastDoc?.data?.()?.created_at) {
+        const timestamp = this.convertTimestampToISO(lastDoc.data().created_at);
+        query = query.lt("created_at", timestamp);
       }
-
-      console.log("🔍 FEED - Executing query for", friendIds.length, "users");
-      const querySnapshot = await getDocs(feedQuery);
-      console.log("🔍 FEED - Query returned", querySnapshot.size, "posts");
+      const { data: rows, error } = await query;
+      if (error) throw error;
+      const rawRows = rows ?? [];
+      console.log("ðŸ” FEED - Query returned", rawRows.length, "posts");
 
       // Extract raw posts (no async)
-      const rawPosts: Post[] = querySnapshot.docs.map((docSnap) => {
-        const data = docSnap.data();
+      const rawPosts: Post[] = rawRows.map((data) => {
         return {
-          id: docSnap.id,
+          id: data.id,
           ...data,
           created_at: this.convertTimestampToISO(data.created_at),
           updated_at: this.convertTimestampToISO(data.updated_at),
@@ -357,13 +352,11 @@ class FeedService {
 
   async getPost(postId: string): Promise<Post | null> {
     try {
-      const postDocRef = doc(db, "posts", postId);
-      const postDoc = await getDoc(postDocRef);
-
-      if (!postDoc.exists()) return null;
-      const data = postDoc.data();
+      const { data, error } = await this.client.from("posts").select(POST_SELECT_FIELDS).eq("id", postId).maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
       return {
-        id: postDoc.id,
+        id: data.id,
         ...data,
         created_at: this.convertTimestampToISO(data.created_at),
         updated_at: this.convertTimestampToISO(data.updated_at),
@@ -411,15 +404,13 @@ class FeedService {
     authorId: string,
   ): Promise<PostWithAuthor["author"] | null> {
     try {
-      const userDocRef = doc(db, "users", authorId);
-      const userDoc = await getDoc(userDocRef);
+      const { data: userData, error } = await this.client.from("profiles")
+        .select("id,username,display_name,avatar_url").eq("id", authorId).maybeSingle();
+      if (error) throw error;
 
       let avatarUrl = "";
 
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        avatarUrl = userData.avatar_url || "";
-      }
+      avatarUrl = userData?.avatar_url || "";
 
       // ALWAYS try to get from stored avatars as backup/enhancement
       try {
@@ -433,14 +424,13 @@ class FeedService {
       } catch {}
 
       // If we have an avatar, return the author data
-      if (avatarUrl || userDoc.exists()) {
-        const userData = userDoc.exists() ? userDoc.data() : {};
+      if (avatarUrl || userData) {
 
         return {
-          id: userDoc.id || authorId,
-          user_id: userData.user_id || authorId,
-          username: userData.username || `user_${authorId.slice(0, 8)}`,
-          display_name: userData.displayName || userData.display_name || null,
+          id: userData?.id || authorId,
+          user_id: authorId,
+          username: userData?.username || `user_${authorId.slice(0, 8)}`,
+          display_name: userData?.display_name || null,
           avatar_url: avatarUrl,
         };
       }
@@ -452,17 +442,17 @@ class FeedService {
     }
   }
 
-  // SECURITY FIX (§1.6): Likes/unlikes are written server-side via the
+  // SECURITY FIX (Â§1.6): Likes/unlikes are written server-side via the
   // Next.js API route. The client no longer touches `post_likes` or
-  // `posts.likes_count` directly — Firestore rules block both. The
+  // `posts.likes_count` directly â€” Postgres rules block both. The
   // Cloud Function trigger aggregates the authoritative count, and
-  // existing onSnapshot listeners on the client pick up the change
+  // existing scoped listeners on the client pick up the change
   // automatically so realtime feels unchanged.
   async likePost(postId: string, userId: string): Promise<boolean> {
     try {
       requireAuthenticatedUser(userId);
       const { apiFetch } = await import("@/lib/apiClient");
-      await apiFetch(`/api/posts/${encodeURIComponent(postId)}/like`, {
+      await apiFetch<{ aura?: { userId?: string } | null }>(`/api/posts/${encodeURIComponent(postId)}/like`, {
         method: "POST",
       });
       this.postEnrichmentCache.delete(postId);
@@ -472,16 +462,10 @@ class FeedService {
       // Previously this swallowed the error and returned false, which made
       // failed likes appear successful in the UI until the user refreshed
       // and saw the heart vanish (because nothing was ever written to
-      // Firestore).
+      // Postgres).
       secureLogError("likePost failed", error);
-      console.error("❌ [LIKE API] failed:", postId, error);
-      if (!this.isApiAuthFailure(error)) {
-        throw error;
-      }
-
-      await this.likePostDirect(postId, userId);
-      this.postEnrichmentCache.delete(postId);
-      return true;
+      console.error("âŒ [LIKE API] failed:", postId, error);
+      throw error;
     }
   }
 
@@ -496,14 +480,8 @@ class FeedService {
       return true;
     } catch (error) {
       secureLogError("unlikePost failed", error);
-      console.error("❌ [UNLIKE API] failed:", postId, error);
-      if (!this.isApiAuthFailure(error)) {
-        throw error;
-      }
-
-      await this.unlikePostDirect(postId, userId);
-      this.postEnrichmentCache.delete(postId);
-      return true;
+      console.error("âŒ [UNLIKE API] failed:", postId, error);
+      throw error;
     }
   }
 
@@ -514,29 +492,36 @@ class FeedService {
 
   private async likePostDirect(postId: string, userId: string): Promise<void> {
     requireAuthenticatedUser(userId);
-    const likeRef = doc(db, "post_likes", getPostLikeDocId(postId, userId));
-    const existing = await getDoc(likeRef);
-
-    if (existing.exists()) {
-      await updateDoc(likeRef, {
-        tap_count: increment(1),
-        updated_at: serverTimestamp(),
-      });
+    const { data: existing, error: readError } = await this.client.from("post_reactions")
+      .select("post_id,user_id,taps").eq("post_id", postId).eq("user_id", userId).eq("reaction", "LIKE").maybeSingle();
+    if (readError) throw readError;
+    if (existing) {
+      const { error } = await this.client.from("post_reactions").update({
+        taps: Math.min(50, (existing.taps ?? 0) + 1),
+        updated_at: new Date().toISOString(),
+      }).eq("post_id", postId).eq("user_id", userId).eq("reaction", "LIKE");
+      if (error) throw error;
       return;
     }
-
-    await setDoc(likeRef, {
+    const { error } = await this.client.from("post_reactions").insert({
       post_id: postId,
       user_id: userId,
-      tap_count: 1,
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
+      reaction: "LIKE",
+      taps: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     });
+    if (error) throw error;
   }
 
-  private async unlikePostDirect(postId: string, userId: string): Promise<void> {
+  private async unlikePostDirect(
+    postId: string,
+    userId: string,
+  ): Promise<void> {
     requireAuthenticatedUser(userId);
-    await deleteDoc(doc(db, "post_likes", getPostLikeDocId(postId, userId)));
+    const { error } = await this.client.from("post_reactions").delete()
+      .eq("post_id", postId).eq("user_id", userId).eq("reaction", "LIKE");
+    if (error) throw error;
   }
 
   private async getPostLike(
@@ -544,17 +529,10 @@ class FeedService {
     userId: string,
   ): Promise<PostLike | null> {
     try {
-      const likesRef = collection(db, "post_likes");
-      const q = query(
-        likesRef,
-        where("post_id", "==", postId),
-        where("user_id", "==", userId),
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) return null;
-      const doc = querySnapshot.docs[0];
-      return { id: doc.id, ...doc.data() } as PostLike;
+      const { data, error } = await this.client.from("post_reactions").select(LIKE_FIELDS)
+        .eq("post_id", postId).eq("user_id", userId).maybeSingle();
+      if (error) throw error;
+      return data as PostLike | null;
     } catch (error) {
       console.error("Error getting post like:", error);
       return null;
@@ -568,10 +546,10 @@ class FeedService {
 
   async getPostLikesCount(postId: string): Promise<number> {
     try {
-      const likesRef = collection(db, "post_likes");
-      const q = query(likesRef, where("post_id", "==", postId));
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.size;
+      const { count, error } = await this.client.from("post_reactions")
+        .select("post_id", { count: "exact", head: true }).eq("post_id", postId).eq("reaction", "LIKE");
+      if (error) throw error;
+      return count ?? 0;
     } catch (error) {
       console.error("Error getting post likes count:", error);
       return 0;
@@ -580,74 +558,45 @@ class FeedService {
 
   async getPostCommentsCount(postId: string): Promise<number> {
     try {
-      const commentsRef = collection(db, "post_comments");
-      const q = query(commentsRef, where("post_id", "==", postId));
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.size;
+      const { count, error } = await this.client.from("post_comments")
+        .select("id", { count: "exact", head: true }).eq("post_id", postId);
+      if (error) throw error;
+      return count ?? 0;
     } catch (error) {
       console.error("Error getting post comments count:", error);
       return 0;
     }
   }
 
-  // SECURITY FIX (§1.6): View tracking is server-side. The API route
-  // writes `post_views/${postId}_${uid}` idempotently and the trigger
+  // SECURITY FIX (Â§1.6): View tracking is server-side. The API route
   // aggregates `view_count`. `skipCsrf` is set server-side for this
   // endpoint so sendBeacon() can be used for page-unload flushes.
-  async trackPostView(postId: string, userId: string): Promise<boolean> {
-    try {
-      requireAuthenticatedUser(userId);
-      const sessionKey = `${postId}:${userId}`;
-      if (this.viewedPostsThisSession.has(sessionKey)) return true;
-
-      const { apiFetch } = await import("@/lib/apiClient");
-      await apiFetch(`/api/posts/${encodeURIComponent(postId)}/view`, {
-        method: "POST",
-      });
-      this.viewedPostsThisSession.add(sessionKey);
-      return true;
-    } catch (error) {
-      secureLogError("trackPostView failed", error);
-      return false;
-    }
-  }
-
-  private async getPostView(
-    postId: string,
-    userId: string,
-  ): Promise<PostView | null> {
-    try {
-      const viewsRef = collection(db, "post_views");
-      const q = query(
-        viewsRef,
-        where("post_id", "==", postId),
-        where("user_id", "==", userId),
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) return null;
-      const doc = querySnapshot.docs[0];
-      return { id: doc.id, ...doc.data() } as PostView;
-    } catch (error) {
-      console.error("Error getting post view:", error);
-      return null;
-    }
-  }
-
   async deletePost(postId: string, userId: string): Promise<boolean> {
     try {
       requireAuthenticatedUser(userId);
+      try {
+        const { apiFetch } = await import("@/lib/apiClient");
+        await apiFetch(`/api/posts/${encodeURIComponent(postId)}`, {
+          method: "DELETE",
+        });
+        return true;
+      } catch (error) {
+        secureLogError("deletePost API failed", error);
+        console.error("[DELETE POST API] failed:", postId, error);
+        if (!this.isApiAuthFailure(error)) {
+          throw error;
+        }
+      }
+
       const post = await this.getPost(postId);
       if (!post || post.author_id !== userId) {
         throw new Error("Unauthorized to delete this post");
       }
 
-      const postRef = doc(db, "posts", postId);
-      await deleteDoc(postRef);
+      const { error } = await this.client.from("posts").delete().eq("id", postId);
+      if (error) throw error;
 
       await this.deletePostLikes(postId);
-      await this.deletePostViews(postId);
-
       return true;
     } catch (error) {
       secureLogError("deletePost failed", error);
@@ -657,27 +606,10 @@ class FeedService {
 
   private async deletePostLikes(postId: string): Promise<void> {
     try {
-      const likesRef = collection(db, "post_likes");
-      const q = query(likesRef, where("post_id", "==", postId));
-      const querySnapshot = await getDocs(q);
-      for (const doc of querySnapshot.docs) {
-        await deleteDoc(doc.ref);
-      }
+      const { error } = await this.client.from("post_reactions").delete().eq("post_id", postId);
+      if (error) throw error;
     } catch (error) {
       console.error("Error deleting post likes:", error);
-    }
-  }
-
-  private async deletePostViews(postId: string): Promise<void> {
-    try {
-      const viewsRef = collection(db, "post_views");
-      const q = query(viewsRef, where("post_id", "==", postId));
-      const querySnapshot = await getDocs(q);
-      for (const doc of querySnapshot.docs) {
-        await deleteDoc(doc.ref);
-      }
-    } catch (error) {
-      console.error("Error deleting post views:", error);
     }
   }
 
@@ -689,11 +621,11 @@ class FeedService {
         "Media Migrated",
       );
 
-      const postRef = doc(db, "posts", post.id);
-      await updateDoc(postRef, {
+      const { error } = await this.client.from("posts").update({
         media_url: placeholderUrl,
         updated_at: new Date().toISOString(),
-      });
+      }).eq("id", post.id);
+      if (error) throw error;
 
       return { ...post, media_url: placeholderUrl };
     }
@@ -702,25 +634,24 @@ class FeedService {
 
   async migrateBlobUrls(): Promise<void> {
     try {
-      const postsRef = collection(db, "posts");
-      const querySnapshot = await getDocs(postsRef);
+      const { data: rows, error } = await this.client.from("posts").select(POST_SELECT_FIELDS);
+      if (error) throw error;
 
       let migratedCount = 0;
-      for (const doc of querySnapshot.docs) {
-        const post = { id: doc.id, ...doc.data() } as Post;
+      for (const post of (rows ?? []) as Post[]) {
         if (post.media_url && post.media_url.startsWith("blob:")) {
           await this.fixBlobUrlIfNeeded(post);
           migratedCount++;
         }
       }
 
-      console.log(`✅ MIGRATION COMPLETE: ${migratedCount} posts migrated`);
+      console.log(`âœ… MIGRATION COMPLETE: ${migratedCount} posts migrated`);
     } catch (error) {
-      console.error("❌ ERROR DURING MIGRATION:", error);
+      console.error("âŒ ERROR DURING MIGRATION:", error);
     }
   }
 
-  // FIX: Rebuilt subscribeToFeed — uses parallel batch enrichment instead of
+  // FIX: Rebuilt subscribeToFeed â€” uses parallel batch enrichment instead of
   // sequential N+1 queries. Removed migrateBlobUrls() from hot path.
   subscribeToFeed(
     userId: string,
@@ -749,28 +680,10 @@ class FeedService {
           friendIds = [...new Set([...friendIds, userId])];
         }
 
-        const feedQuery = query(
-          collection(db, "posts"),
-          where("author_id", "in", friendIds),
-          orderBy("created_at", "desc"),
-          limit(limitCount),
-        );
-
         const authorCache = new Map<string, PostWithAuthor["author"]>();
 
-        innerUnsubscribe = onSnapshot(
-          feedQuery,
-          async (querySnapshot) => {
+        const deliver = async (rawPosts: Post[]) => {
             // Extract raw posts (no async)
-            const rawPosts: Post[] = querySnapshot.docs.map((docSnap) => {
-              const data = docSnap.data();
-              return {
-                id: docSnap.id,
-                ...data,
-                created_at: this.convertTimestampToISO(data.created_at),
-                updated_at: this.convertTimestampToISO(data.updated_at),
-              } as Post;
-            });
 
             // Step 1: Collect unique author IDs and post IDs
             const authorIds = [...new Set(rawPosts.map((p) => p.author_id))];
@@ -823,8 +736,8 @@ class FeedService {
             // Step 4: Assemble enriched posts from cache (no extra reads).
             // Use Math.max(raw, cached) so that:
             //   a) realtime CF-incremented counts supersede a stale cache, and
-            //   b) legacy posts where likes_count=0 on the doc (pre-CF) still
-            //      show the actual count from the batchGetPostLikes query.
+            //   b) legacy posts filterWhere likes_count=0 on the doc (pre-CF) still
+            //      show the actual count from the batchGetPostLikes buildQuery.
             const posts: PostWithAuthor[] = rawPosts.map((post) => {
               const enrichment = this.postEnrichmentCache.get(post.id);
               const rawLikes =
@@ -852,13 +765,31 @@ class FeedService {
             });
 
             callback(posts);
+          };
+          /* (error) => {
+            console.error("âŒ Real-time feed subscription error:", error);
           },
-          (error) => {
-            console.error("❌ Real-time feed subscription error:", error);
-          },
-        );
+        ); */
+        let active = true;
+        let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+        const load = async () => {
+          const { data, error } = await this.client.from("posts").select(POST_SELECT_FIELDS)
+            .in("author_id", friendIds).order("created_at", { ascending: false })
+            .order("id", { ascending: false }).limit(limitCount);
+          if (!active || error) return;
+          await deliver((data ?? []) as Post[]);
+        };
+        const scheduleLoad = () => {
+          if (!active || refreshTimer) return;
+          refreshTimer = setTimeout(() => { refreshTimer = null; void load(); }, 40);
+        };
+        void load();
+        const channel = this.client.channel("feed-posts:" + userId)
+          .on("postgres_changes", { event: "*", schema: "public", table: "posts", filter: `author_id=in.(${friendIds.join(",")})` }, scheduleLoad)
+          .subscribe();
+        innerUnsubscribe = () => { active = false; if (refreshTimer) clearTimeout(refreshTimer); void this.client.removeChannel(channel); };
       } catch (error) {
-        console.error("❌ Error setting up feed subscription:", error);
+        console.error("âŒ Error setting up feed subscription:", error);
       }
     };
 
@@ -873,20 +804,15 @@ class FeedService {
     userId: string,
     limitCount: number = 20,
   ): Promise<PostWithAuthor[]> {
-    const userPostsQuery = query(
-      collection(db, "posts"),
-      where("author_id", "==", userId),
-      orderBy("created_at", "desc"),
-      limit(limitCount),
-    );
-
-    const querySnapshot = await getDocs(userPostsQuery);
+    const { data: rows, error } = await this.client.from("posts").select(POST_SELECT_FIELDS)
+      .eq("author_id", userId).order("created_at", { ascending: false })
+      .order("id", { ascending: false }).limit(limitCount);
+    if (error) throw error;
 
     // Extract raw posts
-    const rawPosts: Post[] = querySnapshot.docs.map((docSnap) => {
-      const data = docSnap.data();
+    const rawPosts: Post[] = (rows ?? []).map((data) => {
       return {
-        id: docSnap.id,
+        id: data.id,
         ...data,
         created_at: this.convertTimestampToISO(data.created_at),
         updated_at: this.convertTimestampToISO(data.updated_at),
@@ -926,28 +852,8 @@ class FeedService {
     callback: (posts: PostWithAuthor[]) => void,
     limitCount: number = 20,
   ): Unsubscribe {
-    const userPostsQuery = query(
-      collection(db, "posts"),
-      where("author_id", "==", userId),
-      orderBy("created_at", "desc"),
-      limit(limitCount),
-    );
-
     const authorCache = new Map<string, PostWithAuthor["author"]>();
-
-    const unsubscribe = onSnapshot(
-      userPostsQuery,
-      async (querySnapshot) => {
-        // Extract raw posts (no async)
-        const rawPosts: Post[] = querySnapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            ...data,
-            created_at: this.convertTimestampToISO(data.created_at),
-            updated_at: this.convertTimestampToISO(data.updated_at),
-          } as Post;
-        });
+    const deliver = async (rawPosts: Post[]) => {
 
         const authorIds = [...new Set(rawPosts.map((p) => p.author_id))];
         const postIds = rawPosts.map((p) => p.id);
@@ -1011,15 +917,48 @@ class FeedService {
           };
         });
 
-        callback(posts);
-      },
-      (error) => {
-        console.error("❌ Real-time user posts subscription error:", error);
+      callback(posts);
+    };
+    /*      (error) => {
+        console.error("âŒ Real-time user posts subscription error:", error);
       },
     );
 
-    console.log("✅ Real-time user posts subscription established");
-    return unsubscribe;
+    console.log("âœ… Real-time user posts subscription established");
+    return unsubscribe; */
+
+    let active = true;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const load = async () => {
+      const { data, error } = await this.client.from("posts").select(POST_SELECT_FIELDS)
+        .eq("author_id", userId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(limitCount);
+      if (!active) return;
+      if (error) {
+        console.error("Real-time user posts subscription error:", error);
+        return;
+      }
+      await deliver((data ?? []) as Post[]);
+    };
+    const scheduleLoad = () => {
+      if (!active || refreshTimer) return;
+      refreshTimer = setTimeout(() => { refreshTimer = null; void load(); }, 40);
+    };
+
+    void load();
+    const channel = this.client.channel(`user-posts-feed:${userId}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "posts",
+        filter: `author_id=eq.${userId}`,
+      }, scheduleLoad)
+      .subscribe();
+    return () => {
+      active = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      void this.client.removeChannel(channel);
+    };
   }
 
   async getPostLikes(postId: string): Promise<
@@ -1032,13 +971,12 @@ class FeedService {
     }>
   > {
     try {
-      const likesRef = collection(db, "post_likes");
-      const q = query(likesRef, where("post_id", "==", postId));
-      const querySnapshot = await getDocs(q);
+      const { data: rows, error } = await this.client.from("post_reactions").select(LIKE_FIELDS)
+        .eq("post_id", postId).eq("reaction", "LIKE");
+      if (error) throw error;
 
-      const likes = [];
-      for (const docSnap of querySnapshot.docs) {
-        const like = docSnap.data() as PostLike;
+      const likes: Array<{ userId: string; name: string; username: string; avatar: string; tapCount: number }> = [];
+      for (const like of (rows ?? []) as PostLike[]) {
         const author = await this.getPostAuthor(like.user_id);
 
         if (author) {
@@ -1047,7 +985,7 @@ class FeedService {
             name: author.display_name || author.username,
             username: author.username,
             avatar: author.avatar_url || "",
-            tapCount: like.tap_count || 1,
+            tapCount: like.taps || 1,
           });
         }
       }
@@ -1059,8 +997,8 @@ class FeedService {
     }
   }
 
-  // ─── Batch enrichment methods ──────────────────────────────────────────────
-  // These fetch data for multiple posts/authors in a single Firestore query,
+  // â”€â”€â”€ Batch enrichment methods â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // These fetch data for multiple posts/authors in a single Postgres buildQuery,
   // replacing the sequential N+1 pattern that caused slow feed loading.
 
   async getPostLikePreviews(
@@ -1096,16 +1034,13 @@ class FeedService {
 
       await Promise.all(
         uniquePostIds.map(async (postId) => {
-          const likesRef = collection(db, "post_likes");
-          const q = query(
-            likesRef,
-            where("post_id", "==", postId),
-            limit(Math.max(1, perPostLimit)),
-          );
-          const snapshot = await getDocs(q);
+          const { data: rows, error } = await this.client.from("post_reactions").select(LIKE_FIELDS)
+            .eq("post_id", postId).eq("reaction", "LIKE").order("taps", { ascending: false })
+            .limit(Math.max(1, perPostLimit));
+          if (error) throw error;
           rawByPost.set(
             postId,
-            snapshot.docs.map((docSnap) => docSnap.data() as PostLike),
+            (rows ?? []) as PostLike[],
           );
         }),
       );
@@ -1133,7 +1068,7 @@ class FeedService {
                   author?.display_name || author?.username || fallbackUsername,
                 username: author?.username || fallbackUsername,
                 avatar: author?.avatar_url || "",
-                tapCount: like.tap_count || 1,
+                tapCount: like.taps || 1,
               };
             })
             .sort((a, b) => b.tapCount - a.tapCount),
@@ -1153,32 +1088,50 @@ class FeedService {
     if (authorIds.length === 0) return results;
 
     try {
-      // Firebase 'in' queries support max 10 items; chunk if needed
+      const now = Date.now();
+      const uniqueAuthorIds = [...new Set(authorIds)];
+      const missingAuthorIds = uniqueAuthorIds.filter((authorId) => {
+        const cached = this.authorDetailsCache.get(authorId);
+        if (cached && cached.expiresAt > now) {
+          results.set(authorId, cached.data);
+          return false;
+        }
+        return true;
+      });
+
+      if (missingAuthorIds.length === 0) {
+        return results;
+      }
+
+      // Supabase 'in' queries support max 10 items; chunk if needed
       const chunks: string[][] = [];
-      for (let i = 0; i < authorIds.length; i += 10) {
-        chunks.push(authorIds.slice(i, i + 10));
+      for (let i = 0; i < missingAuthorIds.length; i += 10) {
+        chunks.push(missingAuthorIds.slice(i, i + 10));
       }
 
       await Promise.all(
         chunks.map(async (chunk) => {
-          const usersRef = collection(db, "users");
-          const q = query(usersRef, where(documentId(), "in", chunk));
-          const snapshot = await getDocs(q);
-
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            results.set(docSnap.id, {
-              id: docSnap.id,
-              user_id: data.user_id || docSnap.id,
-              username: data.username || `user_${docSnap.id.slice(0, 8)}`,
-              display_name: data.displayName || data.display_name || null,
+          const { data: rows, error } = await this.client.from("profiles")
+            .select("id,username,display_name,avatar_url").in("id", chunk);
+          if (error) throw error;
+          (rows ?? []).forEach((data) => {
+            const author = {
+              id: data.id,
+              user_id: data.id,
+              username: data.username || `user_${data.id.slice(0, 8)}`,
+              display_name: data.display_name || null,
               avatar_url: data.avatar_url || "",
+            };
+            results.set(data.id, author);
+            this.authorDetailsCache.set(data.id, {
+              data: author,
+              expiresAt: now + this.authorDetailsCacheTtlMs,
             });
           });
         }),
       );
     } catch (error) {
-      console.error("❌ batchGetAuthors error:", error);
+      console.error("âŒ batchGetAuthors error:", error);
     }
 
     return results;
@@ -1194,7 +1147,7 @@ class FeedService {
       { likesCount: number; isLikedByUser: boolean }
     >();
 
-    // Seed defaults — if stored counts are provided use them, otherwise 0
+    // Seed defaults â€” if stored counts are provided use them, otherwise 0
     for (const id of postIds) {
       const stored = storedLikesCounts?.get(id);
       results.set(id, {
@@ -1212,8 +1165,8 @@ class FeedService {
       }
 
       if (storedLikesCounts !== undefined) {
-        // ── Optimized path (posts that have likes_count on the document) ────
-        // likesCount is already seeded above. Only query current user's own
+        // â”€â”€ Optimized path (posts that have likes_count on the document) â”€â”€â”€â”€
+        // likesCount is already seeded above. Only buildQuery current user's own
         // likes so we can set isLikedByUser without scanning every like doc.
         //
         // Posts whose stored count is undefined (field not yet written, e.g.
@@ -1235,30 +1188,24 @@ class FeedService {
           legacyChunks.push(legacyIds.slice(i, i + 10));
 
         await Promise.all([
-          // Narrow user-only query for posts with a stored count
+          // Narrow user-only buildQuery for posts with a stored count
           ...optimizedChunks.map(async (chunk) => {
-            const q = query(
-              collection(db, "post_likes"),
-              where("user_id", "==", userId),
-              where("post_id", "in", chunk),
-            );
-            const snapshot = await getDocs(q);
-            snapshot.forEach((docSnap) => {
-              const pid = docSnap.data().post_id as string;
+            const { data: rows, error } = await this.client.from("post_reactions").select("post_id")
+              .eq("user_id", userId).eq("reaction", "LIKE").in("post_id", chunk);
+            if (error) throw error;
+            (rows ?? []).forEach((row) => {
+              const pid = row.post_id as string;
               const existing = results.get(pid)!;
               results.set(pid, { ...existing, isLikedByUser: true });
             });
           }),
           // Full scan for posts without a stored count
           ...legacyChunks.map(async (chunk) => {
-            const q = query(
-              collection(db, "post_likes"),
-              where("post_id", "in", chunk),
-            );
-            const snapshot = await getDocs(q);
+            const { data: rows, error } = await this.client.from("post_reactions").select("post_id,user_id")
+              .eq("reaction", "LIKE").in("post_id", chunk);
+            if (error) throw error;
             const byPost = new Map<string, Array<{ user_id: string }>>();
-            snapshot.forEach((docSnap) => {
-              const d = docSnap.data();
+            (rows ?? []).forEach((d) => {
               const pid = d.post_id as string;
               if (!byPost.has(pid)) byPost.set(pid, []);
               byPost.get(pid)!.push({ user_id: d.user_id });
@@ -1273,19 +1220,16 @@ class FeedService {
           }),
         ]);
       } else {
-        // ── Legacy path (no stored counts provided by caller) ────────────────
+        // â”€â”€ Legacy path (no stored counts provided by caller) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Read ALL like docs per chunk to derive count + user status.
         await Promise.all(
           chunks.map(async (chunk) => {
-            const q = query(
-              collection(db, "post_likes"),
-              where("post_id", "in", chunk),
-            );
-            const snapshot = await getDocs(q);
+            const { data: rows, error } = await this.client.from("post_reactions").select("post_id,user_id")
+              .eq("reaction", "LIKE").in("post_id", chunk);
+            if (error) throw error;
 
             const byPost = new Map<string, Array<{ user_id: string }>>();
-            snapshot.forEach((docSnap) => {
-              const d = docSnap.data();
+            (rows ?? []).forEach((d) => {
               const pid = d.post_id as string;
               if (!byPost.has(pid)) byPost.set(pid, []);
               byPost.get(pid)!.push({ user_id: d.user_id });
@@ -1302,7 +1246,7 @@ class FeedService {
         );
       }
     } catch (error) {
-      console.error("❌ batchGetPostLikes error:", error);
+      console.error("âŒ batchGetPostLikes error:", error);
     }
 
     return results;
@@ -1317,9 +1261,9 @@ class FeedService {
     if (postIds.length === 0) return results;
 
     if (storedCommentsCounts !== undefined) {
-      // ── Optimized path ──────────────────────────────────────────────────
+      // â”€â”€ Optimized path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // Use the comments_count field stored on the post document.
-      // No Firestore reads needed for posts that have this field.
+      // No Postgres reads needed for posts that have this field.
       const needsQuery: string[] = [];
       for (const id of postIds) {
         const stored = storedCommentsCounts.get(id);
@@ -1348,13 +1292,13 @@ class FeedService {
 
       await Promise.all(
         chunks.map(async (chunk) => {
-          const commentsRef = collection(db, "post_comments");
-          const q = query(commentsRef, where("post_id", "in", chunk));
-          const snapshot = await getDocs(q);
+          const { data: rows, error } = await this.client.from("post_comments").select("post_id")
+            .in("post_id", chunk);
+          if (error) throw error;
 
           const counts = new Map<string, number>();
-          snapshot.forEach((docSnap) => {
-            const pid = docSnap.data().post_id as string;
+          (rows ?? []).forEach((row) => {
+            const pid = row.post_id as string;
             counts.set(pid, (counts.get(pid) || 0) + 1);
           });
 
@@ -1364,7 +1308,7 @@ class FeedService {
         }),
       );
     } catch (error) {
-      console.error("❌ batchGetPostCommentsCounts error:", error);
+      console.error("âŒ batchGetPostCommentsCounts error:", error);
     }
 
     return results;
@@ -1382,17 +1326,15 @@ class FeedService {
       }>,
     ) => void,
   ): Unsubscribe {
-    const likesRef = collection(db, "post_likes");
-    const q = query(likesRef, where("post_id", "==", postId));
     const authorCache = new Map<string, PostWithAuthor["author"]>();
-
-    return onSnapshot(
-      q,
-      async (querySnapshot) => {
-        const rawLikes = querySnapshot.docs.map(
-          (docSnap) => docSnap.data() as PostLike,
-        );
-        const authorIds = [...new Set(rawLikes.map((like) => like.user_id))];
+    let active = true;
+    const load = async () => {
+        const { data: rawLikes, error } = await this.client.from("post_reactions")
+          .select(LIKE_FIELDS).eq("post_id", postId).eq("reaction", "LIKE")
+          .order("taps", { ascending: false }).limit(100);
+        if (!active) return;
+        if (error) throw error;
+        const authorIds = [...new Set<string>(rawLikes.map((like) => String(like.user_id)))];
         const missingAuthorIds = authorIds.filter((id) => !authorCache.has(id));
 
         if (missingAuthorIds.length > 0) {
@@ -1403,25 +1345,27 @@ class FeedService {
         }
 
         const likes = rawLikes.map((like) => {
-          const author = authorCache.get(like.user_id);
-          const fallbackUsername = `user_${like.user_id.slice(0, 8)}`;
+          const authorId = String(like.user_id);
+          const author = authorCache.get(authorId);
+          const fallbackUsername = `user_${authorId.slice(0, 8)}`;
 
           return {
             userId: like.user_id,
             name: author?.display_name || author?.username || fallbackUsername,
             username: author?.username || fallbackUsername,
             avatar: author?.avatar_url || "",
-            tapCount: like.tap_count || 1,
+            tapCount: like.taps || 1,
           };
         });
 
         callback(likes);
-      },
-      (error) => {
-        console.error("Real-time likes subscription error:", error);
-      },
-    );
+    };
+    void load().catch((error) => console.error("Real-time likes subscription error:", error));
+    const channel = this.client.channel(`feed:post-likes:${postId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "post_reactions", filter: `post_id=eq.${postId}` }, () => { void load().catch((error) => console.error("Real-time likes subscription error:", error)); })
+      .subscribe();
+    return () => { active = false; void this.client.removeChannel(channel); };
   }
 }
 
-export const feedService = new FeedService();
+export const feedService = guardCircleResult(new FeedService());

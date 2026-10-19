@@ -1,20 +1,6 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  deleteDoc,
-  orderBy,
-  limit,
-  documentId,
-} from "firebase/firestore";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { userService, UserProfile } from "./user.service";
-import { logFirestoreError } from "@/utils/firestoreErrors";
+import { logBackendError } from "@/utils/backendErrors";
 
 export type FriendshipStatus = "pending" | "accepted" | "rejected";
 
@@ -25,6 +11,26 @@ export interface Friendship {
   status: FriendshipStatus;
   created_at: string;
   accepted_at: string | null;
+}
+
+type FriendshipRow = Omit<Friendship, "status" | "accepted_at"> & {
+  status: string;
+  updated_at: string;
+};
+
+const FRIENDSHIP_FIELDS =
+  "id,requester_id,addressee_id,status,created_at,updated_at";
+
+function toFriendship(row: FriendshipRow): Friendship {
+  const status = row.status.toLowerCase() as FriendshipStatus;
+  return {
+    id: row.id,
+    requester_id: row.requester_id,
+    addressee_id: row.addressee_id,
+    status,
+    created_at: row.created_at,
+    accepted_at: status === "accepted" ? row.updated_at : null,
+  };
 }
 
 export interface FriendRequest {
@@ -45,6 +51,9 @@ export interface Friend extends UserProfile {
 }
 
 class FriendsService {
+  private get client() {
+    return getSupabaseBrowserClient();
+  }
   private readonly friendsCacheTtlMs = 15 * 60 * 1000;
   private friendsCache = new Map<
     string,
@@ -90,11 +99,44 @@ class FriendsService {
     }
   }
 
+  private invalidateServerSocialCache(...userIds: Array<string | undefined>): void {
+    const validIds = userIds.filter((id): id is string => !!id);
+    if (validIds.length === 0 || typeof window === "undefined") return;
+
+    import("@/lib/apiClient")
+      .then(({ apiFetch }) =>
+        apiFetch("/api/cache/social", {
+          method: "POST",
+          body: JSON.stringify({ userIds: validIds }),
+        }),
+      )
+      .catch(() => {});
+  }
+
   async sendFriendRequest(
     requesterId: string,
     addresseeId: string,
   ): Promise<Friendship> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{
+            ok: boolean;
+            friendship: Friendship;
+          }>("/api/friends/request", {
+            method: "POST",
+            body: JSON.stringify({ addresseeId }),
+          });
+          if (response.friendship) {
+            this.invalidateFriendsCache(requesterId, addresseeId);
+            return response.friendship;
+          }
+        } catch (apiError) {
+          console.warn("[friendsService] sendFriendRequest API fallback:", apiError);
+        }
+      }
+
       const existing = await this.getFriendshipBetweenUsers(
         requesterId,
         addresseeId,
@@ -107,22 +149,18 @@ class FriendsService {
         throw new Error("Cannot send friend request to yourself");
       }
 
-      const friendshipRef = doc(
-        db,
-        "friendships",
-        this.getCanonicalFriendshipId(requesterId, addresseeId),
-      );
       const friendshipData = {
         requester_id: requesterId,
         addressee_id: addresseeId,
-        status: "pending",
-        created_at: new Date().toISOString(),
-        accepted_at: null,
+        status: "PENDING",
       };
 
-      await setDoc(friendshipRef, friendshipData);
+      const { data: created, error } = await this.client.from("friendships")
+        .insert(friendshipData).select(FRIENDSHIP_FIELDS).single();
+      if (error) throw error;
       this.invalidateFriendsCache(requesterId, addresseeId);
-      return { id: friendshipRef.id, ...friendshipData } as Friendship;
+      this.invalidateServerSocialCache(requesterId, addresseeId);
+      return toFriendship(created as FriendshipRow);
     } catch (error) {
       console.error("Error sending friend request:", error);
       throw error;
@@ -131,22 +169,43 @@ class FriendsService {
 
   async acceptFriendRequest(friendshipId: string): Promise<Friendship> {
     try {
-      const friendshipRef = doc(db, "friendships", friendshipId);
-      await updateDoc(friendshipRef, {
-        status: "accepted",
-        accepted_at: new Date().toISOString(),
-      });
-
-      const updatedDoc = await getDoc(friendshipRef);
-      if (!updatedDoc.exists()) {
-        throw new Error("Friendship not found");
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{
+            ok: boolean;
+            friendship: Friendship;
+          }>(`/api/friends/${encodeURIComponent(friendshipId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: "accepted" }),
+          });
+          if (response.friendship) {
+            this.invalidateFriendsCache(
+              response.friendship.requester_id,
+              response.friendship.addressee_id,
+            );
+            return response.friendship;
+          }
+        } catch (apiError) {
+          console.warn("[friendsService] acceptFriendRequest API fallback:", apiError);
+        }
       }
 
-      const accepted = {
-        id: updatedDoc.id,
-        ...updatedDoc.data(),
-      } as Friendship;
+      const { data: updated, error: updateError } = await this.client.from("friendships")
+        .update({
+        status: "ACCEPTED",
+        updated_at: new Date().toISOString(),
+      }).eq("id", friendshipId).select(FRIENDSHIP_FIELDS).maybeSingle();
+      if (updateError) throw updateError;
+      if (!updated) {
+        throw new Error("Friendship not found");
+      }
+      const accepted = toFriendship(updated as FriendshipRow);
       this.invalidateFriendsCache(accepted.requester_id, accepted.addressee_id);
+      this.invalidateServerSocialCache(
+        accepted.requester_id,
+        accepted.addressee_id,
+      );
       return accepted;
     } catch (error) {
       console.error("Error accepting friend request:", error);
@@ -156,21 +215,41 @@ class FriendsService {
 
   async rejectFriendRequest(friendshipId: string): Promise<Friendship> {
     try {
-      const friendshipRef = doc(db, "friendships", friendshipId);
-      await updateDoc(friendshipRef, {
-        status: "rejected",
-      });
-
-      const updatedDoc = await getDoc(friendshipRef);
-      if (!updatedDoc.exists()) {
-        throw new Error("Friendship not found");
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{
+            ok: boolean;
+            friendship: Friendship;
+          }>(`/api/friends/${encodeURIComponent(friendshipId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: "rejected" }),
+          });
+          if (response.friendship) {
+            this.invalidateFriendsCache(
+              response.friendship.requester_id,
+              response.friendship.addressee_id,
+            );
+            return response.friendship;
+          }
+        } catch (apiError) {
+          console.warn("[friendsService] rejectFriendRequest API fallback:", apiError);
+        }
       }
 
-      const rejected = {
-        id: updatedDoc.id,
-        ...updatedDoc.data(),
-      } as Friendship;
+      const { data: updated, error: updateError } = await this.client.from("friendships")
+        .update({ status: "DECLINED" }).eq("id", friendshipId)
+        .select(FRIENDSHIP_FIELDS).maybeSingle();
+      if (updateError) throw updateError;
+      if (!updated) {
+        throw new Error("Friendship not found");
+      }
+      const rejected = toFriendship(updated as FriendshipRow);
       this.invalidateFriendsCache(rejected.requester_id, rejected.addressee_id);
+      this.invalidateServerSocialCache(
+        rejected.requester_id,
+        rejected.addressee_id,
+      );
       return rejected;
     } catch (error) {
       console.error("Error rejecting friend request:", error);
@@ -184,7 +263,7 @@ class FriendsService {
   ): Promise<boolean> {
     try {
       console.log(
-        "🔄 FriendsService: Cancelling friend request between",
+        "ðŸ”„ FriendsService: Cancelling friend request between",
         requesterId,
         "and",
         addresseeId,
@@ -197,24 +276,38 @@ class FriendsService {
       );
 
       if (!friendship) {
-        console.log("❌ No friendship found to cancel");
+        console.log("âŒ No friendship found to cancel");
         return false;
       }
 
       if (friendship.status !== "pending") {
-        console.log("❌ Friendship is not pending, cannot cancel");
+        console.log("âŒ Friendship is not pending, cannot cancel");
         return false;
       }
 
-      // Delete the friendship document
-      const friendshipRef = doc(db, "friendships", friendship.id);
-      await deleteDoc(friendshipRef);
-      this.invalidateFriendsCache(requesterId, addresseeId);
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          await apiFetch(`/api/friends/${encodeURIComponent(friendship.id)}`, {
+            method: "DELETE",
+          });
+          this.invalidateFriendsCache(requesterId, addresseeId);
+          return true;
+        } catch (apiError) {
+          console.warn("[friendsService] cancelFriendRequest API fallback:", apiError);
+        }
+      }
 
-      console.log("✅ Friend request cancelled successfully");
+      // Delete the friendship document
+      const { error } = await this.client.from("friendships").delete().eq("id", friendship.id);
+      if (error) throw error;
+      this.invalidateFriendsCache(requesterId, addresseeId);
+      this.invalidateServerSocialCache(requesterId, addresseeId);
+
+      console.log("âœ… Friend request cancelled successfully");
       return true;
     } catch (error) {
-      console.error("❌ Error cancelling friend request:", error);
+      console.error("âŒ Error cancelling friend request:", error);
       throw error;
     }
   }
@@ -232,20 +325,13 @@ class FriendsService {
         return cached.data;
       }
 
-      const friendshipsRef = collection(db, "friendships");
-      const canonicalFriendshipId = this.getCanonicalFriendshipId(
-        userId1,
-        userId2,
-      );
-      const canonicalFriendshipDoc = await getDoc(
-        doc(db, "friendships", canonicalFriendshipId),
-      );
-
-      if (canonicalFriendshipDoc.exists()) {
-        const result = {
-          id: canonicalFriendshipDoc.id,
-          ...canonicalFriendshipDoc.data(),
-        } as Friendship;
+      const { data: direct, error: directError } = await this.client.from("friendships")
+        .select(FRIENDSHIP_FIELDS)
+        .or(`and(requester_id.eq.${userId1},addressee_id.eq.${userId2}),and(requester_id.eq.${userId2},addressee_id.eq.${userId1})`)
+        .limit(1).maybeSingle();
+      if (directError) throw directError;
+      if (direct) {
+        const result = toFriendship(direct as FriendshipRow);
         this.friendshipBetweenCache.set(pairKey, {
           data: result,
           expiresAt: now + this.friendsCacheTtlMs,
@@ -253,26 +339,7 @@ class FriendsService {
         return result;
       }
 
-      // Fallback for legacy friendships created before deterministic IDs.
-      const [forwardSnap, reverseSnap] = await Promise.all([
-        getDocs(
-          query(
-            friendshipsRef,
-            where("requester_id", "==", userId1),
-            where("addressee_id", "==", userId2),
-          ),
-        ),
-        getDocs(
-          query(
-            friendshipsRef,
-            where("requester_id", "==", userId2),
-            where("addressee_id", "==", userId1),
-          ),
-        ),
-      ]);
-
-      const allDocs = [...forwardSnap.docs, ...reverseSnap.docs];
-      if (allDocs.length === 0) {
+      if (!direct) {
         this.friendshipBetweenCache.set(pairKey, {
           data: null,
           expiresAt: now + this.friendsCacheTtlMs,
@@ -280,33 +347,24 @@ class FriendsService {
         return null;
       }
 
-      const docSnap = allDocs[0];
-      const result = { id: docSnap.id, ...docSnap.data() } as Friendship;
-      this.friendshipBetweenCache.set(pairKey, {
-        data: result,
-        expiresAt: now + this.friendsCacheTtlMs,
-      });
-      return result;
+      return null;
     } catch (error) {
-      logFirestoreError("Error getting friendship between users:", error);
+      logBackendError("Error getting friendship between users:", error);
       return null;
     }
   }
 
   async getFriendRequests(userId: string): Promise<FriendRequest[]> {
     try {
-      const friendshipsRef = collection(db, "friendships");
-      const q = query(
-        friendshipsRef,
-        where("addressee_id", "==", userId),
-        where("status", "==", "pending"),
-        orderBy("created_at", "desc"),
-      );
-      const querySnapshot = await getDocs(q);
+      const { data: rows, error } = await this.client.from("friendships")
+        .select(FRIENDSHIP_FIELDS)
+        .eq("addressee_id", userId).eq("status", "PENDING")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
 
       const requests: FriendRequest[] = [];
-      for (const doc of querySnapshot.docs) {
-        const friendship = { id: doc.id, ...doc.data() } as Friendship;
+      for (const friendshipRow of (rows ?? []) as FriendshipRow[]) {
+        const friendship = toFriendship(friendshipRow);
         const requesterProfile = await userService.getProfile(
           friendship.requester_id,
         );
@@ -321,7 +379,7 @@ class FriendsService {
 
       return requests;
     } catch (error) {
-      logFirestoreError("Error getting friend requests:", error);
+      logBackendError("Error getting friend requests:", error);
       return [];
     }
   }
@@ -344,44 +402,25 @@ class FriendsService {
       this.inFlightFriendsRequests.set(userId, request);
       return request;
     } catch (error) {
-      logFirestoreError("Error getting friends:", error);
+      logBackendError("Error getting friends:", error);
       return [];
     }
   }
 
   private async fetchFriends(userId: string): Promise<Friend[]> {
     try {
-      const friendshipsRef = collection(db, "friendships");
-
-      // Firestore does not allow multiple "in" filters in a single query.
-      // Instead, fetch friendships where the current user is either the
-      // requester OR the addressee, then merge the results.
-      const [asRequesterSnap, asAddresseeSnap] = await Promise.all([
-        getDocs(
-          query(
-            friendshipsRef,
-            where("status", "==", "accepted"),
-            where("requester_id", "==", userId),
-          ),
-        ),
-        getDocs(
-          query(
-            friendshipsRef,
-            where("status", "==", "accepted"),
-            where("addressee_id", "==", userId),
-          ),
-        ),
-      ]);
-
-      const allDocs = [...asRequesterSnap.docs, ...asAddresseeSnap.docs];
+      const { data: rows, error } = await this.client.from("friendships")
+        .select(FRIENDSHIP_FIELDS)
+        .eq("status", "ACCEPTED")
+        .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+      if (error) throw error;
       const seenIds = new Set<string>();
       const friendshipsByOtherUser = new Map<string, Friendship>();
 
-      for (const docSnap of allDocs) {
-        if (seenIds.has(docSnap.id)) continue;
-        seenIds.add(docSnap.id);
-
-        const friendship = { id: docSnap.id, ...docSnap.data() } as Friendship;
+      for (const friendshipRow of (rows ?? []) as FriendshipRow[]) {
+        const friendship = toFriendship(friendshipRow);
+        if (seenIds.has(friendship.id)) continue;
+        seenIds.add(friendship.id);
         const otherUserId =
           friendship.requester_id === userId
             ? friendship.addressee_id
@@ -389,7 +428,7 @@ class FriendsService {
         friendshipsByOtherUser.set(otherUserId, friendship);
       }
 
-      // Batch fetch all friend profiles in a single query
+      // Batch fetch all friend profiles in a single buildQuery
       const profileIds = Array.from(friendshipsByOtherUser.keys());
       const profilesMap = new Map<string, UserProfile>();
 
@@ -400,13 +439,13 @@ class FriendsService {
         }
 
         for (const chunk of chunks) {
-          const usersRef = collection(db, "users");
-          const q = query(usersRef, where(documentId(), "in", chunk));
-          const snapshot = await getDocs(q);
-          snapshot.forEach((docSnap) => {
-            profilesMap.set(docSnap.id, {
-              id: docSnap.id,
-              ...docSnap.data(),
+          const { data: profiles, error } = await this.client.from("profiles")
+            .select("id,username,display_name,bio,avatar_url,visibility,is_18_plus,consent_accepted,dares_completed,dares_refused,created_at,updated_at").in("id", chunk);
+          if (error) throw error;
+          (profiles ?? []).forEach((profile) => {
+            profilesMap.set(profile.id, {
+              id: profile.id,
+              ...profile,
             } as UserProfile);
           });
         }
@@ -431,28 +470,43 @@ class FriendsService {
       this.setCachedFriends(userId, friends);
       return friends;
     } catch (error) {
-      logFirestoreError("Error getting friends:", error);
+      logBackendError("Error getting friends:", error);
       return [];
     }
   }
 
   async removeFriend(friendshipId: string): Promise<boolean> {
     try {
-      const existingFriendship = await getDoc(
-        doc(db, "friendships", friendshipId),
-      );
-      const friendshipRef = doc(db, "friendships", friendshipId);
-      await deleteDoc(friendshipRef);
-      if (existingFriendship.exists()) {
-        const friendship = existingFriendship.data() as Friendship;
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          await apiFetch(`/api/friends/${encodeURIComponent(friendshipId)}`, {
+            method: "DELETE",
+          });
+          this.friendsCache.clear();
+          return true;
+        } catch (apiError) {
+          console.warn("[friendsService] removeFriend API fallback:", apiError);
+        }
+      }
+
+      const { data: friendship, error } = await this.client.from("friendships")
+        .delete().eq("id", friendshipId)
+        .select("requester_id,addressee_id").maybeSingle();
+      if (error) throw error;
+      if (friendship) {
         this.invalidateFriendsCache(
+          friendship.requester_id,
+          friendship.addressee_id,
+        );
+        this.invalidateServerSocialCache(
           friendship.requester_id,
           friendship.addressee_id,
         );
       }
       return true;
     } catch (error) {
-      logFirestoreError("Error removing friend:", error);
+      logBackendError("Error removing friend:", error);
       return false;
     }
   }
@@ -479,14 +533,29 @@ class FriendsService {
       }
 
       // Remove the friendship
-      const success = await this.removeFriend(friendship.id);
+      let success: boolean;
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          await apiFetch(
+            `/api/friends/between?userId=${encodeURIComponent(targetUserId)}`,
+            { method: "DELETE" },
+          );
+          success = true;
+        } catch (apiError) {
+          console.warn("[friendsService] unfriendUser API fallback:", apiError);
+          success = await this.removeFriend(friendship.id);
+        }
+      } else {
+        success = await this.removeFriend(friendship.id);
+      }
 
       if (success) {
-        console.log("✅ Successfully unfriended user");
+        console.log("âœ… Successfully unfriended user");
         this.invalidateFriendsCache(currentUserId, targetUserId);
         return true;
       } else {
-        console.error("❌ Failed to unfriend user");
+        console.error("âŒ Failed to unfriend user");
         return false;
       }
     } catch (error) {
@@ -500,7 +569,7 @@ class FriendsService {
       const friendship = await this.getFriendshipBetweenUsers(userId1, userId2);
       return friendship?.status === "accepted" || false;
     } catch (error) {
-      logFirestoreError("Error checking friendship status:", error);
+      logBackendError("Error checking friendship status:", error);
       return false;
     }
   }
@@ -510,7 +579,7 @@ class FriendsService {
       const friends = await this.getFriends(userId);
       return friends.length;
     } catch (error) {
-      logFirestoreError("Error getting friends count:", error);
+      logBackendError("Error getting friends count:", error);
       return 0;
     }
   }

@@ -1,0 +1,8 @@
+import "server-only";
+import { NextResponse } from "next/server";
+import { withSecurity } from "../../../../_lib/withSecurity";
+import { LIMITS } from "../../../../_lib/rateLimit";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { cleanText } from "../../../../_lib/socialMutations";
+const idOf=(req:Request)=>new URL(req.url).pathname.split("/").slice(-2)[0]||"";const valid=(u:string)=>{try{const x=new URL(u);return x.protocol==="https:"&&x.hostname.endsWith("supabase.co");}catch{return false;}};
+export const PATCH=withSecurity({rateLimit:LIMITS.BIRTHDAY_DROP},async(req,ctx)=>{const id=idOf(req),b=await req.json().catch(()=>({})),action=cleanText(b.action,20),db=getSupabaseAdminClient() as any;if(!id||!["accept","complete"].includes(action))return NextResponse.json({error:"bad action"},{status:400});const {data:drop,error}=await db.from("birthday_drops").select("id,type,birthday_user_id,metadata").eq("id",id).maybeSingle();if(error)throw error;if(!drop)return NextResponse.json({error:"not found"},{status:404});if(drop.type!=="dare"||drop.birthday_user_id!==ctx.uid)return NextResponse.json({error:"forbidden"},{status:403});const metadata={...(drop.metadata||{})};if(action==="accept")metadata.dareStatus="accepted";else{const url=cleanText(b.proofMediaUrl,2000),type=cleanText(b.proofMediaType,12);if(!url||!["image","video","audio"].includes(type)||!valid(url))return NextResponse.json({error:"bad proof"},{status:400});metadata.dareStatus="completed";metadata.proofMediaUrl=url;metadata.proofMediaType=type;}const {error:ue}=await db.from("birthday_drops").update({updated_at:new Date().toISOString(),metadata}).eq("id",id);if(ue)throw ue;return NextResponse.json({ok:true});});

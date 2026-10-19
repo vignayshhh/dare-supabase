@@ -1,27 +1,35 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import {
-  doc,
-  getDoc,
-  getFirestore,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
+  memo,
+  type ComponentProps,
+  type FunctionComponent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { MainScreen } from "../screens/MainScreen";
 import { FeedScreen } from "../screens/FeedScreen";
 import { DaresReceivedScreen } from "../screens/DaresReceivedScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { CreateDareScreen } from "../screens/CreateDareScreen";
+import { CreateCommunityDareScreen } from "../screens/CreateCommunityDareScreen";
 import { CreateFeedPostScreen } from "../screens/CreateFeedPostScreen";
 import { BottomNavigation } from "../navigation/BottomNavigation";
 import { ChatListScreen } from "../screens/ChatListScreen";
 import MessagingScreen from "../screens/MessagingScreen";
+import { DarrenChatScreen } from "../screens/DarrenChatScreen";
 import { LaunchGate } from "../LaunchScreen";
 import { AuthScreen } from "../screens/AuthScreen";
 import { GuestApp } from "./GuestApp";
 import { ActionPickerScreen } from "../screens/ActionPickerScreen";
 import { CreateInteractionScreen } from "../screens/CreateInteractionScreen";
+import { CreatePredictionScreen } from "../screens/CreatePredictionScreen";
+import { CreateDealScreen } from "../screens/CreateDealScreen";
+import { CreateCustomScreen } from "../screens/CreateCustomScreen";
+import { CreateRumourScreen } from "../screens/CreateRumourScreen";
+import { CreatePromiseScreen } from "../screens/CreatePromiseScreen";
+import { CreateVerdictScreen } from "../screens/CreateVerdictScreen";
 import { ProfileCreationScreen } from "../screens/ProfileCreationScreen";
 import { AlertsScreen } from "../screens/AlertsScreen";
 import { ChallengeFriendTimelineScreen } from "../screens/ChallengeFriendTimelineScreen";
@@ -29,39 +37,54 @@ import { FriendsInviteAlertsScreen } from "../screens/FriendsInviteAlertsScreen"
 import { UserSearchScreen } from "../screens/UserSearchScreen";
 import { UserProfileScreen } from "../screens/UserProfileScreen";
 import { ProfileEditScreen } from "../screens/ProfileEditScreen";
-import { ActivityScreen } from "../screens/ActivityScreen";
 import {
   DailyChallengeScreen,
   type DailyChallengeDraft,
 } from "../screens/DailyChallengeScreen";
 import { DailyChallengeRevealScreen } from "../screens/DailyChallengeRevealScreen";
 import { DareCenterScreen } from "../screens/DareCenterScreen";
+import { BirthdayRoomScreen } from "../screens/BirthdayRoomScreen";
+import { BirthdayPartyRoomScreen } from "../screens/BirthdayPartyRoomScreen";
+import { VerdictsScreen } from "../screens/VerdictsScreen";
+import { FriendCircleScreen } from "../screens/FriendCircleScreen";
+import { AppearanceThemeRuntime } from "../ui/AppearanceToggle";
+import type {
+  BirthdayDrop,
+  BirthdayRoom,
+} from "../../middleware/services/birthday-room.service";
 import { useAuthStore } from "../../stores/useAuthStore-v2";
-import { useGhostModeStore } from "../../stores/useGhostModeStore";
+import { useImmersiveOverlayStore } from "../../stores/useImmersiveOverlayStore";
 import { useMessagingStore } from "../../stores/useMessagingStore";
 import { useAlertStore } from "../../stores/useAlertStore";
+import { useCirclesStore } from "../../stores/useCirclesStore";
 import { messagingService } from "../../middleware/services/messaging.service";
-import { auth as firebaseAuth } from "../../backend/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import { startAvatarSync } from "../../utils/avatarSync";
 import { avatarSyncService } from "../../services/avatarSyncService";
 import { profileSyncService } from "../../services/profileSyncService";
 import { useProfileDataStore } from "../../stores/profileDataStore";
-import { surveillanceService } from "../../middleware/services/surveillance.service";
 import { backgroundPreCache } from "../../utils/backgroundPreCache";
 import { resolveUserProfile } from "../../utils/profileResolver";
-import {
-  isFirestoreOfflineError,
-  logFirestoreError,
-} from "@/utils/firestoreErrors";
+import { isBackendUnavailable } from "@/utils/backendErrors";
 import { usePwaScreenHistory } from "../../hooks/usePwaScreenHistory";
 import { dareService } from "../../middleware/services/service-factory";
+import { DARREN_CONVERSATION_ID, DARREN_USER_ID } from "@/lib/darren";
 import type {
   TruthPost,
   DarePost,
 } from "../../middleware/adapters/data-adapters";
 import type { DareEntity } from "../../backend/domain/entities/Dare";
 import type { AlertEntity } from "../../backend/domain/entities/Alert";
+import { setActiveEventId } from "@/lib/circleContext";
+import { CircleGate } from "../circles/CircleExperience";
+import { CircleChatScreen } from "../circles/CircleChatScreen";
+import { ChatInteractionScreen } from "../circles/ChatInteractionScreen";
+import { CircleJailVotesScreen } from "../circles/CircleJailVotesScreen";
+import { setChatSource, type ChatSource } from "@/lib/chatContext";
+import { circleChatService } from "@/middleware/services/circle-chat.service";
+import { getActiveCircleId } from "@/lib/circleContext";
+import type { CircleChatMessage } from "@/middleware/services/circle-chat.service";
+import { AuraSystemHost } from "../aura/AuraSystem";
 
 type Screen =
   | "truth"
@@ -70,23 +93,36 @@ type Screen =
   | "profile"
   | "profile-edit"
   | "create-dare"
+  | "create-community-dare"
   | "create-feed"
+  | "create-verdict"
   | "feed"
+  | "verdicts"
+  | "circle"
   | "auth"
+  | "circle-chat"
+  | "chat-interaction"
+  | "circle-jail-votes"
   | "chat-list"
   | "chat"
   | "action-picker"
   | "create-truth"
+  | "create-prediction"
+  | "create-deal"
+  | "create-custom"
+  | "create-rumour"
+  | "create-promise"
   | "create-dare-interaction"
   | "alerts"
   | "chat-invites"
   | "profile-creation"
   | "user-search"
   | "user-profile"
-  | "activity"
   | "daily"
   | "daily-reveal"
   | "dare-center"
+  | "birthday-room"
+  | "birthday-party-room"
   | "challenge-timeline";
 
 type DaresNavigationRequest = {
@@ -111,44 +147,58 @@ type AppHistorySnapshot = {
   selectedChallengeFriendAlert: AlertEntity | null;
 };
 
+type BirthdayPartyRoomContext = {
+  room: BirthdayRoom;
+  drops: BirthdayDrop[];
+};
+
+type InteractionRecipient = {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string;
+};
+
+type TextCardPostKind =
+  | "prediction"
+  | "deal"
+  | "rumour"
+  | "promise"
+  | "custom";
+
+type TextCardReturnRequest = {
+  kind: TextCardPostKind;
+  nonce: number;
+};
+
 function getScreenLayerClassName(
   isActive: boolean,
-  className = "full-height-scroll tab-screen-bottom-pad",
+  className = "full-height-scroll",
 ) {
   return `app-screen-layer ${isActive ? "is-active" : ""} ${className}`;
 }
 
-function normalizeTimestampInput(value: unknown): string | null {
-  if (!value) return null;
-
-  let date: Date | null = null;
-
-  if (value instanceof Date) {
-    date = value;
-  } else if (typeof value === "string" || typeof value === "number") {
-    date = new Date(value);
-  } else if (
-    typeof value === "object" &&
-    value !== null &&
-    "toDate" in value &&
-    typeof (value as { toDate?: () => Date }).toDate === "function"
-  ) {
-    date = (value as { toDate: () => Date }).toDate();
-  } else if (
-    typeof value === "object" &&
-    value !== null &&
-    "seconds" in value &&
-    typeof (value as { seconds?: number }).seconds === "number"
-  ) {
-    date = new Date((value as { seconds: number }).seconds * 1000);
-  }
-
-  if (!date || Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date.toISOString();
+// Keep hidden tabs mounted for instant return navigation, but avoid asking
+// their large component trees to render when the parent changes tabs.
+function memoizeInactiveScreen<P extends { isActive?: boolean }>(
+  ScreenComponent: FunctionComponent<P>,
+) {
+  return memo<P>(ScreenComponent, (previous, next) => {
+    if (previous.isActive !== next.isActive) return false;
+    return previous.isActive !== true;
+  });
 }
+
+const MemoMainScreen = memoizeInactiveScreen(MainScreen);
+const MemoDaresReceivedScreen = memoizeInactiveScreen(DaresReceivedScreen);
+const MemoProfileScreen = memoizeInactiveScreen<
+  NonNullable<ComponentProps<typeof ProfileScreen>>
+>(ProfileScreen);
+const MemoFeedScreen = memoizeInactiveScreen(FeedScreen);
+const MemoVerdictsScreen = memoizeInactiveScreen(VerdictsScreen);
+const MemoFriendCircleScreen = memoizeInactiveScreen(FriendCircleScreen);
+const MemoDailyChallengeScreen = memoizeInactiveScreen(DailyChallengeScreen);
+const MemoChatListScreen = memoizeInactiveScreen(ChatListScreen);
 
 async function buildDareFocusPost(dare: DareEntity): Promise<DarePost> {
   const [challengerProfile, receiverProfile] = await Promise.all([
@@ -197,23 +247,26 @@ export default function AuthenticatedApp() {
     useAuthStore();
   const [mounted, setMounted] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
-  const {
-    checkGhostModeStatus,
-    subscribeToGhostMode,
-    applyOptimisticGhostMode,
-    reconcileGhostModeBackend,
-  } = useGhostModeStore();
-  const alerts = useAlertStore((s) => s.alerts);
+  const activeCircleId = useCirclesStore((state) => state.activeId);
+  const circleReady = useCirclesStore((state) => state.ready);
   const subscribeToAlerts = useAlertStore((s) => s.subscribeToAlerts);
   const [currentScreen, setCurrentScreen] = useState<Screen>("feed");
+  const [chatOrigin, setChatOrigin] = useState<ChatSource | null>(null);
+  const [chatInteraction, setChatInteraction] = useState<CircleChatMessage | null>(null);
+  const [jailCaseId, setJailCaseId] = useState<string | undefined>();
+  useEffect(() => { if (!currentScreen.startsWith("create-")) setChatSource(null); }, [currentScreen]);
   const [dailyChallengeSkipWait, setDailyChallengeSkipWait] = useState(false);
   const [dailyChallengeDraft, setDailyChallengeDraft] =
     useState<DailyChallengeDraft | null>(null);
   const [mainDareAudience, setMainDareAudience] = useState<
     "friends" | "community"
   >("friends");
-  const handledGhostApprovalAlertIdsRef = useRef<Set<string>>(new Set());
-  const handledGhostCompletionKeysRef = useRef<Set<string>>(new Set());
+  const [textCardReturnRequest, setTextCardReturnRequest] =
+    useState<TextCardReturnRequest | null>(null);
+  const [birthdayPartyRoomContext, setBirthdayPartyRoomContext] =
+    useState<BirthdayPartyRoomContext | null>(null);
+  const [birthdayRoomReturnScreen, setBirthdayRoomReturnScreen] =
+    useState<Screen>("feed");
 
   // Mark as mounted after first client render to avoid SSR/client hydration mismatch
   useEffect(() => {
@@ -273,6 +326,9 @@ export default function AuthenticatedApp() {
       if (!response.success) {
         throw new Error(response.error || "Unable to create your account.");
       }
+      return {
+        requiresEmailConfirmation: response.requiresEmailConfirmation,
+      };
     }
   };
 
@@ -296,11 +352,18 @@ export default function AuthenticatedApp() {
     nonce: number;
   } | null>(null);
   const [mainScreenResetKey, setMainScreenResetKey] = useState(0);
+  const [communityHubRequestKey, setCommunityHubRequestKey] = useState(0);
+  const [interactionRecipient, setInteractionRecipient] =
+    useState<InteractionRecipient | null>(null);
   const [daresScreenResetKey, setDaresScreenResetKey] = useState(0);
+  const [pendingVerdictId, setPendingVerdictId] = useState<string | null>(null);
   const [daresNavigationRequest, setDaresNavigationRequest] =
     useState<DaresNavigationRequest | null>(null);
   const [isStoryViewerOpen, setIsStoryViewerOpen] = useState(false);
   const [isStoryComposerOpen, setIsStoryComposerOpen] = useState(false);
+  const [isFeedCommentsOpen, setIsFeedCommentsOpen] = useState(false);
+  const [isFeedPostOptionsOpen, setIsFeedPostOptionsOpen] = useState(false);
+  const isImmersiveOverlayActive = useImmersiveOverlayStore((s) => s.active);
   const [selectedChallengeFriendAlert, setSelectedChallengeFriendAlert] =
     useState<AlertEntity | null>(null);
   const goBackInApp = usePwaScreenHistory<Screen, AppHistorySnapshot>(
@@ -362,46 +425,6 @@ export default function AuthenticatedApp() {
   }, [lastActiveChatUserId]);
 
   useEffect(() => {
-    if (
-      currentScreen !== "user-profile" ||
-      !user?.id ||
-      !selectedUserId ||
-      user.id === selectedUserId
-    ) {
-      return;
-    }
-
-    const viewerUsername = user.username || "someone";
-    const viewerDisplayName = user.displayName || user.username || "Someone";
-    const viewerAvatar = user.avatar || "";
-
-    void surveillanceService.startViewingProfile(
-      user.id,
-      selectedUserId,
-      viewerUsername,
-      viewerDisplayName,
-      viewerAvatar,
-    );
-
-    return () => {
-      void surveillanceService.stopViewingProfile(
-        user.id,
-        selectedUserId,
-        viewerUsername,
-        viewerDisplayName,
-        viewerAvatar,
-      );
-    };
-  }, [
-    currentScreen,
-    selectedUserId,
-    user?.avatar,
-    user?.displayName,
-    user?.id,
-    user?.username,
-  ]);
-
-  useEffect(() => {
     if (isAuthenticated && user?.id) {
       startAvatarSync();
 
@@ -431,208 +454,81 @@ export default function AuthenticatedApp() {
   ]);
 
   useEffect(() => {
-    if (!isAuthenticated || !user?.id) return;
+    // Direct inbox rows are Circle-scoped. Starting before Circle bootstrap
+    // completes produces an unauthorised empty snapshot that never refreshes.
+    if (!isAuthenticated || !user?.id || !circleReady || !activeCircleId) return;
 
     const messagingStore = useMessagingStore.getState();
     const targetUserId = user.id;
     let cancelled = false;
     let started = false;
-    let unsubAuth: (() => void) | null = null;
 
     const start = () => {
       if (cancelled || started) return;
       started = true;
       console.log(
-        "🔍 [AuthenticatedApp DEBUG] Starting RTDB subscriptions for user:",
+        "🔍 [AuthenticatedApp DEBUG] Starting Realtime subscriptions for user:",
         targetUserId,
       );
       messagingStore.subscribeToRealTimeConversations(targetUserId);
       messagingStore.setOnlineStatus(true);
     };
 
-    // Wait until Firebase Auth has actually restored the session for THIS
-    // user before subscribing to RTDB-backed presence/typing. On a page
+    const authSubscription = getSupabaseBrowserClient().auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.user?.id === targetUserId) start();
+      },
+    );
+
+    // Wait until Supabase Auth has actually restored the session for THIS
+    // user before subscribing to Supabase presence/typing. On a page
     // reload the auth store hydrates synchronously from localStorage but
-    // Firebase Auth's currentUser is still null for a brief moment — if we
-    // attach RTDB onValue listeners during that window the rules deny the
+    // Supabase Auth's currentUser is still null for a brief moment — if we
+    // attach private Realtime channels during that window; policies deny the
     // read and the listeners are stuck reporting "offline" forever, which
     // is why the chat list and messaging header never showed active /
     // typing status.
-    if (firebaseAuth?.currentUser?.uid === targetUserId) {
-      start();
-    } else if (firebaseAuth) {
-      unsubAuth = onAuthStateChanged(firebaseAuth, (firebaseUser) => {
-        if (firebaseUser?.uid === targetUserId) start();
-      });
-    }
+    void getSupabaseBrowserClient().auth.getUser().then(({ data }) => {
+      if (!cancelled && data.user?.id === targetUserId) start();
+    });
 
     const onVisibility = () => {
-      if (!started) return;
-      messagingStore.setOnlineStatus(document.visibilityState !== "hidden");
+      // A backgrounded mobile tab is still connected and reachable. Treating
+      // `hidden` as offline makes peers flicker offline whenever the user
+      // switches apps or the browser changes the focused window. Supabase
+      // Presence removes the device automatically when its socket disconnects.
+      if (started && document.visibilityState === "visible") {
+        messagingStore.setOnlineStatus(true);
+      }
     };
     const onFocus = () => {
-      if (!started) return;
-      messagingStore.setOnlineStatus(true);
+      if (started) messagingStore.setOnlineStatus(true);
     };
     const onBeforeUnload = () => {
-      if (!started) return;
-      messagingStore.setOnlineStatus(false);
+      if (started) messagingStore.setOnlineStatus(false);
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onFocus);
     window.addEventListener("beforeunload", onBeforeUnload);
-    const onlineHeartbeat = window.setInterval(() => {
-      if (!started || document.visibilityState === "hidden") return;
-      messagingStore.setOnlineStatus(true);
-    }, 15000);
-
     return () => {
       cancelled = true;
-      if (unsubAuth) unsubAuth();
-      window.clearInterval(onlineHeartbeat);
       if (started) {
         messagingStore.unsubscribeFromRealTimeConversations();
         messagingStore.setOnlineStatus(false);
       }
+      authSubscription.data.subscription.unsubscribe();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onFocus);
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
-  }, [isAuthenticated, user?.id]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !user?.id) return;
-
-    void checkGhostModeStatus(user.id);
-    const unsubscribe = subscribeToGhostMode(user.id);
-
-    return () => {
-      unsubscribe?.();
-    };
-  }, [checkGhostModeStatus, isAuthenticated, subscribeToGhostMode, user?.id]);
+  }, [activeCircleId, circleReady, isAuthenticated, user?.id]);
 
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
     return subscribeToAlerts(user.id);
-  }, [isAuthenticated, user?.id]);
-
-  useEffect(() => {
-    if (!user?.id || alerts.length === 0) return;
-
-    const pendingGhostModeAlerts = alerts.filter(
-      (alert) =>
-        alert.userId === user.id &&
-        alert.type === "DARE_APPROVED" &&
-        !!alert.entityId &&
-        !handledGhostApprovalAlertIdsRef.current.has(alert.id),
-    );
-
-    if (pendingGhostModeAlerts.length === 0) return;
-
-    pendingGhostModeAlerts.forEach((alert) =>
-      handledGhostApprovalAlertIdsRef.current.add(alert.id),
-    );
-
-    void (async () => {
-      for (const alert of pendingGhostModeAlerts) {
-        try {
-          applyOptimisticGhostMode(alert.entityId, alert.createdAt, 15);
-          void reconcileGhostModeBackend(
-            user.id,
-            alert.entityId,
-            alert.createdAt,
-            15,
-          );
-        } catch (error) {
-          console.error(
-            "Error activating ghost mode from DARE_APPROVED alert:",
-            error,
-          );
-        }
-      }
-    })();
-  }, [alerts, applyOptimisticGhostMode, reconcileGhostModeBackend, user?.id]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !user?.id) return;
-
-    return dareService.subscribeToUserDares(
-      user.id,
-      "received",
-      (receivedDares: DareEntity[]) => {
-        const latestApprovedCompletion = [...receivedDares]
-          .filter(
-            (dare) =>
-              dare.receiverId === user.id && dare.state === "ACCEPTED_REAL",
-          )
-          .map((dare) => {
-            const completedAt =
-              normalizeTimestampInput(dare.completedAt) ||
-              normalizeTimestampInput(dare.updatedAt);
-
-            return {
-              dare,
-              completedAt,
-            };
-          })
-          .filter(
-            (
-              entry,
-            ): entry is {
-              dare: DareEntity;
-              completedAt: string;
-            } => {
-              if (!entry.completedAt) return false;
-
-              const completedMs = new Date(entry.completedAt).getTime();
-              return (
-                Number.isFinite(completedMs) &&
-                Date.now() - completedMs < 15 * 60 * 1000
-              );
-            },
-          )
-          .sort(
-            (a, b) =>
-              new Date(b.completedAt).getTime() -
-              new Date(a.completedAt).getTime(),
-          )[0];
-
-        if (!latestApprovedCompletion) {
-          return;
-        }
-
-        const completionKey = `${latestApprovedCompletion.dare.id}:${latestApprovedCompletion.completedAt}`;
-        const ghostModeState = useGhostModeStore.getState();
-        const shouldApply =
-          !handledGhostCompletionKeysRef.current.has(completionKey) ||
-          !ghostModeState.isActive;
-
-        if (!shouldApply) {
-          return;
-        }
-
-        handledGhostCompletionKeysRef.current.add(completionKey);
-        applyOptimisticGhostMode(
-          latestApprovedCompletion.dare.id,
-          latestApprovedCompletion.completedAt,
-          15,
-        );
-        void reconcileGhostModeBackend(
-          user.id,
-          latestApprovedCompletion.dare.id,
-          latestApprovedCompletion.completedAt,
-          15,
-        );
-      },
-    );
-  }, [
-    applyOptimisticGhostMode,
-    isAuthenticated,
-    reconcileGhostModeBackend,
-    user?.id,
-  ]);
+  }, [isAuthenticated, subscribeToAlerts, user?.id]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -654,8 +550,29 @@ export default function AuthenticatedApp() {
     setCurrentScreen("feed");
   };
 
+  const openCategoryInteraction = async (kind: string, id: string, chatMessageId?: string) => {
+    if (kind === "jail") { setChatOrigin(null); setJailCaseId(id); setCurrentScreen("circle-jail-votes"); return; }
+    if (!["prediction", "deal", "promise"].includes(kind)) return;
+    let message: CircleChatMessage | null = null;
+    if (chatMessageId) { try { message = await circleChatService.source(chatMessageId); } catch {} }
+    setChatInteraction(message || { id, seq: 0, circle_id: getActiveCircleId() || "", author_id: "", author_name: "", body: "", created_at: new Date().toISOString(), source_message_id: null, interaction_kind: kind as CircleChatMessage["interaction_kind"], interaction_id: id, status: null });
+    setCurrentScreen("chat-interaction");
+  };
+
   const handleBackToMain = () => {
+    if (chatOrigin && currentScreen.startsWith("create-")) { setChatSource(null); setCurrentScreen("circle-chat"); return; }
     goBackInApp("feed");
+  };
+
+  const openBirthdayRoom = (returnScreen: Screen = "feed") => {
+    setBirthdayRoomReturnScreen(returnScreen);
+    setBirthdayPartyRoomContext(null);
+    setCurrentScreen("birthday-room");
+  };
+
+  const closeBirthdayFlow = () => {
+    setBirthdayPartyRoomContext(null);
+    setCurrentScreen(birthdayRoomReturnScreen);
   };
 
   const updateCurrentChatPresence = (
@@ -663,22 +580,11 @@ export default function AuthenticatedApp() {
     nextUsername: string,
   ) => {
     if (!user?.id || !nextUserId) return;
-
-    const db = getFirestore();
-    const presenceRef = doc(db, "presence", user.id);
-    void setDoc(
-      presenceRef,
-      {
-        current_chat_user_id: nextUserId,
-        current_chat_user_name: nextUsername || "someone",
-        is_online: true,
-        last_seen: serverTimestamp(),
-        updated_at: serverTimestamp(),
-      },
-      { merge: true },
-    ).catch((error) => {
-      logFirestoreError("Error updating current chat presence:", error);
-    });
+    messagingService.setCurrentChatPresence(
+      user.id,
+      nextUserId,
+      nextUsername || "someone",
+    );
   };
 
   const emitChatSwitchForPreviousConversation = (
@@ -688,38 +594,50 @@ export default function AuthenticatedApp() {
   ) => {
     const fromConversationId =
       lastActiveConversationIdRef.current || chatConversationIdRef.current;
+    const logChatSwitch = (label: string, details: Record<string, unknown>) => {
+      console.info(`[DARE_LIVE_DEBUG][app] ${label}`, {
+        at: new Date().toISOString(),
+        currentUserId: user?.id ?? null,
+        ...details,
+      });
+    };
 
     if (
       !fromConversationId ||
       !nextConversationId ||
       fromConversationId === nextConversationId
     ) {
+      logChatSwitch("chat_switch_emit_skipped_conversation", {
+        fromConversationId,
+        nextConversationId,
+      });
       return;
     }
 
-    const previousChatUserId = lastActiveChatUserIdRef.current;
+    const state = useMessagingStore.getState();
+    const previousConversation =
+      state.currentConversation?.id === fromConversationId
+        ? state.currentConversation
+        : state.conversations.find((c: any) => c.id === fromConversationId);
+    const previousChatUserId =
+      lastActiveChatUserIdRef.current ||
+      previousConversation?.other_user?.user_id ||
+      previousConversation?.other_user?.id ||
+      "";
 
     if (!user?.id || !previousChatUserId || previousChatUserId === nextUserId) {
+      logChatSwitch("chat_switch_emit_skipped_recipient", {
+        fromConversationId,
+        nextConversationId,
+        previousChatUserId,
+        nextUserId,
+        hasUser: !!user?.id,
+      });
       return;
     }
 
     void (async () => {
       try {
-        const db = getFirestore();
-        const previousUserPresence = await getDoc(
-          doc(db, "presence", previousChatUserId),
-        );
-        const previousPresenceData = previousUserPresence.exists()
-          ? previousUserPresence.data()
-          : null;
-        const previousUserWasActivelyChattingWithMe =
-          String(previousPresenceData?.current_chat_user_id || "") === user.id;
-
-        if (!previousUserWasActivelyChattingWithMe) {
-          return;
-        }
-
-        const state = useMessagingStore.getState();
         const nextConversation = state.conversations.find(
           (c: any) => c.id === nextConversationId,
         );
@@ -728,23 +646,22 @@ export default function AuthenticatedApp() {
           nextConversation?.other_user?.display_name ||
           nextConversation?.other_user?.username ||
           "someone";
-
-        await messagingService.emitOptimisticChatSwitchSignal(
+        logChatSwitch("chat_switch_emit_started", {
           fromConversationId,
-          user.id,
-          targetUserName,
-          nextUserId,
+          nextConversationId,
           previousChatUserId,
-        );
+          nextUserId,
+          targetUserName,
+        });
 
-        await state.trackChatSwitch(
+        logChatSwitch("chat_switch_emit_finished", {
           fromConversationId,
-          targetUserName,
-          nextUserId,
+          nextConversationId,
           previousChatUserId,
-        );
+          nextUserId,
+        });
       } catch (error) {
-        if (isFirestoreOfflineError(error)) {
+        if (isBackendUnavailable(error)) {
           return;
         }
         console.error("Error emitting chat switch:", error);
@@ -758,6 +675,11 @@ export default function AuthenticatedApp() {
     conversationId?: string,
   ) => {
     const nextConversationId = conversationId || "";
+    if (userId === DARREN_USER_ID || nextConversationId === DARREN_CONVERSATION_ID) {
+      setChatConversationId(DARREN_CONVERSATION_ID);
+      setCurrentScreen("chat");
+      return;
+    }
     emitChatSwitchForPreviousConversation(nextConversationId, userId, username);
     updateCurrentChatPresence(userId, username);
     setChatConversationId(nextConversationId);
@@ -765,6 +687,17 @@ export default function AuthenticatedApp() {
   };
 
   const handleUserSelect = (userId: string) => {
+    if (userId === user?.id) {
+      setSelectedUserId("");
+      setSelectedUserPostId("");
+      setSelectedUserCommentId("");
+      setSelectedUserTruthId("");
+      setSelectedUserDareId("");
+      setPreviousScreen(currentScreen);
+      setCurrentScreen("profile");
+      return;
+    }
+
     setSelectedUserId(userId);
     setSelectedUserPostId("");
     setSelectedUserCommentId("");
@@ -811,25 +744,6 @@ export default function AuthenticatedApp() {
     setCurrentScreen("user-search");
   };
 
-  const handleNavigateToActivity = () => {
-    setPreviousScreen("profile");
-    setCurrentScreen("activity");
-  };
-
-  const handleActivityBack = () => {
-    if (previousScreen && previousScreen !== "activity") {
-      setCurrentScreen(previousScreen);
-      return;
-    }
-
-    if (selectedUserId && selectedUserId !== user?.id) {
-      setCurrentScreen("user-profile");
-      return;
-    }
-
-    setCurrentScreen("profile");
-  };
-
   const handleOpenTruthPost = (truth: TruthPost) => {
     setMainFocusRequest({
       view: "truth",
@@ -873,35 +787,74 @@ export default function AuthenticatedApp() {
     setCurrentScreen("action-picker");
   };
 
-  const handleActionSelect = (action: "truth" | "dare" | "feed") => {
+  const handleTextCardCreated = (kind: TextCardPostKind) => {
+    setMainFocusRequest(null);
+    setTextCardReturnRequest({ kind, nonce: Date.now() });
+    setMainScreenResetKey((key) => key + 1);
+    setCurrentScreen("truth");
+  };
+
+  const handleActionSelect = (action: "truth" | "prediction" | "deal" | "custom" | "rumour" | "promise" | "dare" | "community-dare" | "feed" | "verdict") => {
+    setChatSource(null);
+    setChatOrigin(null);
+    setInteractionRecipient(null);
     switch (action) {
       case "truth":
         setCurrentScreen("create-truth");
         break;
+      case "prediction":
+        setCurrentScreen("create-prediction");
+        break;
+      case "deal":
+        setCurrentScreen("create-deal");
+        break;
+      case "custom":
+        setCurrentScreen("create-custom");
+        break;
+      case "rumour":
+        setCurrentScreen("create-rumour");
+        break;
+      case "promise":
+        setCurrentScreen("create-promise");
+        break;
       case "dare":
         setCurrentScreen("create-dare-interaction");
+        break;
+      case "community-dare":
+        setCurrentScreen("create-community-dare");
         break;
       case "feed":
         setCurrentScreen("create-feed");
         break;
+      case "verdict":
+        setCurrentScreen("create-verdict");
+        break;
     }
   };
 
-  const handleTabScreenChange = (screen: "truth" | "main" | "dares" | "profile" | "feed") => {
+  const handleTabScreenChange = (screen: "truth" | "main" | "dares" | "profile" | "feed" | "verdicts") => {
+    setChatOrigin(null);
+    setActiveEventId(null);
+    // Commit the destination first so the new tab can paint before any
+    // scroll/reset bookkeeping runs on the large mounted screen trees.
+    setCurrentScreen(screen);
+
     if (screen === "truth" || screen === "main") {
-      setMainFocusRequest(null);
-      if (screen === "main") {
-        setMainDareAudience("friends");
-      }
-      setMainScreenResetKey((key) => key + 1);
+      window.requestAnimationFrame(() => {
+        setMainFocusRequest(null);
+        if (screen === "main") {
+          setMainDareAudience("friends");
+        }
+        setMainScreenResetKey((key) => key + 1);
+      });
     }
 
     if (screen === "dares") {
-      setDaresNavigationRequest(null);
-      setDaresScreenResetKey((key) => key + 1);
+      window.requestAnimationFrame(() => {
+        setDaresNavigationRequest(null);
+        setDaresScreenResetKey((key) => key + 1);
+      });
     }
-
-    setCurrentScreen(screen);
   };
 
   const TAB_SCREENS = [
@@ -910,6 +863,8 @@ export default function AuthenticatedApp() {
     "profile",
     "truth",
     "main",
+    "verdicts",
+    "circle",
     "chat-list",
     "daily",
   ];
@@ -921,9 +876,42 @@ export default function AuthenticatedApp() {
       ? "profile-creation"
       : currentScreen;
   const isTabScreen = TAB_SCREENS.includes(effectiveScreen);
+  useEffect(() => { if (effectiveScreen !== "circle" && !effectiveScreen.startsWith("create-")) setActiveEventId(null); }, [effectiveScreen]);
 
   const renderOverlayScreen = () => {
     switch (effectiveScreen) {
+      case "circle-chat":
+        return <div className="app-overlay-screen chat-viewport-overlay h-full overflow-hidden"><CircleChatScreen
+          onBack={() => setCurrentScreen("chat-list")}
+          onCreate={(kind, source) => {
+            setChatOrigin(source);
+            setChatSource(source);
+            setActiveEventId(null);
+            setInteractionRecipient(source.author_id !== user?.id ? { id: source.author_id, name: source.author_name, username: "", avatar: "" } : null);
+            if (kind === "jail") { setJailCaseId(undefined); setCurrentScreen("circle-jail-votes"); }
+            else setCurrentScreen(kind === "dare" ? "create-dare-interaction" : (`create-${kind}` as Screen));
+          }}
+          onOpen={message => {
+            setChatInteraction(message);
+            if (message.interaction_kind === "jail") { setChatOrigin(null); setJailCaseId(message.interaction_id!); setCurrentScreen("circle-jail-votes"); }
+            else setCurrentScreen("chat-interaction");
+          }} /></div>;
+      case "chat-interaction":
+        return chatInteraction ? <div className="app-overlay-screen h-full overflow-hidden"><ChatInteractionScreen message={chatInteraction} onBack={() => setCurrentScreen("circle-chat")} onOpenChallenge={async (message, source) => {
+          setChatOrigin(source);
+          const { data, error } = await getSupabaseBrowserClient().from(message.interaction_kind === "dare" ? "dares" : "truths").select("creator_id,receiver_id").eq("id", message.interaction_id!).single();
+          if (error || !data) throw new Error("This interaction is no longer available.");
+          if (data.creator_id !== user?.id && data.receiver_id !== user?.id) {
+            setSelectedUserId(data.creator_id); setSelectedUserPostId(""); setSelectedUserCommentId("");
+            setSelectedUserDareId(message.interaction_kind === "dare" ? message.interaction_id! : "");
+            setSelectedUserTruthId(message.interaction_kind === "truth" ? message.interaction_id! : "");
+            setPreviousScreen("chat-interaction"); setCurrentScreen("user-profile"); return;
+          }
+          setDaresNavigationRequest({ tab: message.author_id === user?.id ? "sent" : "received", ...(message.interaction_kind === "dare" ? { highlightDareId: message.interaction_id! } : { highlightTruthId: message.interaction_id! }), nonce: Date.now() });
+          setCurrentScreen("dares");
+        }} /></div> : null;
+      case "circle-jail-votes":
+        return <div className="app-overlay-screen h-full overflow-hidden"><CircleJailVotesScreen onBack={() => { setChatOrigin(null); setCurrentScreen("circle-chat"); }} source={jailCaseId ? null : chatOrigin} initialId={jailCaseId} /></div>;
       case "profile-edit":
         return (
           <div className="app-overlay-screen full-height-scroll">
@@ -932,19 +920,49 @@ export default function AuthenticatedApp() {
         );
       case "create-dare":
         return (
-          <div className="app-overlay-screen full-height-scroll">
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
             <CreateDareScreen onBack={handleBackToMain} />
           </div>
         );
       case "create-feed":
         return (
-          <div className="app-overlay-screen full-height-scroll">
-            <CreateFeedPostScreen onBack={handleBackToMain} />
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
+            <CreateFeedPostScreen onBack={() => { setActiveEventId(null); setCurrentScreen("feed"); }} />
+          </div>
+        );
+      case "create-verdict":
+        return (
+          <div className="app-overlay-screen interaction-flow-screen h-full overflow-hidden">
+            <CreateVerdictScreen
+              onBack={handleBackToMain}
+              onCreated={() => setCurrentScreen("verdicts")}
+            />
+          </div>
+        );
+      case "create-community-dare":
+        return (
+          <div className="app-overlay-screen interaction-flow-screen h-full overflow-hidden">
+            <CreateCommunityDareScreen
+              onBack={() => goBackInApp("action-picker")}
+              onCreated={() => {
+                setMainFocusRequest(null);
+                setMainDareAudience("community");
+                setMainScreenResetKey((key) => key + 1);
+                setCurrentScreen("main");
+              }}
+            />
           </div>
         );
       case "chat":
+        if (chatConversationId === DARREN_CONVERSATION_ID) {
+          return (
+            <div className="app-overlay-screen full-height-scroll">
+              <DarrenChatScreen onBack={() => goBackInApp("chat-list")} />
+            </div>
+          );
+        }
         return (
-          <div className="app-overlay-screen full-height-scroll">
+          <div className="app-overlay-screen chat-viewport-overlay">
             <MessagingScreen
               onBack={() => goBackInApp("chat-list")}
               conversationId={chatConversationId || undefined}
@@ -970,20 +988,74 @@ export default function AuthenticatedApp() {
         );
       case "create-truth":
         return (
-          <div className="app-overlay-screen full-height-scroll">
-            <CreateInteractionScreen mode="truth" onBack={handleBackToMain} />
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
+            <CreateInteractionScreen
+              mode="truth"
+              onBack={handleBackToMain}
+              initialRecipient={interactionRecipient}
+            />
+          </div>
+        );
+      case "create-prediction":
+        return (
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
+            <CreatePredictionScreen
+              onBack={handleBackToMain}
+              onCreated={() => handleTextCardCreated("prediction")}
+            />
+          </div>
+        );
+      case "create-deal":
+        return (
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
+            <CreateDealScreen
+              onBack={handleBackToMain}
+              onCreated={() => handleTextCardCreated("deal")}
+            />
+          </div>
+        );
+      case "create-custom":
+        return (
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
+            <CreateCustomScreen
+              onBack={handleBackToMain}
+              onCreated={() => handleTextCardCreated("custom")}
+            />
+          </div>
+        );
+      case "create-rumour":
+        return (
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
+            <CreateRumourScreen
+              onBack={handleBackToMain}
+              onCreated={() => handleTextCardCreated("rumour")}
+            />
+          </div>
+        );
+      case "create-promise":
+        return (
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
+            <CreatePromiseScreen
+              onBack={handleBackToMain}
+              onCreated={() => handleTextCardCreated("promise")}
+            />
           </div>
         );
       case "create-dare-interaction":
         return (
-          <div className="app-overlay-screen full-height-scroll">
-            <CreateInteractionScreen mode="dare" onBack={handleBackToMain} />
+          <div className="app-overlay-screen interaction-flow-screen full-height-scroll">
+            <CreateInteractionScreen
+              mode="dare"
+              onBack={handleBackToMain}
+              initialRecipient={interactionRecipient}
+            />
           </div>
         );
       case "alerts":
         return (
           <div className="app-overlay-screen full-height-scroll">
             <AlertsScreen
+              onOpenInteraction={(kind, id, messageId) => void openCategoryInteraction(kind, id, messageId)}
               onBack={handleBackToMain}
               onNavigateToDares={(request) => {
                 setDaresNavigationRequest({
@@ -1052,56 +1124,10 @@ export default function AuthenticatedApp() {
               onNavigateToProfile={handleUserSelect}
               onNavigateToTruthPost={handleOpenTruthPost}
               onNavigateToDarePost={handleOpenDarePost}
-              onNavigateToActivity={(userId: string) => {
-                setSelectedUserId(userId);
-                setPreviousScreen("user-profile");
-                setCurrentScreen("activity");
-              }}
               initialPostId={selectedUserPostId || undefined}
               initialCommentId={selectedUserCommentId || undefined}
               initialTruthId={selectedUserTruthId || undefined}
               initialDareId={selectedUserDareId || undefined}
-            />
-          </div>
-        );
-      case "activity":
-        return (
-          <div className="app-overlay-screen full-height-scroll">
-            <ActivityScreen
-              userId={selectedUserId || undefined}
-              onBack={handleActivityBack}
-              onNavigateToPost={(postId: string) => {
-                setSelectedUserPostId(postId);
-                setSelectedUserCommentId("");
-                setSelectedUserTruthId("");
-                setSelectedUserDareId("");
-                setPreviousScreen("activity");
-                setCurrentScreen("user-profile");
-              }}
-              onNavigateToComment={(postId: string, commentId: string) => {
-                setSelectedUserPostId(postId);
-                setSelectedUserCommentId(commentId);
-                setSelectedUserTruthId("");
-                setSelectedUserDareId("");
-                setPreviousScreen("activity");
-                setCurrentScreen("user-profile");
-              }}
-              onNavigateToTruth={(truthId: string) => {
-                setSelectedUserPostId("");
-                setSelectedUserCommentId("");
-                setSelectedUserTruthId(truthId);
-                setSelectedUserDareId("");
-                setPreviousScreen("activity");
-                setCurrentScreen("user-profile");
-              }}
-              onNavigateToDare={(dareId: string) => {
-                setSelectedUserPostId("");
-                setSelectedUserCommentId("");
-                setSelectedUserTruthId("");
-                setSelectedUserDareId(dareId);
-                setPreviousScreen("activity");
-                setCurrentScreen("user-profile");
-              }}
             />
           </div>
         );
@@ -1128,6 +1154,29 @@ export default function AuthenticatedApp() {
               onOpenMain={() => setCurrentScreen("main")}
               onOpenAlerts={() => setCurrentScreen("alerts")}
               onOpenChat={() => setCurrentScreen("chat-list")}
+              onOpenBirthdayRoom={() => openBirthdayRoom("dare-center")}
+            />
+          </div>
+        );
+      case "birthday-room":
+        return (
+          <div className="app-overlay-screen h-full overflow-hidden">
+            <BirthdayRoomScreen
+              onBack={closeBirthdayFlow}
+              onOpenPartyRoom={(room, drops) => {
+                setBirthdayPartyRoomContext({ room, drops });
+                setCurrentScreen("birthday-party-room");
+              }}
+            />
+          </div>
+        );
+      case "birthday-party-room":
+        return (
+          <div className="app-overlay-screen h-full overflow-hidden">
+            <BirthdayPartyRoomScreen
+              initialRoom={birthdayPartyRoomContext?.room ?? null}
+              initialDrops={birthdayPartyRoomContext?.drops ?? []}
+              onBack={closeBirthdayFlow}
             />
           </div>
         );
@@ -1137,7 +1186,13 @@ export default function AuthenticatedApp() {
   };
 
   const showBottomNav =
-    isTabScreen && !isStoryViewerOpen && !isStoryComposerOpen;
+    isTabScreen &&
+    effectiveScreen !== "dares" &&
+    !isStoryViewerOpen &&
+    !isStoryComposerOpen &&
+    !isFeedCommentsOpen &&
+    !isFeedPostOptionsOpen &&
+    !isImmersiveOverlayActive;
 
   // Render a neutral shell during SSR and first client paint to avoid hydration mismatch.
   // Auth state from the persisted Zustand store is only safe to consume after mount.
@@ -1159,11 +1214,15 @@ export default function AuthenticatedApp() {
     );
   }
 
+  if (effectiveScreen === "profile-creation") return renderOverlayScreen();
+
   return (
-    <LaunchGate>
+    <CircleGate userId={user.id} onEnter={() => setCurrentScreen("feed")}><LaunchGate>
+      <AppearanceThemeRuntime />
+      <AuraSystemHost />
       <div className="app-fixed-viewport relative overflow-hidden bg-[#0a0f0a]">
         <div className={getScreenLayerClassName(effectiveScreen === "truth")}>
-          <MainScreen
+          <MemoMainScreen
             isActive={effectiveScreen === "truth"}
             onDaresClick={() => setCurrentScreen("dares")}
             onNavigateToChat={() => setCurrentScreen("chat-list")}
@@ -1172,10 +1231,11 @@ export default function AuthenticatedApp() {
             activeView="truth"
             showViewToggle={false}
             resetKey={mainScreenResetKey}
+            textCardReturnRequest={textCardReturnRequest}
           />
         </div>
         <div className={getScreenLayerClassName(effectiveScreen === "main")}>
-          <MainScreen
+          <MemoMainScreen
             isActive={effectiveScreen === "main"}
             onDaresClick={() => setCurrentScreen("dares")}
             onNavigateToChat={() => setCurrentScreen("chat-list")}
@@ -1185,25 +1245,29 @@ export default function AuthenticatedApp() {
             initialDareAudience={mainDareAudience}
             showViewToggle={false}
             resetKey={mainScreenResetKey}
+            openCommunityHubRequestKey={communityHubRequestKey}
           />
         </div>
         <div className={getScreenLayerClassName(effectiveScreen === "dares")}>
-          <DaresReceivedScreen
+          <MemoDaresReceivedScreen
+            chatSource={chatOrigin}
+            onOpenInteraction={(kind, id) => void openCategoryInteraction(kind, id)}
+            isActive={effectiveScreen === "dares"}
             navigationRequest={daresNavigationRequest}
             resetKey={daresScreenResetKey}
           />
         </div>
         <div className={getScreenLayerClassName(effectiveScreen === "profile")}>
-          <ProfileScreen
+          <MemoProfileScreen
             isActive={effectiveScreen === "profile"}
             onNavigateToProfile={handleUserSelect}
-            onNavigateToActivity={handleNavigateToActivity}
+            onNavigateToSearch={handleNavigateToSearch}
             onNavigateToTruthPost={handleOpenTruthPost}
             onNavigateToDarePost={handleOpenDarePost}
           />
         </div>
         <div className={getScreenLayerClassName(effectiveScreen === "feed")}>
-          <FeedScreen
+          <MemoFeedScreen
             isActive={effectiveScreen === "feed"}
             onBack={handleBackToMain}
             onCreatePost={() => setCurrentScreen("create-feed")}
@@ -1246,9 +1310,42 @@ export default function AuthenticatedApp() {
               setCurrentScreen("main");
             }}
             onNavigateToDareCenter={() => setCurrentScreen("dare-center")}
+            onNavigateToBirthdayRoom={() => openBirthdayRoom("feed")}
             onNavigateToProfile={handleUserSelect}
+            onNavigateToVerdict={(verdictId) => {
+              setPendingVerdictId(verdictId);
+              setCurrentScreen("verdicts");
+            }}
+            onDareUser={(targetUser) => {
+              setInteractionRecipient(targetUser);
+              setCurrentScreen("create-dare-interaction");
+            }}
+            onAskTruthUser={(targetUser) => {
+              setInteractionRecipient(targetUser);
+              setCurrentScreen("create-truth");
+            }}
+            onCreatePrediction={() => setCurrentScreen("create-prediction")}
+            onCreateRumour={() => setCurrentScreen("create-rumour")}
+            onSendToDarren={() => {
+              setChatConversationId(DARREN_CONVERSATION_ID);
+              setCurrentScreen("chat");
+            }}
             onStoryComposerOpenChange={setIsStoryComposerOpen}
             onStoryViewerOpenChange={setIsStoryViewerOpen}
+            onCommentsModalOpenChange={setIsFeedCommentsOpen}
+            onPostOptionsOpenChange={setIsFeedPostOptionsOpen}
+          />
+        </div>
+        <div className={getScreenLayerClassName(effectiveScreen === "verdicts")}>
+          <MemoVerdictsScreen
+            isActive={effectiveScreen === "verdicts"}
+            initialVerdictId={pendingVerdictId}
+          />
+        </div>
+        <div className={getScreenLayerClassName(effectiveScreen === "circle")}>
+          <MemoFriendCircleScreen
+            isActive={effectiveScreen === "circle"}
+            onNavigateToOwnProfile={() => handleTabScreenChange("profile")}
           />
         </div>
         <div
@@ -1257,7 +1354,7 @@ export default function AuthenticatedApp() {
             "h-full overflow-hidden",
           )}
         >
-          <DailyChallengeScreen
+          <MemoDailyChallengeScreen
             isActive={effectiveScreen === "daily"}
             skipWaitEnabled={dailyChallengeSkipWait}
             onBack={() => goBackInApp("feed")}
@@ -1271,12 +1368,19 @@ export default function AuthenticatedApp() {
         <div
           className={getScreenLayerClassName(effectiveScreen === "chat-list")}
         >
-          <ChatListScreen
+          <MemoChatListScreen
             isActive={effectiveScreen === "chat-list"}
             onBack={handleBackToMain}
             onChatSelect={handleChatSelect}
+            onCircleChatClick={() => { setChatOrigin(null); setCurrentScreen("circle-chat"); }}
             onInviteAlertsClick={() => setCurrentScreen("chat-invites")}
             onDailyChallengeClick={() => setCurrentScreen("daily")}
+            onNavigateToCommunityDares={() => {
+              setMainFocusRequest(null);
+              setMainDareAudience("friends");
+              setCommunityHubRequestKey((key) => key + 1);
+              setCurrentScreen("main");
+            }}
           />
         </div>
 
@@ -1291,12 +1395,16 @@ export default function AuthenticatedApp() {
                 | "dares"
                 | "profile"
                 | "feed"
+                | "verdicts"
+                | "circle"
             }
             onScreenChange={handleTabScreenChange}
             onCreateClick={handleCreateClick}
+            onVerdictsClick={() => setCurrentScreen("verdicts")}
+            onCircleClick={() => setCurrentScreen("circle")}
           />
         )}
       </div>
-    </LaunchGate>
+    </LaunchGate></CircleGate>
   );
 }

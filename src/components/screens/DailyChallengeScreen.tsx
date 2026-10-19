@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -8,8 +8,7 @@ import {
   RefreshCw,
   Zap,
 } from "lucide-react";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { db } from "@/backend/lib/firebase";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/useAuthStore-v2";
 import { useMessagingStore } from "@/stores/useMessagingStore";
 import { useAvatarStore } from "@/stores/avatarStore";
@@ -357,21 +356,23 @@ export function DailyChallengeScreen({
 
       await Promise.all([
         minimumSpin,
-        setDoc(
-          doc(db, "dailyChallenges", docId),
-          {
-            ...challengeData,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-        ).catch((writeError) => {
+        getSupabaseBrowserClient().from("daily_challenge_matches").upsert({
+            id: docId,
+            user_id: user.id,
+            local_date: localDate,
+            matched_friend_username: chosen.username,
+            matched_friend_name: chosen.displayName,
+            matched_friend_avatar: chosen.avatarUrl,
+            matched_friend_id: chosen.id,
+            status: "matched",
+          }).then(({ error: writeError }) => { if (writeError) throw writeError; }).catch((writeError) => {
           if (!isPermissionError(writeError)) {
             throw writeError;
           }
 
           persisted = false;
           console.warn(
-            "Daily challenge match will continue without Firestore state:",
+            "Daily challenge match will continue without Postgres state:",
             writeError,
           );
         }),
@@ -410,7 +411,7 @@ export function DailyChallengeScreen({
             radial-gradient(circle at 50% -12%, rgba(74,222,128,0.18), transparent 34%),
             radial-gradient(circle at 12% 18%, rgba(14,165,233,0.12), transparent 28%),
             linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%);
-          font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+          font-family: var(--font-ui);
         }
         @keyframes dailySweep {
           0% { transform: translateX(-120%); }
@@ -467,7 +468,7 @@ export function DailyChallengeScreen({
         className="flex-1 min-h-0 overflow-y-auto px-4"
         style={{
           paddingTop: "calc(var(--safe-area-top) + 12px)",
-          paddingBottom: "calc(var(--bottom-nav-total-height) + 24px)",
+          paddingBottom: "var(--bottom-nav-total-height)",
           WebkitOverflowScrolling: "touch",
           overscrollBehaviorY: "contain",
         }}

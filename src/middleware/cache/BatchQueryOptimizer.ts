@@ -1,18 +1,11 @@
-/**
- * BatchQueryOptimizer - Reduces Firebase reads by batching queries
+﻿/**
+ * BatchQueryOptimizer - Reduces Supabase reads by batching queries
  * 
  * Instead of fetching author data and likes for each post individually,
- * this batches them into single queries, reducing Firebase reads by 80%+
+ * this batches them into single queries, reducing Supabase reads by 80%+
  */
 
-import { db } from "@/backend/lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  documentId,
-} from "firebase/firestore";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { authorCache } from "./FeedCacheManager";
 
 interface AuthorData {
@@ -30,6 +23,7 @@ interface PostLikesData {
 }
 
 export class BatchQueryOptimizer {
+  private get client() { return getSupabaseBrowserClient(); }
   private authorBatchQueue: Set<string> = new Set();
   private authorBatchPromises: Map<string, Promise<AuthorData | null>> = new Map();
   private authorBatchTimer: NodeJS.Timeout | null = null;
@@ -39,7 +33,7 @@ export class BatchQueryOptimizer {
   private likesBatchTimer: NodeJS.Timeout | null = null;
 
   private readonly BATCH_DELAY = 50; // 50ms delay to collect requests
-  private readonly MAX_BATCH_SIZE = 10; // Firebase 'in' query limit
+  private readonly MAX_BATCH_SIZE = 100;
 
   /**
    * Get author data with batching and caching
@@ -142,7 +136,7 @@ export class BatchQueryOptimizer {
 
     if (authorIds.length === 0) return;
 
-    console.log(`🔄 [Batch] Fetching ${authorIds.length} authors in batch`);
+    console.log(`ðŸ”„ [Batch] Fetching ${authorIds.length} authors in batch`);
 
     try {
       const results = await this.fetchAuthorsBatch(authorIds);
@@ -158,7 +152,7 @@ export class BatchQueryOptimizer {
         this.authorBatchPromises.delete(authorId);
       }
     } catch (error) {
-      console.error("❌ [Batch] Author batch fetch failed:", error);
+      console.error("âŒ [Batch] Author batch fetch failed:", error);
       
       // Reject all promises
       const resolvers = (this as any).authorResolvers || new Map();
@@ -174,7 +168,7 @@ export class BatchQueryOptimizer {
   }
 
   /**
-   * Fetch multiple authors in a single query
+   * Fetch multiple authors in a single buildQuery
    */
   private async fetchAuthorsBatch(
     authorIds: string[],
@@ -184,20 +178,15 @@ export class BatchQueryOptimizer {
     if (authorIds.length === 0) return results;
 
     try {
-      // Fetch from users collection
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where(documentId(), "in", authorIds));
-      const querySnapshot = await getDocs(q);
-
-      // Map results
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        results.set(doc.id, {
-          id: doc.id,
-          user_id: data.user_id || doc.id,
-          username: data.username || `user_${doc.id.slice(0, 8)}`,
-          display_name: data.displayName || data.display_name || null,
-          avatar_url: data.avatar_url || "",
+      const { data, error } = await this.client.from("profiles").select("id,username,display_name,avatar_url").in("id", authorIds);
+      if (error) throw error;
+      (data ?? []).forEach((profile) => {
+        results.set(profile.id, {
+          id: profile.id,
+          user_id: profile.id,
+          username: profile.username || `user_${profile.id.slice(0, 8)}`,
+          display_name: profile.display_name || null,
+          avatar_url: profile.avatar_url || "",
         });
       });
 
@@ -208,9 +197,9 @@ export class BatchQueryOptimizer {
         }
       }
 
-      console.log(`✅ [Batch] Fetched ${results.size} authors`);
+      console.log(`âœ… [Batch] Fetched ${results.size} authors`);
     } catch (error) {
-      console.error("❌ [Batch] Failed to fetch authors:", error);
+      console.error("âŒ [Batch] Failed to fetch authors:", error);
     }
 
     return results;
@@ -224,15 +213,10 @@ export class BatchQueryOptimizer {
     userId: string,
   ): Promise<PostLikesData> {
     try {
-      // Fetch likes for this post
-      const likesRef = collection(db, "post_likes");
-      const q = query(likesRef, where("post_id", "==", postId));
-      const querySnapshot = await getDocs(q);
-
-      const likesCount = querySnapshot.size;
-      const isLikedByUser = querySnapshot.docs.some(
-        (doc) => doc.data().user_id === userId,
-      );
+      const { data, error } = await this.client.from("post_reactions").select("user_id").eq("post_id", postId).eq("reaction", "LIKE");
+      if (error) throw error;
+      const likesCount = data?.length ?? 0;
+      const isLikedByUser = (data ?? []).some((row) => row.user_id === userId);
 
       return {
         postId,
@@ -240,7 +224,7 @@ export class BatchQueryOptimizer {
         isLikedByUser,
       };
     } catch (error) {
-      console.error("❌ [Batch] Failed to fetch post likes:", error);
+      console.error("âŒ [Batch] Failed to fetch post likes:", error);
       return {
         postId,
         likesCount: 0,
@@ -261,23 +245,21 @@ export class BatchQueryOptimizer {
     if (postIds.length === 0) return results;
 
     try {
-      console.log(`🔄 [Batch] Fetching likes for ${postIds.length} posts`);
-
-      // Fetch all likes for these posts in one query
-      const likesRef = collection(db, "post_likes");
-      const q = query(likesRef, where("post_id", "in", postIds));
-      const querySnapshot = await getDocs(q);
+      console.log(`ðŸ”„ [Batch] Fetching likes for ${postIds.length} posts`);
 
       // Group likes by post
       const likesByPost = new Map<string, Array<{ userId: string }>>();
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const postId = data.post_id;
-        if (!likesByPost.has(postId)) {
-          likesByPost.set(postId, []);
-        }
-        likesByPost.get(postId)!.push({ userId: data.user_id });
-      });
+      for (const chunk of this.chunkArray(postIds, this.MAX_BATCH_SIZE)) {
+        const { data, error } = await this.client.from("post_reactions").select("post_id,user_id").eq("reaction", "LIKE").in("post_id", chunk);
+        if (error) throw error;
+        (data ?? []).forEach((row) => {
+          const postId = row.post_id;
+          if (!likesByPost.has(postId)) {
+            likesByPost.set(postId, []);
+          }
+          likesByPost.get(postId)!.push({ userId: row.user_id });
+        });
+      }
 
       // Build results
       for (const postId of postIds) {
@@ -289,9 +271,9 @@ export class BatchQueryOptimizer {
         });
       }
 
-      console.log(`✅ [Batch] Fetched likes for ${results.size} posts`);
+      console.log(`âœ… [Batch] Fetched likes for ${results.size} posts`);
     } catch (error) {
-      console.error("❌ [Batch] Failed to fetch post likes batch:", error);
+      console.error("âŒ [Batch] Failed to fetch post likes batch:", error);
       
       // Return empty results for all posts
       for (const postId of postIds) {

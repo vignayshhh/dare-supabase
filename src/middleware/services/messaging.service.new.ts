@@ -4,6 +4,7 @@ import { IUserRepository } from "@/backend/domain/interfaces/IUserRepository";
 import { UserRepository } from "@/backend/repositories/UserRepository";
 import { IPresenceRepository } from "@/backend/domain/interfaces/IPresenceRepository";
 import { PresenceRepository } from "@/backend/repositories/PresenceRepository";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export interface ConversationResponse {
   success: boolean;
@@ -46,6 +47,7 @@ class MessagingService {
   private messagingRepository: IMessagingRepository;
   private userRepository: IUserRepository;
   private presenceRepository: IPresenceRepository;
+  private typingChannels = new Map<string, any>();
 
   constructor(
     messagingRepository?: IMessagingRepository,
@@ -228,10 +230,6 @@ class MessagingService {
         eventData: { sent_at: new Date().toISOString() },
       });
 
-      const otherUserId =
-        conversation.user1Id === request.senderId
-          ? conversation.user2Id
-          : conversation.user1Id;
       await this.messagingRepository.markMessageAsDelivered(message.id);
 
       return { success: true, message };
@@ -366,18 +364,14 @@ class MessagingService {
         return { success: false, error: "Access denied" };
       }
 
-      await this.messagingRepository.setTypingIndicator(
-        conversationId,
-        userId,
-        speed,
-      );
-
-      await this.presenceRepository.ensurePresenceExists(userId);
-      const otherUserId =
-        conversation.user1Id === userId
-          ? conversation.user2Id
-          : conversation.user1Id;
-      await this.presenceRepository.setTypingInChat(userId, otherUserId);
+      const client = getSupabaseBrowserClient();
+      let channel = this.typingChannels.get(conversationId);
+      if (!channel) {
+        channel = client.channel(`typing:${conversationId}`, { config: { private: true } });
+        this.typingChannels.set(conversationId, channel);
+        await channel.subscribe();
+      }
+      await channel.send({ type: "broadcast", event: "typing", payload: { userId, isTyping: true, typingSpeed: speed, sentAt: Date.now() } });
 
       return { success: true };
     } catch (error) {
@@ -403,13 +397,14 @@ class MessagingService {
         return { success: false, error: "Access denied" };
       }
 
-      await this.messagingRepository.clearTypingIndicator(
-        conversationId,
-        userId,
-      );
-
-      await this.presenceRepository.ensurePresenceExists(userId);
-      await this.presenceRepository.clearTypingInChat(userId);
+      const client = getSupabaseBrowserClient();
+      let channel = this.typingChannels.get(conversationId);
+      if (!channel) {
+        channel = client.channel(`typing:${conversationId}`, { config: { private: true } });
+        this.typingChannels.set(conversationId, channel);
+        await channel.subscribe();
+      }
+      await channel.send({ type: "broadcast", event: "typing", payload: { userId, isTyping: false, typingSpeed: "normal", sentAt: Date.now() } });
 
       return { success: true };
     } catch (error) {
@@ -435,14 +430,7 @@ class MessagingService {
         return { success: false, error: "Access denied" };
       }
 
-      const typingIndicators =
-        await this.messagingRepository.getTypingIndicators(conversationId);
-
-      const otherUserTyping = typingIndicators.find(
-        (indicator) => indicator.userId !== userId,
-      );
-
-      return { success: true, typingUser: otherUserTyping };
+      return { success: true, typingUser: undefined };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";

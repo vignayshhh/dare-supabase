@@ -1,0 +1,203 @@
+<svg width="390" height="844" viewBox="0 0 390 844" fill="none" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, -apple-system, sans-serif">
+  <!-- ============================================================
+       CONCEPT 01 — VERDICT NOIR
+       Refined version of the current dark court theme.
+       Spotlight stage, gold bench, rose vs sky podiums,
+       tug-of-war verdict meter, green SLAM composer.
+  ============================================================ -->
+  <defs>
+    <linearGradient id="vnBg" x1="0" y1="0" x2="0" y2="844" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b0f0a"/>
+      <stop offset="0.46" stop-color="#0a0d0b"/>
+      <stop offset="1" stop-color="#050705"/>
+    </linearGradient>
+    <radialGradient id="vnGoldGlow" cx="0.5" cy="0.06" r="0.42">
+      <stop offset="0" stop-color="#facc15" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#facc15" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vnRoseGlow" cx="0.16" cy="0.55" r="0.34">
+      <stop offset="0" stop-color="#fb7185" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#fb7185" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vnSkyGlow" cx="0.86" cy="0.55" r="0.34">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="vnSlam" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="vnBench" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#facc15" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#1c1808" stop-opacity="0.95"/>
+    </linearGradient>
+    <!-- stick body: spine, arms down-ish, legs -->
+    <g id="vnBody" stroke="#ffffff" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="0" x2="0" y2="20"/>
+      <line x1="0" y1="6" x2="-11" y2="14"/>
+      <line x1="0" y1="6" x2="11" y2="14"/>
+      <line x1="0" y1="20" x2="-9" y2="33"/>
+      <line x1="0" y1="20" x2="9" y2="33"/>
+    </g>
+    <!-- stick body with arms raised (objection!) -->
+    <g id="vnBodyUp" stroke="#ffffff" stroke-opacity="0.85" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="0" x2="0" y2="20"/>
+      <line x1="0" y1="7" x2="-12" y2="-2"/>
+      <line x1="0" y1="7" x2="12" y2="-2"/>
+      <line x1="0" y1="20" x2="-9" y2="33"/>
+      <line x1="0" y1="20" x2="9" y2="33"/>
+    </g>
+  </defs>
+
+  <rect width="390" height="844" fill="url(#vnBg)"/>
+  <rect width="390" height="360" fill="url(#vnGoldGlow)"/>
+  <rect y="240" width="390" height="420" fill="url(#vnRoseGlow)"/>
+  <rect y="240" width="390" height="420" fill="url(#vnSkyGlow)"/>
+
+  <!-- status bar -->
+  <text x="30" y="34" fill="#fff" font-size="13" font-weight="700">9:41</text>
+  <rect x="336" y="24" width="22" height="11" rx="3" stroke="#ffffff66"/>
+  <rect x="338" y="26" width="14" height="7" rx="1.5" fill="#4ade80"/>
+
+  <!-- header -->
+  <rect x="16" y="56" width="40" height="40" rx="16" fill="#ffffff0a" stroke="#ffffff14"/>
+  <path d="M42 76 H32 M36 71 l-5 5 5 5" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="68" y="72" fill="#fff" font-size="16" font-weight="900">Who ruined the Goa trip?</text>
+  <text x="68" y="90" fill="#7c8a80" font-size="11" font-weight="600">Court #42 · accused Rahul · LIVE</text>
+  <circle cx="352" cy="70" r="4" fill="#fb7185"/>
+  <text x="342" y="90" fill="#fda4af" font-size="9" font-weight="900">LIVE</text>
+
+  <!-- phase rail -->
+  <g font-size="9" font-weight="800" text-anchor="middle">
+    <rect x="20" y="108" width="62" height="24" rx="12" fill="#facc1522" stroke="#facc1555"/>
+    <text x="51" y="124" fill="#facc15">OPENING</text>
+    <rect x="88" y="108" width="62" height="24" rx="12" fill="#ffffff08"/>
+    <text x="119" y="124" fill="#5b6b60">DEFENSE</text>
+    <rect x="156" y="108" width="62" height="24" rx="12" fill="#ffffff08"/>
+    <text x="187" y="124" fill="#5b6b60">WITNESS</text>
+    <rect x="224" y="108" width="62" height="24" rx="12" fill="#ffffff08"/>
+    <text x="255" y="124" fill="#5b6b60">CLOSING</text>
+    <rect x="292" y="108" width="62" height="24" rx="12" fill="#ffffff08"/>
+    <text x="323" y="124" fill="#5b6b60">VERDICT</text>
+  </g>
+
+  <!-- ── JUDGE, top center ── -->
+  <g transform="translate(195,168)">
+    <!-- spotlight cone -->
+    <path d="M0 -14 L-70 150 L70 150 Z" fill="#facc15" opacity="0.05"/>
+    <circle r="19" fill="#facc15"/>
+    <circle r="16" fill="#2a2410"/>
+    <text y="6" text-anchor="middle" fill="#facc15" font-size="15" font-weight="900">P</text>
+    <use href="#vnBody" y="19"/>
+    <rect x="-34" y="58" width="68" height="16" rx="8" fill="#00000073" stroke="#ffffff14"/>
+    <text y="70" text-anchor="middle" fill="#fff" font-size="9" font-weight="900">Priya</text>
+  </g>
+  <!-- bench -->
+  <path d="M120 254 Q195 236 270 254 L270 268 L120 268 Z" fill="url(#vnBench)" stroke="#facc154d"/>
+  <rect x="111" y="268" width="168" height="30" rx="10" fill="#141a0e" stroke="#ffffff14"/>
+  <text x="195" y="287" text-anchor="middle" fill="#facc15" font-size="10" font-weight="900" letter-spacing="2">⚖ THE BENCH</text>
+
+  <!-- ── verdict tug-of-war meter ── -->
+  <text x="195" y="336" text-anchor="middle" fill="#7c8a80" font-size="9" font-weight="800" letter-spacing="2">COURT LEANS</text>
+  <rect x="36" y="346" width="318" height="18" rx="9" fill="#ffffff0a"/>
+  <rect x="36" y="346" width="182" height="18" rx="9" fill="#fb7185"/>
+  <rect x="218" y="346" width="136" height="18" rx="0" fill="#38bdf8"/>
+  <rect x="340" y="346" width="14" height="18" rx="9" fill="#38bdf8"/>
+  <rect x="212" y="340" width="12" height="30" rx="5" fill="#facc15" stroke="#0b0f0a" stroke-width="2"/>
+  <text x="44" y="382" fill="#fda4af" font-size="10" font-weight="900">GUILTY · 8</text>
+  <text x="346" y="382" text-anchor="end" fill="#7dd3fc" font-size="10" font-weight="900">NOT GUILTY · 6</text>
+
+  <!-- ── podium: accuser (left) ── -->
+  <g transform="translate(100,470)">
+    <!-- big speaker, arms raised, active glow -->
+    <g transform="translate(0,-16)">
+      <circle r="24" fill="#fb7185" opacity="0.25"/>
+      <circle r="18" fill="#fb7185"/>
+      <circle r="15" fill="#2a1216"/>
+      <text y="5" text-anchor="middle" fill="#fda4af" font-size="14" font-weight="900">A</text>
+      <use href="#vnBodyUp" y="18"/>
+    </g>
+    <!-- speech spark -->
+    <text x="30" y="-38" font-size="14">💥</text>
+    <!-- supporters -->
+    <g transform="translate(-46,6)">
+      <circle r="12" fill="#fb7185"/><circle r="9.5" fill="#2a1216"/>
+      <text y="4" text-anchor="middle" fill="#fda4af" font-size="9" font-weight="900">M</text>
+      <use href="#vnBody" y="12" transform="scale(0.7)"/>
+    </g>
+    <g transform="translate(46,6)">
+      <circle r="12" fill="#c084fc"/><circle r="9.5" fill="#231328"/>
+      <text y="4" text-anchor="middle" fill="#e9d5ff" font-size="9" font-weight="900">K</text>
+      <use href="#vnBody" y="12" transform="scale(0.7)"/>
+    </g>
+    <!-- podium block -->
+    <rect x="-62" y="62" width="124" height="42" rx="14" fill="#1a0d10" stroke="#fb718533"/>
+    <rect x="-62" y="62" width="124" height="5" rx="2.5" fill="#fb7185" opacity="0.7"/>
+    <text y="88" text-anchor="middle" fill="#fda4af" font-size="10" font-weight="900" letter-spacing="2">ACCUSER</text>
+  </g>
+
+  <!-- ── podium: accused (right) ── -->
+  <g transform="translate(290,470)">
+    <g transform="translate(0,-16)">
+      <circle r="18" fill="#38bdf8"/>
+      <circle r="15" fill="#0e1f2a"/>
+      <text y="5" text-anchor="middle" fill="#7dd3fc" font-size="14" font-weight="900">R</text>
+      <!-- slumped arms = on trial -->
+      <g stroke="#ffffff" stroke-opacity="0.7" stroke-width="3" stroke-linecap="round">
+        <line x1="0" y1="18" x2="0" y2="38"/>
+        <line x1="0" y1="25" x2="-10" y2="34"/>
+        <line x1="0" y1="25" x2="10" y2="34"/>
+        <line x1="0" y1="38" x2="-9" y2="51"/>
+        <line x1="0" y1="38" x2="9" y2="51"/>
+      </g>
+    </g>
+    <text x="-42" y="-46" font-size="13">😰</text>
+    <g transform="translate(-46,6)">
+      <circle r="12" fill="#38bdf8"/><circle r="9.5" fill="#0e1f2a"/>
+      <text y="4" text-anchor="middle" fill="#7dd3fc" font-size="9" font-weight="900">S</text>
+      <use href="#vnBody" y="12" transform="scale(0.7)"/>
+    </g>
+    <g transform="translate(46,6)">
+      <circle r="12" fill="#4ade80"/><circle r="9.5" fill="#0f2416"/>
+      <text y="4" text-anchor="middle" fill="#bbf7d0" font-size="9" font-weight="900">D</text>
+      <use href="#vnBody" y="12" transform="scale(0.7)"/>
+    </g>
+    <rect x="-62" y="62" width="124" height="42" rx="14" fill="#0b141c" stroke="#38bdf833"/>
+    <rect x="-62" y="62" width="124" height="5" rx="2.5" fill="#38bdf8" opacity="0.7"/>
+    <text y="88" text-anchor="middle" fill="#7dd3fc" font-size="10" font-weight="900" letter-spacing="2">ACCUSED</text>
+  </g>
+
+  <!-- floor line -->
+  <line x1="24" y1="578" x2="366" y2="578" stroke="#ffffff0d"/>
+
+  <!-- ── statement drop card ── -->
+  <rect x="20" y="596" width="350" height="74" rx="16" fill="#101411" stroke="#4ade8044"/>
+  <rect x="20" y="596" width="4" height="74" rx="2" fill="#4ade80"/>
+  <text x="38" y="618" fill="#86efac" font-size="9" font-weight="900" letter-spacing="2">STATEMENT DROPPED · AAKASH</text>
+  <text x="38" y="640" fill="#fff" font-size="13" font-weight="600">"He booked the hotel for the WRONG weekend</text>
+  <text x="38" y="658" fill="#fff" font-size="13" font-weight="600">and blamed the app. I have screenshots. 📎"</text>
+
+  <!-- reactions strip -->
+  <g font-size="12" text-anchor="middle">
+    <rect x="20" y="682" width="54" height="26" rx="13" fill="#ffffff08" stroke="#ffffff12"/>
+    <text x="47" y="700">😂 12</text>
+    <rect x="82" y="682" width="54" height="26" rx="13" fill="#ffffff08" stroke="#ffffff12"/>
+    <text x="109" y="700">😱 7</text>
+    <rect x="144" y="682" width="54" height="26" rx="13" fill="#fb718522" stroke="#fb718544"/>
+    <text x="171" y="700">🔥 21</text>
+    <rect x="206" y="682" width="70" height="26" rx="13" fill="#ffffff08" stroke="#ffffff12"/>
+    <text x="241" y="700">⚖️ SUS 4</text>
+  </g>
+  <rect x="292" y="682" width="78" height="26" rx="13" fill="#ffffff0a" stroke="#ffffff1a"/>
+  <text x="331" y="699" text-anchor="middle" fill="#fff" font-size="9" font-weight="900">SWITCH SIDE ⇄</text>
+
+  <!-- ── composer + SLAM ── -->
+  <text x="195" y="736" text-anchor="middle" fill="#7c8a80" font-size="10" font-weight="600">Nobody sees it until you SLAM — then it hits the whole court</text>
+  <rect x="20" y="748" width="248" height="48" rx="24" fill="#ffffff0a" stroke="#4ade8066"/>
+  <text x="40" y="778" fill="#94a3b8" font-size="15">📎</text>
+  <text x="66" y="777" fill="#5b6b60" font-size="13" font-weight="600">Type your argument…</text>
+  <rect x="276" y="748" width="94" height="48" rx="24" fill="url(#vnSlam)"/>
+  <text x="323" y="778" text-anchor="middle" fill="#04170c" font-size="14" font-weight="900">SLAM 🔨</text>
+
+  <rect x="128" y="822" width="134" height="5" rx="2.5" fill="#ffffff33"/>
+</svg>

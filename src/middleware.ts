@@ -1,28 +1,27 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { Redis } from "@upstash/redis";
+import { createClient } from "@supabase/supabase-js";
+import { refreshSupabaseSession } from "@/lib/supabase/proxy";
+import { createUuid } from "@/utils/uuid";
+import { instrumentSupabaseFetch } from "@/lib/observability/resourceMetrics";
 
 /**
  * Middleware for security checks.
  *
  * Responsibilities (runs on the edge for every request):
  *   1. Redis-backed IP blocklist (§2.8). Blocked IPs are rejected with
- *      403 before any route handler or API runs. Fail-OPEN when Redis
- *      env is unset so local dev doesn't break; production deploys must
- *      set UPSTASH_REDIS_REST_URL/TOKEN.
+ *      403 before any route handler or API runs. Fail-OPEN when Supabase
+ *      server credentials are unset so local dev doesn't break.
  *   2. Origin check for state-changing requests.
  *   3. Double-submit CSRF token (§1.4).
  *   4. Security headers + CSP with per-request nonce.
  */
 
-// Initialise Redis lazily at module scope so connections are reused.
-const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-      })
-    : null;
+const supabaseEdge = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SECRET_KEY
+  ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: instrumentSupabaseFetch(globalThis.fetch.bind(globalThis)) } })
+  : null;
+const BLOCK_CACHE_TTL_MS = 10_000;
+const blockCache = new Map<string, { blocked: boolean; expiresAt: number }>();
 
 function getClientIp(req: NextRequest): string | null {
   const xff = req.headers.get("x-forwarded-for");
@@ -43,14 +42,43 @@ function getHostname(value?: string | null): string | null {
   }
 }
 
+function shouldCheckIpBlockInMiddleware(request: NextRequest): boolean {
+  const path = request.nextUrl.pathname;
+  if (path.startsWith("/api/")) {
+    // API routes run the server-side `withSecurity` IP check. Avoid paying a
+    // duplicate Redis command in middleware on every API call.
+    return false;
+  }
+
+  const accept = request.headers.get("accept") || "";
+  return request.method === "GET" && accept.includes("text/html");
+}
+
+async function isIpBlockedInSupabase(ip: string): Promise<boolean> {
+  if (!supabaseEdge) return false;
+  const { data, error } = await supabaseEdge.from("cache_entries").select("value,expires_at").eq("key", "ip:blocked").maybeSingle();
+  if (error || !data || data.expires_at && Date.parse(data.expires_at) <= Date.now()) return false;
+  return Array.isArray(data.value) && data.value.includes(ip);
+}
+
 export async function middleware(request: NextRequest) {
   // ── IP blocklist (§2.8) ─────────────────────────────────────────────
-  if (redis) {
+  if (supabaseEdge && shouldCheckIpBlockInMiddleware(request)) {
     const ip = getClientIp(request);
     if (ip) {
       try {
-        const blocked = await redis.sismember("ip:blocked", ip);
-        if (blocked === 1) {
+        const cached = blockCache.get(ip);
+        const blocked =
+          cached && cached.expiresAt > Date.now()
+            ? cached.blocked
+            : await isIpBlockedInSupabase(ip);
+        if (!cached || cached.expiresAt <= Date.now()) {
+          blockCache.set(ip, {
+            blocked,
+            expiresAt: Date.now() + BLOCK_CACHE_TTL_MS,
+          });
+        }
+        if (blocked) {
           return new NextResponse("Forbidden", { status: 403 });
         }
       } catch {
@@ -65,10 +93,7 @@ export async function middleware(request: NextRequest) {
 
   // Generate nonce for CSP (cryptographically secure)
   // Fallback for browsers that don't support crypto.randomUUID()
-  const nonce =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+  const nonce = createUuid();
 
   // CSRF Protection: Validate Origin header for state-changing requests
   if (
@@ -210,8 +235,8 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_ENVIRONMENT === "staging" ||
     (process.env.NODE_ENV as string) === "staging";
   const scriptSrc = isDev
-    ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.gstatic.com https://www.google.com https://www.recaptcha.net https://firebase.googleapis.com https://firebasestorage.googleapis.com"
-    : `script-src 'self' 'nonce-${nonce}' https://www.gstatic.com https://www.google.com https://www.recaptcha.net https://firebase.googleapis.com https://firebasestorage.googleapis.com`;
+    ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.google.com https://www.recaptcha.net"
+    : `script-src 'self' 'nonce-${nonce}' https://www.google.com https://www.recaptcha.net`;
   const styleSrc = isDev
     ? "style-src 'self' 'unsafe-inline' https://www.gstatic.com"
     : `style-src 'self' 'nonce-${nonce}' https://www.gstatic.com`;
@@ -222,12 +247,12 @@ export async function middleware(request: NextRequest) {
     styleSrc,
     // SECURITY FIX (§3.2): Tighten img-src. Previously allowed any https:
     // origin to serve images, which widens the XSS exfiltration surface.
-    // We now explicitly allow-list Firebase Storage / gstatic and keep
+    // We now explicitly allow-list Supabase Storage / gstatic and keep
     // data:/blob: for small inline previews (canvas, file previews).
     // TEMPORARILY: Added i.pravatar.cc, images.unsplash.com for GuestApp mock data
-    "img-src 'self' data: blob: https://firebasestorage.googleapis.com https://*.firebasestorage.app https://storage.googleapis.com https://*.googleusercontent.com https://www.gstatic.com https://i.pravatar.cc https://images.unsplash.com",
-    "media-src 'self' blob: https://firebasestorage.googleapis.com https://*.firebasestorage.app https://storage.googleapis.com",
-    "connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firebasestorage.googleapis.com https://*.firebasestorage.app https://*.gstatic.com https://www.google.com https://www.recaptcha.net wss://*.firebaseio.com",
+    "img-src 'self' data: blob: https://*.supabase.co https://storage.googleapis.com https://*.googleusercontent.com https://i.pravatar.cc https://images.unsplash.com",
+    "media-src 'self' blob: https://*.supabase.co https://storage.googleapis.com",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.google.com https://www.recaptcha.net",
     "font-src 'self' data:",
     "frame-src 'self' https://www.google.com https://www.recaptcha.net",
     "object-src 'none'",
@@ -250,7 +275,7 @@ export async function middleware(request: NextRequest) {
   // Pass nonce to client via header for use in HTML
   response.headers.set("x-csp-nonce", nonce);
 
-  return response;
+  return refreshSupabaseSession(request, response);
 }
 
 /**
@@ -260,16 +285,7 @@ export async function middleware(request: NextRequest) {
 function generateCSRFToken(): string {
   // Use crypto.randomUUID() for cryptographically secure random token
   // Fallback to crypto.randomBytes() if randomUUID is not available
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-
-  // Fallback for environments without randomUUID
-  const timestamp = Date.now().toString(36);
-  const randomPart = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return `${timestamp}-${randomPart}`;
+  return createUuid();
 }
 
 /**

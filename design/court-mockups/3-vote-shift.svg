@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" font-family="'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#241445"/><stop offset="1" stop-color="#0e0820"/>
+    </linearGradient>
+    <linearGradient id="red3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff5a6e"/><stop offset="1" stop-color="#b3142b"/>
+    </linearGradient>
+    <linearGradient id="blue3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1d6fc4"/><stop offset="1" stop-color="#4fd1ff"/>
+    </linearGradient>
+    <linearGradient id="gold3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe07a"/><stop offset="1" stop-color="#e0a92e"/>
+    </linearGradient>
+    <filter id="glow3" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft3"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.45"/></filter>
+  </defs>
+  <rect width="390" height="844" fill="url(#bg3)"/>
+
+  <!-- dim overlay header -->
+  <text x="195" y="70" text-anchor="middle" fill="#ffd766" font-size="13" letter-spacing="3">— END OF ROUND 2 —</text>
+  <text x="195" y="120" text-anchor="middle" fill="#fff" font-size="26" font-weight="800">The room is shifting…</text>
+  <text x="195" y="150" text-anchor="middle" fill="#9d8bc4" font-size="13">Defense just dropped receipts. Where do you stand?</text>
+
+  <!-- BEFORE / AFTER tally drama -->
+  <g transform="translate(40,200)">
+    <text x="0" y="0" fill="#6c5a8c" font-size="11">BEFORE</text>
+    <rect x="0" y="10" width="310" height="20" rx="10" fill="#1a0f2e"/>
+    <clipPath id="b1"><rect x="0" y="10" width="310" height="20" rx="10"/></clipPath>
+    <g clip-path="url(#b1)">
+      <rect x="0" y="10" width="177" height="20" fill="url(#red3)"/>
+      <rect x="177" y="10" width="133" height="20" fill="url(#blue3)"/>
+    </g>
+    <text x="6" y="25" fill="#fff" font-size="11" font-weight="700">8</text>
+    <text x="304" y="25" text-anchor="end" fill="#fff" font-size="11" font-weight="700">6</text>
+  </g>
+
+  <text x="195" y="268" text-anchor="middle" font-size="22" fill="#ffd766">⬇</text>
+
+  <g transform="translate(40,280)">
+    <text x="0" y="0" fill="#ffd766" font-size="11" font-weight="700">NOW</text>
+    <rect x="0" y="10" width="310" height="26" rx="13" fill="#1a0f2e"/>
+    <clipPath id="b2"><rect x="0" y="10" width="310" height="26" rx="13"/></clipPath>
+    <g clip-path="url(#b2)">
+      <rect x="0" y="10" width="103" height="26" fill="url(#red3)"/>
+      <rect x="103" y="10" width="207" height="26" fill="url(#blue3)"/>
+    </g>
+    <text x="10" y="28" fill="#fff" font-size="13" font-weight="800">GUILTY 4</text>
+    <text x="300" y="28" text-anchor="end" fill="#fff" font-size="13" font-weight="800">10 NOT GUILTY</text>
+    <polygon points="103,38 96,46 110,46" fill="#ffd766"><animate attributeName="opacity" values="1;0.3;1" dur="0.8s" repeatCount="indefinite"/></polygon>
+    <text x="118" y="62" fill="#7fd6ff" font-size="11" font-weight="700">+4 jumped to Defense 🔄</text>
+  </g>
+
+  <!-- avatars flipping sides animation hint -->
+  <g transform="translate(150,360)">
+    <circle r="14" fill="url(#blue3)" stroke="#fff" stroke-width="1.5"/>
+    <text x="0" y="5" text-anchor="middle" font-size="13">😯</text>
+  </g>
+  <text x="172" y="364" font-size="14">➡</text>
+  <g transform="translate(210,360)">
+    <circle r="14" fill="url(#blue3)" stroke="#fff" stroke-width="1.5"/>
+    <text x="0" y="5" text-anchor="middle" font-size="13">🤯</text>
+  </g>
+
+  <!-- YOUR CHOICE big -->
+  <text x="195" y="448" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">Pick your side</text>
+  <g transform="translate(34,470)" filter="url(#soft3)">
+    <rect width="150" height="150" rx="20" fill="#2a0f1a" stroke="#ff5a6e" stroke-width="2"/>
+    <text x="75" y="58" text-anchor="middle" font-size="40">😈</text>
+    <text x="75" y="96" text-anchor="middle" fill="#ff8a9a" font-size="18" font-weight="800">GUILTY</text>
+    <text x="75" y="124" text-anchor="middle" fill="#c98a93" font-size="11">tap to convict</text>
+  </g>
+  <g transform="translate(206,470)" filter="url(#glow3)">
+    <rect width="150" height="150" rx="20" fill="#0f2236" stroke="#4fd1ff" stroke-width="3"/>
+    <text x="75" y="58" text-anchor="middle" font-size="40">😇</text>
+    <text x="75" y="96" text-anchor="middle" fill="#7fd6ff" font-size="18" font-weight="800">NOT GUILTY</text>
+    <text x="75" y="124" text-anchor="middle" fill="#8ab9d4" font-size="11">✓ your pick</text>
+  </g>
+
+  <!-- countdown to lock -->
+  <g transform="translate(195,664)">
+    <rect x="-90" y="-18" width="180" height="36" rx="18" fill="#2a1840" stroke="#ffd766"/>
+    <text x="0" y="6" text-anchor="middle" fill="#ffd766" font-size="13" font-weight="700">⏱ Voting closes in 0:09</text>
+  </g>
+
+  <!-- judge waiting cameo -->
+  <g transform="translate(60,740)">
+    <circle r="20" fill="url(#gold3)" stroke="#fff" stroke-width="2"/>
+    <text x="0" y="7" text-anchor="middle" font-size="20">🧑‍⚖️</text>
+  </g>
+  <text x="90" y="736" fill="#ffd766" font-size="12" font-weight="700">Judge Priya is watching the swing…</text>
+  <text x="90" y="754" fill="#9d8bc4" font-size="11">Verdict + your override vote come next.</text>
+
+  <!-- confetti-ish drama specks -->
+  <circle cx="40" cy="180" r="3" fill="#ffd766"/>
+  <circle cx="350" cy="240" r="3" fill="#4fd1ff"/>
+  <circle cx="300" cy="430" r="2" fill="#ff5a6e"/>
+  <circle cx="70" cy="430" r="2" fill="#ffd766"/>
+</svg>

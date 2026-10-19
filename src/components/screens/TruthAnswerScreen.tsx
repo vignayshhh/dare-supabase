@@ -15,10 +15,11 @@ interface TruthAnswerScreenProps {
 
 export function TruthAnswerScreen({ truthId, onBack }: TruthAnswerScreenProps) {
   const { user } = useAuthStore();
-  const { currentTruth, getTruth, answerTruth } = useTruthStore();
+  const { currentTruth, getTruth, answerTruth, refuseTruth } = useTruthStore();
   const [answer, setAnswer] = useState("");
   const [timeRemaining, setTimeRemaining] = useState(15 * 60);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isRefusing, setIsRefusing] = useState(false);
   const [challenger, setChallenger] = useState<any>(null);
 
   const truthProfiles = useProfileDataStore((s) => s.userProfiles);
@@ -104,12 +105,24 @@ export function TruthAnswerScreen({ truthId, onBack }: TruthAnswerScreenProps) {
     }
   };
 
-  const answerDisabled = isSubmitted || currentTruth?.state !== "SENT";
+  const handleRefuse = async () => {
+    if (!currentTruth || !user || currentTruth.state !== "SENT" || isRefusing) return;
+    setIsRefusing(true);
+    try {
+      await refuseTruth(currentTruth.id, user.id);
+      onBack();
+    } catch (error) {
+      console.error("Failed to refuse truth:", error);
+      setIsRefusing(false);
+    }
+  };
+
+  const answerDisabled = isSubmitted || isRefusing || currentTruth?.state !== "SENT";
   const canSubmit =
     Boolean(answer.trim()) && !isSubmitted && currentTruth?.state === "SENT";
   const truthStateLabel =
-    currentTruth?.state === "ANSWERED"
-      ? "Already answered"
+    currentTruth?.state === "ANSWERED" || currentTruth?.state === "APPROVED"
+      ? "Posted"
       : currentTruth?.state === "SENT"
         ? "Live now"
         : currentTruth?.state || "Loading";
@@ -200,7 +213,7 @@ export function TruthAnswerScreen({ truthId, onBack }: TruthAnswerScreenProps) {
                   Your Answer
                 </label>
                 <p className="mt-1 text-sm text-[#8ea18e]">
-                  Keep it honest, clear, and ready to be reviewed.
+                    Keep it honest and clear. Your answer posts immediately.
                 </p>
               </div>
               <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-[#c8d2c8]">
@@ -218,16 +231,17 @@ export function TruthAnswerScreen({ truthId, onBack }: TruthAnswerScreenProps) {
               />
             </div>
 
-            {currentTruth?.state === "ANSWERED" ? (
+            {currentTruth?.state === "ANSWERED" ||
+            currentTruth?.state === "APPROVED" ? (
               <div className="rounded-[22px] border border-[#4ade80]/25 bg-[#4ade80]/10 p-4">
                 <div className="flex items-start gap-3">
                   <ShieldCheck size={20} className="mt-0.5 text-[#86efac]" />
                   <div>
                     <p className="font-semibold text-[#86efac]">
-                      Already answered
+                        Answer posted
                     </p>
                     <p className="mt-1 text-sm text-[#c5d0c5]">
-                      Your response has already been submitted for this truth.
+                        Your response has been posted to the truth feed.
                     </p>
                   </div>
                 </div>
@@ -241,15 +255,23 @@ export function TruthAnswerScreen({ truthId, onBack }: TruthAnswerScreenProps) {
                 >
                   {isSubmitted ? "Submitting..." : "Submit Answer"}
                 </button>
+                <button
+                  onClick={handleRefuse}
+                  disabled={isSubmitted || isRefusing || currentTruth?.state !== "SENT"}
+                  className="flex w-full items-center justify-center rounded-[22px] border border-red-400/35 bg-red-500/10 px-5 py-3 text-sm font-bold text-red-200 transition-all hover:border-red-300/60 hover:bg-red-500/18 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRefusing ? "Refusing..." : "Refuse Truth"}
+                </button>
                 <p className="text-center text-sm text-[#7f8b7f]">
-                  Once submitted, this cannot be edited.
+                  Answering posts your response immediately. Refusing closes this Truth.
                 </p>
               </div>
             )}
           </div>
 
           {currentTruth?.state !== "SENT" &&
-            currentTruth?.state !== "ANSWERED" && (
+            currentTruth?.state !== "ANSWERED" &&
+            currentTruth?.state !== "APPROVED" && (
               <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4 text-sm text-[#9cab9c]">
                 This truth is currently in{" "}
                 <span className="font-semibold text-white">

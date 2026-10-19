@@ -1,5 +1,6 @@
 export type StoryMediaType = "image" | "video";
 export type StoryType = "personal" | "dedication";
+export type StoryVisibility = "PUBLIC" | "FRIENDS" | "PRIVATE" | "CLOSE_FRIENDS";
 export type StoryTextStyle = "clean" | "bold" | "glass";
 
 export interface StoryTextOverlay {
@@ -9,6 +10,18 @@ export interface StoryTextOverlay {
   xPct?: number;
   yPct?: number;
   fontSize?: number;
+  rotation?: number;
+  font?: string;
+  background?: boolean;
+  align?: "left" | "center" | "right";
+}
+
+export interface StoryDrawPath {
+  id: string;
+  d: string;
+  color: string;
+  width: number;
+  brush: string;
 }
 
 export interface StoryMusic {
@@ -26,6 +39,8 @@ export interface Story {
   storyText?: StoryTextOverlay | null;
   storyFilter?: string | null;
   storyMusic?: StoryMusic | null;
+  storyDrawPaths?: StoryDrawPath[];
+  visibility: StoryVisibility;
   caption: string | null;
   createdAt: string;
   expiresAt: string;
@@ -43,6 +58,8 @@ export interface CreateStoryRequest {
   storyText?: StoryTextOverlay | null;
   storyFilter?: string | null;
   storyMusic?: StoryMusic | null;
+  storyDrawPaths?: StoryDrawPath[];
+  visibility?: StoryVisibility;
   caption?: string;
 }
 

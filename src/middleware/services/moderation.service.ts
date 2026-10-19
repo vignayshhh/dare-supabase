@@ -1,19 +1,4 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  deleteDoc,
-  orderBy,
-  limit,
-  startAfter,
-  increment,
-} from "firebase/firestore";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { dareService } from "./dare.service";
 import { friendsService } from "./friends.service";
 
@@ -57,19 +42,20 @@ export interface OverrideVote {
 }
 
 class ModerationService {
+  private get client() {
+    return getSupabaseBrowserClient();
+  }
   async createContentReport(
     report: Omit<ContentReport, "id" | "created_at" | "status">,
   ): Promise<ContentReport> {
     try {
-      const reportRef = doc(collection(db, "reports"));
-      const reportData = {
-        ...report,
-        status: "pending",
-        created_at: new Date().toISOString(),
-      };
-
-      await setDoc(reportRef, reportData);
-      return { id: reportRef.id, ...reportData } as ContentReport;
+      const { data, error } = await this.client.from("reports").insert({
+        reporter_id: report.reporter_id, subject_type: report.content_type,
+        subject_id: report.content_id, reason: report.reason, detail: report.details,
+        status: "OPEN",
+      }).select("id,reporter_id,subject_type,subject_id,reason,detail,status,created_at").single();
+      if (error) throw error;
+      return { id: data.id, reporter_id: data.reporter_id, content_type: data.subject_type, content_id: data.subject_id, reason: data.reason, details: data.detail, status: data.status.toLowerCase(), created_at: data.created_at } as ContentReport;
     } catch (error) {
       console.error("Error creating content report:", error);
       throw error;
@@ -78,18 +64,10 @@ class ModerationService {
 
   async getReportsForReview(): Promise<ContentReport[]> {
     try {
-      const reportsRef = collection(db, "reports");
-      const q = query(
-        reportsRef,
-        where("status", "==", "pending"),
-        orderBy("created_at", "desc"),
-      );
-      const querySnapshot = await getDocs(q);
-
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as ContentReport[];
+      const { data, error } = await this.client.from("reports").select("id,reporter_id,subject_type,subject_id,reason,detail,status,created_at")
+        .in("status", ["OPEN", "REVIEWING"]).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((row) => ({ id: row.id, reporter_id: row.reporter_id, content_type: row.subject_type, content_id: row.subject_id, reason: row.reason, details: row.detail, status: row.status.toLowerCase(), created_at: row.created_at })) as ContentReport[];
     } catch (error) {
       console.error("Error getting reports for review:", error);
       return [];
@@ -103,20 +81,15 @@ class ModerationService {
     status: "resolved" | "dismissed",
   ): Promise<ContentReport> {
     try {
-      const reportRef = doc(db, "reports", reportId);
-      await updateDoc(reportRef, {
-        status,
-        reviewed_by: moderatorId,
-        reviewed_at: new Date().toISOString(),
-        resolution,
-      });
-
-      const updatedDoc = await getDoc(reportRef);
-      if (!updatedDoc.exists()) {
+      const { data, error } = await this.client.from("reports").update({
+        status: status === "resolved" ? "RESOLVED" : "DISMISSED",
+        resolved_by: moderatorId, detail: resolution, updated_at: new Date().toISOString(),
+      }).eq("id", reportId).select("id,reporter_id,subject_type,subject_id,reason,detail,status,created_at").maybeSingle();
+      if (error) throw error;
+      if (!data) {
         throw new Error("Report not found after update");
       }
-
-      return { id: updatedDoc.id, ...updatedDoc.data() } as ContentReport;
+      return { id: data.id, reporter_id: data.reporter_id, content_type: data.subject_type, content_id: data.subject_id, reason: data.reason, details: data.detail, status: data.status.toLowerCase(), created_at: data.created_at } as ContentReport;
     } catch (error) {
       console.error("Error reviewing report:", error);
       throw error;
@@ -127,14 +100,12 @@ class ModerationService {
     action: Omit<ModerationAction, "id" | "created_at">,
   ): Promise<ModerationAction> {
     try {
-      const actionRef = doc(collection(db, "moderation_actions"));
-      const actionData = {
-        ...action,
-        created_at: new Date().toISOString(),
-      };
-
-      await setDoc(actionRef, actionData);
-      return { id: actionRef.id, ...actionData } as ModerationAction;
+      const { data, error } = await this.client.from("moderation_actions").insert({
+        admin_id: action.moderator_id, target_user_id: action.target_user_id,
+        action: action.action_type, reason: action.reason, expires_at: action.expires_at ?? null,
+      }).select("id,admin_id,target_user_id,action,reason,expires_at,created_at").single();
+      if (error) throw error;
+      return { id: data.id, moderator_id: data.admin_id, target_user_id: data.target_user_id, action_type: data.action, reason: data.reason, expires_at: data.expires_at, created_at: data.created_at } as ModerationAction;
     } catch (error) {
       console.error("Error creating moderation action:", error);
       throw error;
@@ -145,18 +116,11 @@ class ModerationService {
     userId: string,
   ): Promise<ModerationAction[]> {
     try {
-      const actionsRef = collection(db, "moderation_actions");
-      const q = query(
-        actionsRef,
-        where("target_user_id", "==", userId),
-        where("action_type", "in", ["temporary_ban", "permanent_ban"]),
-      );
-      const querySnapshot = await getDocs(q);
-
-      const actions = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as ModerationAction[];
+      const { data, error } = await this.client.from("moderation_actions")
+        .select("id,admin_id,target_user_id,action,reason,expires_at,created_at")
+        .eq("target_user_id", userId).in("action", ["temporary_ban", "permanent_ban"]);
+      if (error) throw error;
+      const actions = (data ?? []).map((row) => ({ id: row.id, moderator_id: row.admin_id, target_user_id: row.target_user_id, action_type: row.action, reason: row.reason, expires_at: row.expires_at, created_at: row.created_at })) as ModerationAction[];
 
       const now = new Date();
       return actions.filter((action) => {
@@ -209,16 +173,12 @@ class ModerationService {
       const totalFriends = allFriends.size;
       const requiredVotes = Math.ceil(totalFriends * 0.1);
 
-      const votesRef = collection(db, "dare_votes");
-      const q = query(votesRef, where("dare_id", "==", dareId));
-      const querySnapshot = await getDocs(q);
-      const existingVotes = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as any[];
+      const { data: existingVotes, error } = await this.client.from("dare_votes")
+        .select("dare_id,voter_id,vote,created_at").eq("dare_id", dareId);
+      if (error) throw error;
 
       const overrideVotes = existingVotes.filter(
-        (vote) => vote.vote_type === "real" && allFriends.has(vote.voter_id),
+        (vote) => (vote.vote === "APPROVE" || vote.vote === "REAL") && allFriends.has(vote.voter_id),
       );
 
       if (overrideVotes.length >= requiredVotes) {
@@ -261,7 +221,6 @@ class ModerationService {
     reason?: string,
   ): Promise<OverrideVote> {
     try {
-      const voteRef = doc(collection(db, "override_votes"));
       const voteData = {
         dare_id: dareId,
         voter_id: voterId,
@@ -271,8 +230,10 @@ class ModerationService {
         created_at: new Date().toISOString(),
       };
 
-      await setDoc(voteRef, voteData);
-      return { id: voteRef.id, ...voteData } as OverrideVote;
+      const { data, error } = await this.client.from("override_votes").upsert(voteData, { onConflict: "dare_id,voter_id" })
+        .select("id,dare_id,voter_id,vote_type,is_override,override_reason,created_at").single();
+      if (error) throw error;
+      return data as OverrideVote;
     } catch (error) {
       console.error("Error recording override vote:", error);
       throw error;
@@ -281,14 +242,10 @@ class ModerationService {
 
   async getOverrideVotes(dareId: string): Promise<OverrideVote[]> {
     try {
-      const votesRef = collection(db, "override_votes");
-      const q = query(votesRef, where("dare_id", "==", dareId));
-      const querySnapshot = await getDocs(q);
-
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as OverrideVote[];
+      const { data, error } = await this.client.from("override_votes").select("id,dare_id,voter_id,vote_type,is_override,override_reason,created_at")
+        .eq("dare_id", dareId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as OverrideVote[];
     } catch (error) {
       console.error("Error getting override votes:", error);
       return [];
@@ -354,18 +311,11 @@ class ModerationService {
 
   async getModerationHistory(userId: string): Promise<ModerationAction[]> {
     try {
-      const actionsRef = collection(db, "moderation_actions");
-      const q = query(
-        actionsRef,
-        where("target_user_id", "==", userId),
-        orderBy("created_at", "desc"),
-      );
-      const querySnapshot = await getDocs(q);
-
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as ModerationAction[];
+      const { data, error } = await this.client.from("moderation_actions")
+        .select("id,admin_id,target_user_id,action,reason,created_at")
+        .eq("target_user_id", userId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((row) => ({ id: row.id, moderator_id: row.admin_id, target_user_id: row.target_user_id, action_type: row.action, reason: row.reason, created_at: row.created_at })) as ModerationAction[];
     } catch (error) {
       console.error("Error getting moderation history:", error);
       return [];
@@ -374,20 +324,10 @@ class ModerationService {
 
   async cleanupExpiredActions(): Promise<void> {
     try {
-      const now = new Date();
-      const actionsRef = collection(db, "moderation_actions");
-      const q = query(
-        actionsRef,
-        where("action_type", "==", "temporary_ban"),
-        where("expires_at", "<", now.toISOString()),
-      );
-      const querySnapshot = await getDocs(q);
-
-      for (const doc of querySnapshot.docs) {
-        await updateDoc(doc.ref, {
-          action_type: "expired_ban",
-        });
-      }
+      const now = new Date().toISOString();
+      const { error } = await this.client.from("moderation_actions")
+        .update({ action: "expired_ban" }).eq("action", "temporary_ban").lt("expires_at", now);
+      if (error) throw error;
     } catch (error) {
       console.error("Error cleaning up expired actions:", error);
     }

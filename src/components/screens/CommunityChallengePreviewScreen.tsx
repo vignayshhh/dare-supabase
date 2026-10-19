@@ -87,10 +87,12 @@ export function CommunityChallengePreviewScreen({
   challenge: CommunityChallenge;
   isJoined: boolean;
   onClose: () => void;
-  onJoin: () => void;
+  onJoin: () => Promise<boolean>;
   onOpenHub?: () => void;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  const [joinError, setJoinError] = useState("");
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [fallbackDeadlineMs, setFallbackDeadlineMs] = useState(
     () =>
@@ -104,18 +106,31 @@ export function CommunityChallengePreviewScreen({
     challenge.joinedCount,
     isJoined ? 1 : 0,
   );
-  const minRequiredMembers = challenge.minRequiredMembers ?? 3;
+  const minRequiredMembers = challenge.minRequiredMembers ?? 2;
   const membersNeeded = Math.max(0, minRequiredMembers - displayedJoinedCount);
   const hasBatchStarted = challenge.batchStatus === "started";
-  const canJoinBatch = !isJoined && !hasBatchStarted;
+  const heroJoinStatusText = hasBatchStarted
+    ? isJoined
+      ? "Current batch running"
+      : "Next batch open"
+    : isJoined
+      ? membersNeeded > 0
+        ? "Spot saved"
+        : "Joined"
+      : displayedJoinedCount > 0
+        ? membersNeeded > 0
+          ? "Batch forming"
+          : "Next batch opening"
+      : "No one joined yet";
+  const canJoinBatch = !isJoined;
   const primaryButtonLabel = hasBatchStarted
     ? isJoined
       ? "Joined Community Dare"
-      : "Dare Started - Wait for Next Batch"
+      : "Join Next Batch"
     : isJoined
       ? membersNeeded > 0
-        ? `Waiting for ${membersNeeded} more`
-        : "Starting soon"
+        ? "Joined"
+        : "Joined"
       : "Join Current Batch";
   const registrationDeadlineMs =
     !hasBatchStarted && displayedJoinedCount > 0
@@ -142,9 +157,9 @@ export function CommunityChallengePreviewScreen({
     displayedJoinedCount === 0 && !hasBatchStarted
       ? "The 48-hour signup timer starts when one person joins."
       : !hasBatchStarted && countdownMs <= 0
-        ? "This waiting batch expired and will reset if it did not reach 3 members."
+        ? "This waiting batch expired and will reset if it did not reach 2 members."
         : hasBatchStarted
-          ? "This active batch is already running."
+        ? "The current batch is running. New joins enter the next batch."
           : `${membersNeeded} more ${membersNeeded === 1 ? "member" : "members"} needed before the timer ends.`;
 
   useEffect(() => {
@@ -181,20 +196,30 @@ export function CommunityChallengePreviewScreen({
     };
   }, []);
 
-  const handleJoin = () => {
-    onJoin();
-    setShowSuccess(true);
+  const handleJoin = async () => {
+    if (isJoining) return;
+    setIsJoining(true);
+    setJoinError("");
+    try {
+      if (await onJoin()) {
+        setShowSuccess(true);
+      } else {
+        setJoinError("Unable to join this community dare. Please try again.");
+      }
+    } finally {
+      setIsJoining(false);
+    }
   };
 
-  const handlePrimaryAction = () => {
-    if (hasBatchStarted && isJoined) {
+  const handlePrimaryAction = async () => {
+    if (isJoined) {
       onOpenHub?.();
       return;
     }
 
     if (!canJoinBatch) return;
 
-    handleJoin();
+    await handleJoin();
   };
 
   const handleShare = async () => {
@@ -284,6 +309,13 @@ export function CommunityChallengePreviewScreen({
                   }}
                 />
               )}
+              {challenge.customDare && !challenge.imageUrl && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="flex h-36 w-36 items-center justify-center rounded-[42px] border border-[#4ade80]/20 bg-black/22 text-[66px] font-black text-[#86efac] shadow-[0_28px_80px_rgba(0,0,0,0.4),0_0_70px_rgba(74,222,128,0.16),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-md">
+                    D
+                  </div>
+                </div>
+              )}
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.22)_38%,rgba(3,4,3,0.94)_100%)]" />
               <div className="relative z-[1] mt-[11vh]">
                 <div className="max-w-[360px] rounded-[30px] border border-white/12 bg-black/34 p-4 shadow-[0_24px_70px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl">
@@ -295,9 +327,7 @@ export function CommunityChallengePreviewScreen({
                   </h1>
                   <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/35 px-3 py-2 text-sm font-black text-white/90 shadow-[0_12px_28px_rgba(0,0,0,0.32)] backdrop-blur-md">
                     <Users size={16} className="text-[#86efac]" />
-                    {displayedJoinedCount > 0
-                      ? `${displayedJoinedCount}/${minRequiredMembers} joined`
-                      : "No one joined yet"}
+                    {heroJoinStatusText}
                   </div>
                 </div>
               </div>
@@ -316,7 +346,6 @@ export function CommunityChallengePreviewScreen({
                       border: "2px solid rgba(74,222,128,0.28)",
                       boxShadow: "0 14px 34px rgba(0,0,0,0.32)",
                     }}
-                    disableGhostMode
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-black text-white">
@@ -352,7 +381,9 @@ export function CommunityChallengePreviewScreen({
                       </p>
                       <p className="mt-2 text-[12px] font-black text-white/88">
                         {hasBatchStarted
-                          ? "This batch has already started. New entry opens in the next batch."
+                          ? isJoined
+                            ? "Your community dare is already running."
+                            : "A batch is running. Join now to enter the next batch."
                           : displayedJoinedCount > 0
                             ? `${membersNeeded} more ${membersNeeded === 1 ? "member" : "members"} needed.`
                             : "Timer is waiting for the first member."}
@@ -466,15 +497,20 @@ export function CommunityChallengePreviewScreen({
                 onClick={handlePrimaryAction}
                 className={`community-preview-panel mt-5 mb-[calc(var(--safe-area-bottom)+24px)] flex min-h-[62px] w-full items-center justify-center rounded-full px-5 text-[16px] font-black uppercase tracking-[0.06em] transition-transform active:scale-[0.98] ${
                   hasBatchStarted && !isJoined
-                    ? "cursor-default border border-amber-300/22 bg-amber-300/10 text-amber-100 shadow-none"
+                    ? "bg-[linear-gradient(135deg,#4ade80,#22c55e)] text-[#061006] shadow-[0_20px_48px_rgba(74,222,128,0.32)]"
                     : isJoined
                     ? "border border-[#4ade80]/25 bg-[#4ade80]/12 text-[#d7ffe6] shadow-none"
                     : "bg-[linear-gradient(135deg,#4ade80,#22c55e)] text-[#061006] shadow-[0_20px_48px_rgba(74,222,128,0.32)]"
                 }`}
-                disabled={hasBatchStarted && !isJoined}
+                disabled={isJoining}
               >
-                {primaryButtonLabel}
+                {isJoining ? "Joining..." : primaryButtonLabel}
               </button>
+              {joinError && (
+                <p role="alert" className="mt-3 text-center text-sm font-semibold text-red-300">
+                  {joinError}
+                </p>
+              )}
               </div>
             </div>
           </div>

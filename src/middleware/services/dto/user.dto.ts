@@ -15,7 +15,6 @@ export interface UpdateProfileRequest {
   bio?: string;
   avatarUrl?: string;
   visibility?: "PUBLIC" | "PRIVATE";
-  ghostModeActive?: boolean;
 }
 
 export interface SearchProfilesResponse {
@@ -24,10 +23,6 @@ export interface SearchProfilesResponse {
   error?: string;
 }
 
-export interface SetGhostModeRequest {
-  ghostModeActive: boolean;
-  expiresAt?: string;
-}
 
 export interface OnlineStatusRequest {
   isOnline: boolean;

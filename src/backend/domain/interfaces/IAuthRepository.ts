@@ -9,8 +9,6 @@ export interface AuthUser {
   visibility: "PUBLIC" | "PRIVATE";
   daresCompleted: number;
   daresRefused: number;
-  ghostModeActive: boolean;
-  ghostModeExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

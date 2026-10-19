@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Target, X } from "lucide-react";
+import { ArrowLeft, Target } from "lucide-react";
 import type { DarePost } from "../../middleware/adapters/data-adapters";
 import { DareCard } from "./MainScreen";
 import { useContentStore } from "../../stores/useContentStore";
@@ -11,13 +11,8 @@ interface DaresListScreenProps {
   loading?: boolean;
   onSelectDare?: (dare: DarePost) => void;
   initialDareId?: string;
+  titleName?: string;
 }
-
-type FullscreenMedia = {
-  url: string;
-  type: "image" | "video";
-  thumbnail?: string;
-};
 
 function isUserInvolved(dare: DarePost, userId?: string) {
   if (!userId) return true;
@@ -32,10 +27,9 @@ export function DaresListScreen({
   loading = false,
   onSelectDare,
   initialDareId,
+  titleName,
 }: DaresListScreenProps) {
   const voteOnDare = useContentStore((s) => s.voteOnDare);
-  const [fullscreenMedia, setFullscreenMedia] =
-    useState<FullscreenMedia | null>(null);
   const handleVoteClick = (dare: DarePost) => {
     onSelectDare?.(dare);
   };
@@ -48,6 +42,14 @@ export function DaresListScreen({
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
+  const involvedName =
+    titleName ||
+    filteredDares.find((dare) => dare.challengerId === userId)?.challenger
+      .nickname ||
+    filteredDares.find((dare) => dare.receiverId === userId)?.receiver
+      .nickname ||
+    "User";
+  const headerTitle = `${involvedName.replace(/^@/, "")}'s dares`;
 
   const reelContainerRef = useRef<HTMLDivElement | null>(null);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
@@ -83,72 +85,180 @@ export function DaresListScreen({
     <div
       style={{
         height: "100dvh",
-        background: "#000",
+        background:
+          "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.14), transparent 34%), linear-gradient(180deg, #060806 0%, #030403 100%)",
         fontFamily:
-          "'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
+          "var(--font-ui)",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        boxSizing: "border-box",
+        paddingBottom:
+          "calc(var(--bottom-nav-total-height, 82px) + var(--safe-area-bottom) + 8px)",
       }}
     >
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .profile-dares-list-reel .dare-cover-capsule {
+          transform: translateY(78px) !important;
+          width: min(92vw, 360px) !important;
+          max-width: min(92vw, 360px) !important;
+        }
+        .profile-dares-list-reel .dare-liquid-capsule {
+          width: 100% !important;
+          max-width: 100% !important;
+          justify-content: center !important;
+          gap: 7px !important;
+          padding: 0 10px !important;
+          box-sizing: border-box !important;
+        }
+        .profile-dares-list-reel .dare-liquid-capsule button {
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          min-width: 0 !important;
+          max-width: 58px !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          flex: 0 1 58px !important;
+          text-align: center !important;
+          line-height: 1 !important;
+          margin-top: 0 !important;
+        }
+        .profile-dares-list-reel .dare-liquid-capsule .dare-capsule-dared-label {
+          flex: 0 0 auto !important;
+          font-size: 14px !important;
+          letter-spacing: 0.04em !important;
+        }
+        .profile-dares-list-reel .dare-liquid-capsule [style*="min-width: 48px"] {
+          min-width: 42px !important;
+          width: 42px !important;
+          height: 42px !important;
+          flex: 0 0 42px !important;
+        }
+        .profile-dares-list-reel .dare-cover-challenge {
+          transform: translateY(78px) !important;
+        }
+        .profile-dares-list-reel .dare-cover-kicker,
+        .profile-dares-list-reel .dare-cover-copy {
+          transform: translateY(0) !important;
+        }
+        .profile-dares-list-reel .dare-cover-slide > div[style*="bottom: calc(78px"] {
+          bottom: calc(18px + var(--safe-area-bottom)) !important;
+        }
+        .profile-dares-list-reel div[style*="top: calc(100% - 100px"] {
+          top: calc(100% - 28px - var(--safe-area-bottom)) !important;
+        }
+        .profile-dares-list-reel div[style*="padding: 0px 14px calc(95px"] {
+          padding-bottom: calc(14px + var(--safe-area-bottom)) !important;
+        }
+        .profile-dares-list-reel .dare-real-btn,
+        .profile-dares-list-reel .dare-fake-btn {
+          transform: translateY(54px) !important;
+        }
+        .profile-dares-list-reel .dare-real-btn,
+        .profile-dares-list-reel .dare-fake-btn {
+          margin-top: 54px !important;
+        }
+        .profile-dares-list-reel button[style*="width: 80%"] {
+          transform: translateY(54px) !important;
+        }
+      `}</style>
 
-      {/* Header */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "16px 20px 14px",
           flexShrink: 0,
+          padding: "calc(var(--safe-area-top) + 10px) 14px 10px",
           zIndex: 20,
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          backdropFilter: "blur(20px)",
-          background: "rgba(0,0,0,0.88)",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          background:
+            "linear-gradient(180deg, rgba(8,14,10,0.98), rgba(5,8,6,0.92))",
+          boxShadow: "0 18px 42px rgba(0,0,0,0.34)",
+          backdropFilter: "blur(18px)",
+          WebkitBackdropFilter: "blur(18px)",
         }}
       >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "42px minmax(0, 1fr) 52px",
+            alignItems: "center",
+            gap: "10px",
+            minHeight: "46px",
+          }}
+        >
         <button
           onClick={onBack}
           style={{
-            background: "none",
-            border: "none",
+            width: "42px",
+            height: "42px",
+            borderRadius: "15px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            background: "rgba(255,255,255,0.055)",
             color: "#fff",
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
-            gap: "8px",
-            padding: 0,
+            justifyContent: "center",
+            boxShadow:
+              "0 16px 36px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.08)",
           }}
+          aria-label="Back to profile"
         >
           <ArrowLeft size={20} />
-          <span style={{ fontSize: "16px", fontWeight: 600 }}>Back</span>
         </button>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "9px",
+            minHeight: "42px",
+            minWidth: 0,
+            padding: "0 6px",
+          }}
+        >
           <Target size={18} color="#4ade80" />
-          <h1
+          <span
             style={{
               color: "#fff",
-              fontSize: "18px",
-              fontWeight: 800,
+              fontSize: "15px",
+              fontWeight: 950,
               margin: 0,
-              letterSpacing: "-0.02em",
+              letterSpacing: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
-            Dares
-          </h1>
+            {headerTitle}
+          </span>
         </div>
-        <div style={{ width: "80px", textAlign: "right" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "52px",
+            height: "42px",
+            borderRadius: "15px",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.04)",
+          }}
+        >
           {filteredDares.length > 0 && (
             <span
               style={{
-                color: "rgba(255,255,255,0.35)",
+                color: "rgba(255,255,255,0.62)",
                 fontSize: "12px",
-                fontWeight: 600,
+                fontWeight: 950,
               }}
             >
               {activeReelIndex + 1} / {filteredDares.length}
             </span>
           )}
+        </div>
         </div>
       </div>
 
@@ -223,12 +333,18 @@ export function DaresListScreen({
       ) : (
         <div
           ref={reelContainerRef}
+          className="profile-dares-list-reel"
           style={{
             flex: 1,
+            minHeight: 0,
             overflowY: "scroll",
+            overflowX: "hidden",
             scrollSnapType: "y mandatory",
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "none",
+            touchAction: "pan-y",
+            contain: "layout paint style",
+            willChange: "scroll-position",
           }}
         >
           {filteredDares.map((dare, index) => (
@@ -248,63 +364,10 @@ export function DaresListScreen({
                 reelMode
                 isActive={activeReelIndex === index}
                 onVoteClick={handleVoteClick}
-                onFullscreenMedia={setFullscreenMedia}
                 onVote={handleVote}
               />
             </div>
           ))}
-        </div>
-      )}
-
-      {fullscreenMedia && (
-        <div
-          className="app-modal-backdrop"
-          onClick={() => setFullscreenMedia(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.95)",
-            zIndex: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-          }}
-        >
-          <button
-            onClick={() => setFullscreenMedia(null)}
-            style={{
-              position: "absolute",
-              top: 20,
-              right: 20,
-              background: "rgba(255,255,255,0.1)",
-              border: "none",
-              borderRadius: "50%",
-              width: 40,
-              height: 40,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              color: "#fff",
-            }}
-          >
-            <X size={20} />
-          </button>
-          {fullscreenMedia.type === "video" ? (
-            <video
-              src={fullscreenMedia.url}
-              controls
-              autoPlay
-              style={{ maxWidth: "100%", maxHeight: "100%" }}
-            />
-          ) : (
-            <img
-              src={fullscreenMedia.url}
-              alt=""
-              style={{ maxWidth: "100%", maxHeight: "100%" }}
-            />
-          )}
         </div>
       )}
     </div>

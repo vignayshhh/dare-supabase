@@ -1,0 +1,124 @@
+DARE MOBILE CHAT UI RESEARCH
+Date: 2026-10-18
+Scope: Circle group chat and direct MessagingScreen. Existing capabilities only.
+
+SOURCES AND EVIDENCE
+1. Meta, Edit Your Messages, Pin Your Chats and More Instagram DM Updates
+   https://about.fb.com/news/2024/03/instagram-dm-updates/
+   Official article describes contextual long-press reply actions, media replies,
+   and conversation themes. Its accompanying images demonstrate phone-scale
+   contextual controls. It does not publish pixel measurements for bubbles.
+2. Meta, New Instagram DM Features to Help You Stay Connected
+   https://about.fb.com/news/2025/02/new-instagram-dm-features-stay-connected/
+   Official messaging update covers conversation utilities such as pinned content
+   and music sharing. Reference for keeping utilities contextual; these features
+   are not being added to Dare in this UI pass.
+3. Yope official Google Play listing
+   https://play.google.com/store/apps/details?id=app.salo&hl=en
+   Describes private, photo-led chats and group sharing. Promotional assets are
+   direction references, not proof of exact current UI behaviour.
+4. Existing local visual references inspected:
+   .tmp/yope-ui-research/yope-chat.jpeg
+   .tmp/yope-ui-research/yope-group-chat.png
+   Their original capture dates/provenance are not verified. In these images,
+   dark surfaces, vivid accents, generous rounded media and compact identity
+   treatments make private groups feel personal. One image is an inbox, not
+   a text conversation: its large row dimensions should not become bubble sizes.
+
+DARE INTERPRETATION (DESIGN CHOICES, NOT MEASURED COMPETITOR SPECS)
+- Content-sized text bubbles capped at 80% of conversation width; 16px text,
+  1.4 line height, 10px vertical / 14px horizontal padding, 20px outer corners.
+- Consecutive plain messages from the same sender less than five minutes apart
+  form a visual group. Joined corners use 6px radii. Break grouping at cards,
+  media, replies, system events and pending/failed states as applicable.
+- Circle sender names appear at incoming group starts, timestamps at group ends.
+  Pending/failed messages keep their own status. Own messages need no repeated
+  'You'. Keyboard and long-press actions remain available on grouped messages.
+- Preserve Circle's purple accent. Sender identity accents come deterministically
+  from FriendCircleScreen's green, rose, sky, purple, yellow, mint, blue and pink
+  palette. Incoming text surfaces stay neutral; outgoing bubbles are tinted.
+- DMs default to Dare green with distinct incoming charcoal surfaces. Existing
+  app theme overrides and mood panels remain intact.
+- Compact header: 36px avatar, 44px action targets, 56px content height plus safe
+  area. A Lucide menu icon replaces the previously corrupted text glyph.
+- Existing inline replies: 3px accent rail, 12px author, 13px two-line excerpt.
+  Photo fallback text and original reply data/actions remain unchanged.
+- Composer uses 16px input, 44px minimum controls, capped multiline growth and
+  safe-area padding. No fake buttons or new reply backend in Circle chat.
+- One low-opacity static background wash. Glass belongs to header/composer,
+  not every message. Short 140-160ms message feedback and 200ms Circle sheet.
+  Reduced-motion removes message entrance and press movement.
+
+IMPLEMENTATION BOUNDARY
+Shared CSS presentation tokens and a pure grouping helper. Existing stores,
+services, Supabase tables, subscriptions, pagination, uploads and notification
+rules are unchanged. Circle interaction cards retain their category colours,
+status display, source message and navigation.
+
+BASELINE INSPECTION
+Playwright signed into existing QA A, opened QA B's direct conversation and
+the active Circle. Captured 360x800, 390x844 and 430x932; Circle also 390x500.
+Baseline snapshots: .tmp/chat-ui-before/
+Observed: DM header was tall, menu glyph was corrupted, text bubbles had near-
+identical dark gradients and protruding triangular tails. Circle repeated 'You',
+time and menu controls, and card/text spacing consumed excessive vertical space.
+Existing historical QA photos included broken image URLs before this change.
+Do not interpret these historical assets as a new upload regression.
+
+VERIFICATION
+See final verification addendum below for actual results. Browser height reduction
+tests layout resilience but does not certify real iOS/Android keyboard behaviour.
+
+FINAL VERIFICATION ADDENDUM
+- TypeScript type-check and focused ESLint checks passed.
+- Playwright: QA A/B Circle message -> Promise card -> dedicated screen ->
+  recipient confirmation passed. Existing linked-message and status flow retained.
+- QA A/B DM reply persistence/read receipt and fresh photo delivery/reload passed.
+- Incoming Circle groups, first-message long-press and failed-send retry passed.
+  Receiver issued ZERO additional message-history GETs while receiving/grouping
+  two live messages. This is a receive-path measurement, not a full load test.
+- Mobile layout captured at 360x800, 390x844, 430x932. Reduced-height 390x500
+  composer checks passed. Reply cancellation, multiline height cap, scroll gesture
+  cancelling long-press, keyboard actions and reduced-motion sheet checks passed.
+- Existing Games and temporary-invite menu navigation passed.
+- Pagination fixtures exposed sensitivity to a changing group boundary; the
+  UI now preserves the visible bubble position. Two consecutive final runs passed
+  the <3px anchor tolerance after the app entrance animation settled.
+- Grouping helper tests cover sender changes, five-minute boundary, invalid or
+  reversed times, and standalone content/status boundaries.
+- Final screenshot folder: .tmp/chat-ui-after/ (including incoming grouped long
+  text, failed delivery, reply draft, keyboard-height layout and older history).
+  Baseline folder: .tmp/chat-ui-before/. Initial baseline and initial polished
+  captures used existing conversations; later functional QA added labelled test
+  messages, so final screenshots contain additional test conversation content.
+- Visually inspected DM, Circle, reply draft, long unbroken text, failed-send,
+  and reduced-height screenshots. No horizontal overflow in the tested widths.
+- One initial test run matched a reused historical marker; rerun with a unique
+  marker passed. One Chromium mobile-project window resize failed at browser
+  protocol level; viewport sweep passed using the stable desktop Chromium project
+  at mobile dimensions. Functional Circle tests used touch/mobile browser contexts.
+- This pass does not claim native-device keyboard certification, comprehensive
+  WebKit testing, or changes to historical media URLs. No backend files, schemas,
+  Supabase subscriptions or notifications were changed.
+
+MOBILE KEYBOARD / LOADING CORRECTION
+- Removed the Circle demoMessages fallback entirely. Previously it rendered
+  temporary messages while actual history was loading, causing the preview flash.
+- Both real chat screens now use a shared callback-ref viewport controller for
+  VisualViewport.height and offsetTop, including resize, pan and focus events.
+  The scroll feed shrinks; composer/header do not. Keyboard-open bottom padding
+  avoids adding a second safe-area gap. Controller reattaches after nested screens.
+- Removed the scrolling/animated overlay wrapper specifically for these two chat
+  screens so it cannot add a second offset or clipped outer scroll area.
+- Header refined with a 40px identity/avatar, 44px actions, subtle accent surface,
+  compact title/status hierarchy and connection status beside the Circle subtitle.
+- Evidence: https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport
+  https://developer.chrome.com/blog/viewport-resize-behavior/
+  Keyboard may shrink visual viewport without changing layout viewport; merely
+  resizing the browser window was insufficient testing for this defect.
+- tests/qa/mobile-chat-keyboard.spec.ts uses Pixel 7 and iPhone 13 device settings
+  (mobile user agent, touch and device scale) in Chromium. It keeps innerHeight
+  unchanged while simulating VisualViewport heights 400/350/430 and offsetTop 48.
+  Assertions check input/composer bounds, keyboard-close restoration, no loading
+  demo messages, and returning from Games. This is not actual iOS Safari or a
+  physical OS keyboard test. Screenshots: .tmp/chat-keyboard/.

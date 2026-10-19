@@ -1,0 +1,34 @@
+CHAT LIST: TEMPORARILY HIDDEN FEATURES
+
+The Daily Challenge chat entry and the Can't Sleep Room chat entry are
+temporarily hidden from the ChatListScreen UI only.
+
+Nothing inside either feature was deleted or disabled:
+
+- DailyChallengeChatCard remains in:
+  src/components/screens/ChatListScreen.tsx
+- CantSleepChatCard remains in:
+  src/components/screens/ChatListScreen.tsx
+- The full Can't Sleep room remains in:
+  src/components/screens/CantSleepRoomScreen.tsx
+- showCantSleepRoom state and its room-screen return branch remain active in:
+  src/components/screens/ChatListScreen.tsx
+- onDailyChallengeClick remains part of the ChatListScreen props contract.
+- Imports, callbacks, services, and all interior feature implementation remain
+  unchanged.
+
+HOW TO RESTORE BOTH ENTRIES
+
+Open src/components/screens/ChatListScreen.tsx and find this comment:
+
+  Temporarily hidden from the chat list only.
+
+Remove only the surrounding JSX comment markers:
+
+  {/*
+  */}
+
+Do not remove or rewrite the two render expressions inside those markers.
+Once uncommented, both entries return to their previous location immediately
+above the Darren chat entry.
+

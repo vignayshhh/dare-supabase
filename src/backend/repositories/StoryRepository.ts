@@ -1,462 +1,169 @@
-import {
-  collection,
-  doc,
-  addDoc,
-  getDoc,
-  getDocs,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  arrayUnion,
-  serverTimestamp,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "../lib/firebase";
-import { auth } from "@/backend/lib/firebase";
-import {
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type {
   IStoryRepository,
   Story,
   CreateStoryRequest,
   StoryWithViewerInfo,
 } from "../domain/interfaces/IStoryRepository";
-import { IFriendshipRepository } from "../domain/interfaces/IFriendshipRepository";
-import { FriendshipRepository } from "./FriendshipRepository";
 
-const normalizeViewerViewCounts = (value: unknown): Record<string, number> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-
-  const counts: Record<string, number> = {};
-  Object.entries(value as Record<string, unknown>).forEach(([userId, count]) => {
-    if (typeof count !== "number" || !Number.isFinite(count)) return;
-
-    const normalizedCount = Math.max(0, Math.floor(count));
-    if (normalizedCount > 0) {
-      counts[userId] = normalizedCount;
-    }
-  });
-
-  return counts;
+type StoryRow = {
+  id: string;
+  author_id: string;
+  body: string;
+  media_path: string | null;
+  visibility: "PUBLIC" | "FRIENDS" | "PRIVATE" | "CLOSE_FRIENDS";
+  expires_at: string;
+  created_at: string;
+  legacy_payload: Record<string, any> | null;
 };
 
+function mapStory(row: StoryRow, views: Array<{ viewer_id: string }> = []): Story {
+  const extra = row.legacy_payload ?? {};
+  const viewers = views.map((item) => item.viewer_id);
+  return {
+    id: row.id,
+    userId: row.author_id,
+    mediaUrl: typeof extra.mediaUrl === "string" ? extra.mediaUrl : row.media_path ?? "",
+    mediaType: extra.mediaType === "video" ? "video" : "image",
+    storyType: extra.storyType === "dedication" ? "dedication" : "personal",
+    dedicatedToUserId: typeof extra.dedicatedToUserId === "string" ? extra.dedicatedToUserId : null,
+    storyText: extra.storyText ?? null,
+    storyFilter: typeof extra.storyFilter === "string" ? extra.storyFilter : "original",
+    storyMusic: extra.storyMusic ?? null,
+    storyDrawPaths: Array.isArray(extra.storyDrawPaths) ? extra.storyDrawPaths : [],
+    visibility: row.visibility || "FRIENDS",
+    caption: row.body || null,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    viewCount: viewers.length,
+    viewers,
+    viewerViewCounts: Object.fromEntries(viewers.map((id) => [id, 1])),
+  };
+}
+
 export class StoryRepository implements IStoryRepository {
-  private friendshipRepository: IFriendshipRepository;
-
-  private async fetchFriendsStoriesFromApi(): Promise<StoryWithViewerInfo[]> {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      throw new Error("User must be authenticated to fetch friends stories");
-    }
-
-    const idToken = await currentUser.getIdToken();
-    const response = await fetch("/api/stories/friends", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-      credentials: "same-origin",
-    });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(
-        payload?.error ||
-          payload?.message ||
-          "Failed to fetch friends stories from server",
-      );
-    }
-
-    if (Array.isArray(payload?.data)) {
-      return payload.data as StoryWithViewerInfo[];
-    }
-
-    if (Array.isArray(payload)) {
-      return payload as StoryWithViewerInfo[];
-    }
-
-    return [];
-  }
-
-  private async postStoryViewToApi(storyId: string): Promise<void> {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      throw new Error("User must be authenticated to mark story as viewed");
-    }
-
-    const idToken = await currentUser.getIdToken();
-    const response = await fetch(`/api/stories/${storyId}/view`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-      credentials: "same-origin",
-    });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(
-        payload?.error ||
-          payload?.message ||
-          "Failed to mark story as viewed on server",
-      );
-    }
-  }
-
-  constructor() {
-    this.friendshipRepository = new FriendshipRepository();
-  }
+  private get client() { return getSupabaseBrowserClient(); }
 
   async createStory(request: CreateStoryRequest): Promise<Story> {
-    try {
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
-
-      const storyData = {
-        userId: request.userId,
-        mediaUrl: request.mediaUrl,
-        mediaType: request.mediaType,
-        storyType: request.storyType || "personal",
-        dedicatedToUserId: request.dedicatedToUserId || null,
-        storyText: request.storyText || null,
-        storyFilter: request.storyFilter || "original",
-        storyMusic: request.storyMusic || null,
-        caption: request.caption || null,
-        createdAt: serverTimestamp(),
-        expiresAt: Timestamp.fromDate(expiresAt),
-        viewCount: 0,
-        viewers: [],
-        viewerViewCounts: {},
-      };
-
-      const docRef = await addDoc(collection(db, "stories"), storyData);
-      const newStory = await this.getStoryById(docRef.id);
-
-      if (!newStory) {
-        throw new Error("Failed to create story");
-      }
-
-      return newStory;
-    } catch (error) {
-      console.error("Error creating story:", error);
-      throw error;
-    }
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const extra = {
+      mediaUrl: request.mediaUrl,
+      mediaType: request.mediaType,
+      storyType: request.storyType || "personal",
+      dedicatedToUserId: request.dedicatedToUserId || null,
+      storyText: request.storyText || null,
+      storyFilter: request.storyFilter || "original",
+      storyMusic: request.storyMusic || null,
+      storyDrawPaths: request.storyDrawPaths || [],
+    };
+    const { data, error } = await this.client.from("stories").insert({
+      author_id: request.userId,
+      body: request.caption || "",
+      media_path: request.mediaUrl,
+      visibility: request.visibility || "FRIENDS",
+      expires_at: expiresAt,
+      legacy_payload: extra,
+    }).select("id,author_id,body,media_path,visibility,expires_at,created_at,legacy_payload").single();
+    if (error) throw error;
+    return mapStory(data as StoryRow);
   }
 
   async getStoryById(storyId: string): Promise<Story | null> {
-    try {
-      const storyDoc = await getDoc(doc(db, "stories", storyId));
-
-      if (!storyDoc.exists()) {
-        return null;
-      }
-
-      const data = storyDoc.data();
-      return {
-        id: storyDoc.id,
-        userId: data.userId,
-        mediaUrl: data.mediaUrl,
-        mediaType: data.mediaType,
-        storyType: data.storyType || "personal",
-        dedicatedToUserId: data.dedicatedToUserId || null,
-        storyText: data.storyText || null,
-        storyFilter: data.storyFilter || "original",
-        storyMusic: data.storyMusic || null,
-        caption: data.caption,
-        createdAt:
-          data.createdAt?.toDate()?.toISOString() || new Date().toISOString(),
-        expiresAt:
-          data.expiresAt?.toDate()?.toISOString() || new Date().toISOString(),
-        viewCount: data.viewCount || 0,
-        viewers: data.viewers || [],
-        viewerViewCounts: normalizeViewerViewCounts(data.viewerViewCounts),
-      } as Story;
-    } catch (error) {
-      console.error("Error fetching story:", error);
-      return null;
-    }
+    const [{ data, error }, views] = await Promise.all([
+      this.client.from("stories").select("id,author_id,body,media_path,visibility,expires_at,created_at,legacy_payload").eq("id", storyId).maybeSingle(),
+      this.client.from("story_views").select("viewer_id").eq("story_id", storyId).limit(1000),
+    ]);
+    if (error || !data) return null;
+    return mapStory(data as StoryRow, views.data ?? []);
   }
 
   async getStoriesByUserId(userId: string): Promise<Story[]> {
-    try {
-      const q = query(
-        collection(db, "stories"),
-        where("userId", "==", userId),
-        orderBy("createdAt", "desc"),
-      );
-
-      const querySnapshot = await getDocs(q);
-      const stories: Story[] = [];
-
-      for (const storyDoc of querySnapshot.docs) {
-        const data = storyDoc.data();
-        const story = {
-          id: storyDoc.id,
-          userId: data.userId,
-          mediaUrl: data.mediaUrl,
-          mediaType: data.mediaType,
-          storyType: data.storyType || "personal",
-          dedicatedToUserId: data.dedicatedToUserId || null,
-          storyText: data.storyText || null,
-          storyFilter: data.storyFilter || "original",
-          storyMusic: data.storyMusic || null,
-          caption: data.caption,
-          createdAt:
-            data.createdAt?.toDate()?.toISOString() || new Date().toISOString(),
-          expiresAt:
-            data.expiresAt?.toDate()?.toISOString() || new Date().toISOString(),
-          viewCount: data.viewCount || 0,
-          viewers: data.viewers || [],
-          viewerViewCounts: normalizeViewerViewCounts(data.viewerViewCounts),
-        } as Story;
-
-        // Only include non-expired stories
-        if (new Date(story.expiresAt) > new Date()) {
-          stories.push(story);
-        }
-      }
-
-      return stories;
-    } catch (error) {
-      console.error("Error fetching user stories:", error);
-      return [];
-    }
+    const { data, error } = await this.client.from("stories")
+      .select("id,author_id,body,media_path,visibility,expires_at,created_at,legacy_payload")
+      .eq("author_id", userId).gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100);
+    if (error) return [];
+    // Viewer rows are loaded separately as one grouped count RPC by StoryService.
+    // Do not transfer every viewer just to render the owner's story list.
+    return (data as StoryRow[] | null ?? []).map((row) => mapStory(row));
   }
 
   async getActiveStoriesForUser(userId: string): Promise<Story[]> {
-    try {
-      const now = new Date();
-      const q = query(
-        collection(db, "stories"),
-        where("expiresAt", ">", Timestamp.fromDate(now)),
-        orderBy("createdAt", "desc"),
-      );
-
-      const querySnapshot = await getDocs(q);
-      const stories: Story[] = [];
-
-      for (const doc of querySnapshot.docs) {
-        const data = doc.data();
-        stories.push({
-          id: doc.id,
-          userId: data.userId,
-          mediaUrl: data.mediaUrl,
-          mediaType: data.mediaType,
-          storyType: data.storyType || "personal",
-          dedicatedToUserId: data.dedicatedToUserId || null,
-          storyText: data.storyText || null,
-          storyFilter: data.storyFilter || "original",
-          storyMusic: data.storyMusic || null,
-          caption: data.caption,
-          createdAt:
-            data.createdAt?.toDate()?.toISOString() || new Date().toISOString(),
-          expiresAt:
-            data.expiresAt?.toDate()?.toISOString() || new Date().toISOString(),
-          viewCount: data.viewCount || 0,
-          viewers: data.viewers || [],
-          viewerViewCounts: normalizeViewerViewCounts(data.viewerViewCounts),
-        } as Story);
-      }
-
-      return stories;
-    } catch (error) {
-      console.error("Error fetching active stories:", error);
-      return [];
-    }
+    return this.getStoriesByUserId(userId);
   }
 
   async getFriendsStories(userId: string): Promise<StoryWithViewerInfo[]> {
-    try {
-      return await this.fetchFriendsStoriesFromApi();
-    } catch (serverError) {
-      console.warn(
-        "Falling back to direct Firestore friends stories fetch:",
-        serverError,
-      );
-    }
+    const { data, error } = await this.client.rpc("get_friend_stories", {
+      p_user_id: userId,
+      p_limit: 200,
+    });
+    if (error) return [];
 
-    try {
-      // Get user's friends
-      const friendships =
-        await this.friendshipRepository.getAcceptedFriends(userId);
-      const friendIds = friendships.map((f) =>
-        f.requesterId === userId ? f.addresseeId : f.requesterId,
-      );
-
-      if (friendIds.length === 0) {
-        return [];
-      }
-
-      // Get stories from friends that haven't expired
-      const now = new Date();
-      const q = query(
-        collection(db, "stories"),
-        where("userId", "in", friendIds),
-        where("expiresAt", ">", Timestamp.fromDate(now)),
-        orderBy("createdAt", "desc"),
-      );
-
-      const querySnapshot = await getDocs(q);
-      const storiesWithViewerInfo: StoryWithViewerInfo[] = [];
-
-      for (const storyDoc of querySnapshot.docs) {
-        const data = storyDoc.data();
-        const story = {
-          id: storyDoc.id,
-          userId: data.userId,
-          mediaUrl: data.mediaUrl,
-          mediaType: data.mediaType,
-          storyType: data.storyType || "personal",
-          dedicatedToUserId: data.dedicatedToUserId || null,
-          storyText: data.storyText || null,
-          storyFilter: data.storyFilter || "original",
-          storyMusic: data.storyMusic || null,
-          caption: data.caption,
-          createdAt:
-            data.createdAt?.toDate()?.toISOString() || new Date().toISOString(),
-          expiresAt:
-            data.expiresAt?.toDate()?.toISOString() || new Date().toISOString(),
-          viewCount: data.viewCount || 0,
-          viewers: data.viewers || [],
-          viewerViewCounts: normalizeViewerViewCounts(data.viewerViewCounts),
-        } as Story;
-
-        // Get author info - fetch actual user data
-        const userDoc = await getDoc(doc(db, "users", story.userId));
-        const userData = userDoc.exists() ? (userDoc.data() as any) : null;
-
-        // Try to get avatar from multiple sources
-        let avatar = userData?.avatar_url || "";
-
-        // If no avatar in Firebase, check if we have one in the avatar store
-        if (!avatar) {
-          try {
-            // Dynamically import the store to avoid SSR issues
-            const { useAvatarStore } = await import("../../stores/avatarStore");
-            avatar = useAvatarStore.getState().getStoredAvatar(story.userId);
-            if (avatar) {
-              console.log(
-                "🔥 STORY: Using stored avatar for user:",
-                story.userId,
-              );
-            }
-          } catch (error) {
-            console.log("🔥 STORY: Could not access avatar store");
+    // The bounded RPC joins authorized friendships, profiles, active stories,
+    // viewer state, and view counts in one request. Do not recreate the old
+    // friendship -> stories -> views -> profiles request chain here.
+    return ((data ?? []) as Array<Record<string, any>>).map((row) => {
+      const metadata = row.metadata ?? row.legacy_payload ?? {};
+      const hasViewed = Boolean(row.has_viewed);
+      const story: Story = {
+        id: String(row.id),
+        userId: String(row.author_id),
+        mediaUrl: metadata.mediaUrl ?? metadata.media_url ?? row.media_path ?? "",
+        mediaType: metadata.mediaType === "video" || metadata.media_type === "video" ? "video" : "image",
+        storyType: metadata.storyType === "dedication" ? "dedication" : "personal",
+        dedicatedToUserId: row.dedicated_to_id ?? metadata.dedicatedToUserId ?? null,
+        storyText: row.body || metadata.storyText || null,
+        storyFilter: metadata.storyFilter ?? "original",
+        storyMusic: metadata.storyMusic ?? null,
+        storyDrawPaths: Array.isArray(metadata.storyDrawPaths) ? metadata.storyDrawPaths : [],
+        visibility: row.visibility || "FRIENDS",
+        caption: row.body || null,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        viewCount: Number(row.view_count ?? 0),
+        viewers: hasViewed ? [userId] : [],
+        viewerViewCounts: hasViewed ? { [userId]: 1 } : {},
+      };
+      const dedicatedTo = row.dedicated_to_id
+        ? {
+            id: String(row.dedicated_to_id),
+            username: row.dedicated_to_username || `user_${String(row.dedicated_to_id).slice(-6)}`,
+            displayName: row.dedicated_to_display_name || row.dedicated_to_username || "User",
+            avatar: row.dedicated_to_avatar || "",
           }
-        }
-
-        const author = {
-          id: story.userId,
-          username: userData?.username || `@user_${story.userId.slice(0, 8)}`,
-          displayName:
-            userData?.display_name || `User ${story.userId.slice(0, 8)}`,
-          avatar: avatar, // Use actual avatar from Firebase or stored
-        };
-
-        const hasViewed = story.viewers.includes(userId);
-
-        storiesWithViewerInfo.push({
-          ...story,
-          author,
-          hasViewed,
-        });
-      }
-
-      return storiesWithViewerInfo;
-    } catch (error) {
-      console.error("Error fetching friends stories:", error);
-      return [];
-    }
+        : null;
+      return {
+        ...story,
+        author: {
+          id: String(row.author_id),
+          username: row.author_username || `user_${String(row.author_id).slice(-6)}`,
+          displayName: row.author_display_name || row.author_username || "User",
+          avatar: row.author_avatar || "",
+        },
+        dedicatedTo,
+        hasViewed,
+      };
+    });
   }
 
-  async markStoryAsViewed(storyId: string, viewerId: string): Promise<void> {
-    try {
-      await this.postStoryViewToApi(storyId);
-      return;
-    } catch (serverError) {
-      console.warn(
-        "Falling back to direct Firestore story view update:",
-        serverError,
-      );
-    }
-
-    try {
-      const storyRef = doc(db, "stories", storyId);
-      const storyDoc = await getDoc(storyRef);
-
-      if (!storyDoc.exists()) {
-        throw new Error("Story not found");
-      }
-
-      const data = storyDoc.data();
-      const viewers = data.viewers || [];
-      const viewerViewCounts = normalizeViewerViewCounts(data.viewerViewCounts);
-      const currentViewerCount =
-        viewerViewCounts[viewerId] ?? (viewers.includes(viewerId) ? 1 : 0);
-      const nextViewerViewCounts = {
-        ...viewerViewCounts,
-        [viewerId]: currentViewerCount + 1,
-      };
-
-      if (!viewers.includes(viewerId)) {
-        await updateDoc(storyRef, {
-          viewers: arrayUnion(viewerId),
-          viewCount: (data.viewCount || 0) + 1,
-          viewerViewCounts: nextViewerViewCounts,
-        });
-        return;
-      }
-
-      await updateDoc(storyRef, {
-        viewerViewCounts: nextViewerViewCounts,
-      });
-    } catch (error) {
-      console.error("Error marking story as viewed:", error);
-      throw error;
-    }
+  async markStoryAsViewed(storyId: string, _viewerId: string): Promise<void> {
+    void _viewerId;
+    const { error } = await this.client.rpc("record_story_view", { p_story_id: storyId });
+    if (error) throw error;
   }
 
   async deleteStory(storyId: string): Promise<void> {
-    try {
-      await deleteDoc(doc(db, "stories", storyId));
-    } catch (error) {
-      console.error("Error deleting story:", error);
-      throw error;
-    }
+    const { error } = await this.client.from("stories").delete().eq("id", storyId);
+    if (error) throw error;
   }
 
   async deleteExpiredStories(userId: string): Promise<void> {
-    try {
-      const now = new Date();
-      const q = query(
-        collection(db, "stories"),
-        where("userId", "==", userId),
-        where("expiresAt", "<=", Timestamp.fromDate(now)),
-      );
-
-      const querySnapshot = await getDocs(q);
-
-      for (const doc of querySnapshot.docs) {
-        await deleteDoc(doc.ref);
-      }
-    } catch (error) {
-      console.error("Error deleting expired stories:", error);
-      throw error;
-    }
+    const { error } = await this.client.from("stories").delete().eq("author_id", userId).lte("expires_at", new Date().toISOString());
+    if (error) throw error;
   }
 
-  async isUserViewerOfStory(
-    storyId: string,
-    viewerId: string,
-  ): Promise<boolean> {
-    try {
-      const story = await this.getStoryById(storyId);
-      return story ? story.viewers.includes(viewerId) : false;
-    } catch (error) {
-      console.error("Error checking if user viewed story:", error);
-      return false;
-    }
+  async isUserViewerOfStory(storyId: string, viewerId: string): Promise<boolean> {
+    const { data } = await this.client.from("story_views").select("story_id").eq("story_id", storyId).eq("viewer_id", viewerId).maybeSingle();
+    return Boolean(data);
   }
 }

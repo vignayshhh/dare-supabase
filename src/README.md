@@ -17,7 +17,7 @@ src/
 ├── backend/           # Backend Layer - Domain & Infrastructure
 │   ├── domain/        # Business entities, interfaces
 │   ├── repositories/  # Data access implementations
-│   ├── lib/           # Firebase, infrastructure
+│   ├── lib/           # Supabase, infrastructure
 │   ├── types/         # Database types
 │   └── utils/         # Backend utilities
 └── __tests__/         # Tests for all layers
@@ -29,7 +29,7 @@ src/
 - React components and screens
 - User interaction handling
 - Presentation logic only
-- **NO**: Firebase calls, business logic, database access
+- **NO**: Supabase calls, business logic, database access
 
 ### Middleware Layer  
 - Service orchestration
@@ -40,7 +40,7 @@ src/
 ### Backend Layer
 - Domain entities and business rules
 - Repository implementations
-- Firebase operations
+- Supabase operations
 - **NO**: UI coupling, frontend dependencies
 
 ## Architecture Contract
@@ -59,7 +59,7 @@ See `/docs/ARCHITECTURE_CONTRACT.md` for the permanent binding agreement that en
 
 ### Backend can import:
 - Other backend modules
-- Infrastructure (Firebase)
+- Infrastructure (Supabase)
 
 ### Forbidden Imports:
 - Frontend → Backend (direct)

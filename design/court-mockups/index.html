@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Friendship Court — UI Mockups</title>
+<style>
+  :root{ --bg:#0a0614; --card:#160d28; --ink:#ece6fb; --muted:#9d8bc4; --gold:#ffd766; }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%, #241445, var(--bg));color:var(--ink);
+       font-family:'Segoe UI',system-ui,sans-serif;padding:32px 16px 80px}
+  h1{text-align:center;font-size:28px;margin:0 0 4px;letter-spacing:1px}
+  h1 .g{color:var(--gold)}
+  p.sub{text-align:center;color:var(--muted);margin:0 0 32px}
+  .grid{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;max-width:1280px;margin:0 auto}
+  .frame{background:var(--card);border:1px solid #2c1a4a;border-radius:28px;padding:14px;
+         box-shadow:0 20px 60px rgba(0,0,0,.5);width:min(390px,92vw)}
+  .frame img{width:100%;display:block;border-radius:18px}
+  .label{margin:12px 4px 2px;font-weight:800;font-size:15px}
+  .desc{margin:0 4px 4px;color:var(--muted);font-size:12.5px;line-height:1.45}
+  .notch{width:120px;height:6px;background:#2c1a4a;border-radius:6px;margin:2px auto 12px}
+</style>
+</head>
+<body>
+  <h1>⚖ <span class="g">Friendship Court</span> — UI Mockups</h1>
+  <p class="sub">Mobile · dramatic courtroom · tap through the trial lifecycle</p>
+  <div class="grid">
+    <div class="frame">
+      <div class="notch"></div>
+      <img src="1-courtroom-session.svg" alt="Courtroom in session"/>
+      <div class="label">1 · Court in session</div>
+      <p class="desc">Prosecution vs Defense as stickmen with profile-pic heads, judge on the bench, live timer, the live opinion bar, and SWITCH SIDE. <b>Reveal-on-send:</b> spectators see only suspense — "Aakash is sealing their statement 📜… drops all at once" — never the live typing.</p>
+    </div>
+    <div class="frame">
+      <div class="notch"></div>
+      <img src="2-your-turn-typing.svg" alt="Your turn to speak"/>
+      <div class="label">2 · Your turn (compose)</div>
+      <p class="desc">Full cinematic takeover: spotlight + pulsing "IT'S YOUR TURN". You draft <b>privately</b> ("🔒 hidden until you send"), then hit <b>SLAM ⚡ reveal</b> to drop it on the whole court at once. Evidence / @witness / rest-case actions + speaking-window ring.</p>
+    </div>
+    <div class="frame">
+      <div class="notch"></div>
+      <img src="3-vote-shift.svg" alt="Vote shift moment"/>
+      <div class="label">3 · The vote shift</div>
+      <p class="desc">Between-round suspense beat: before/after bars animate the swing, avatars flip sides, big GUILTY / NOT GUILTY tap targets, a closing countdown, and the judge watching the swing.</p>
+    </div>
+    <div class="frame">
+      <div class="notch"></div>
+      <img src="4-verdict-jail.svg" alt="Verdict and jail"/>
+      <div class="label">4 · Verdict → jail → archive</div>
+      <p class="desc">Judge verdict, public override result, sentence, the animated jail with roses/notes/paper balls and a 6h countdown, observer-mode note, visitor actions, and the archive card for Highlights/Memories.</p>
+    </div>
+  </div>
+</body>
+</html>

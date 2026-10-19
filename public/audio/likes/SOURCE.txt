@@ -1,0 +1,26 @@
+Continuous feed-like sound: bubble-flow.wav
+
+Creator: rubberduck
+Collection: 40 CC0 water / splash / slime SFX
+Original file: loop_bubbles_1.ogg
+Source: https://opengameart.org/content/40-cc0-water-splash-slime-sfx
+Download: https://opengameart.org/sites/default/files/water-splash-slime-sfx.zip
+License: Creative Commons CC0 1.0 Universal (public domain dedication)
+License deed: https://creativecommons.org/publicdomain/zero/1.0/
+Legal code: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+Retrieved: 2026-10-16
+Original file SHA-256: 5ae25a9734a05f60e57a1b1db2fa9afaddf972c1a2927c1e743e720fcdaaccfe
+
+Preparation: decoded original Ogg recording, downmixed to mono, resampled to
+22,050 Hz, peak normalized to 0.72, and encoded as 16-bit PCM WAV for browser
+compatibility. Duration: 4.407 seconds. Playback uses one continuous loop with
+the website's existing volume fade and gradual playback-rate adjustment.
+
+The source page explicitly identifies the collection as CC0. Attribution is
+provided here for provenance; it is not a CC0 requirement. No endorsement by
+the creator is implied.
+
+Other files (pop-0.wav through pop-7.wav, celebrate.wav, flow.wav) are earlier
+project-generated sounds. They are not used by the current continuous player.
+scripts/generate-feed-like-audio.mjs generates only those original assets and
+does not replace the downloaded bubble-flow.wav recording.

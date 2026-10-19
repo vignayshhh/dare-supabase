@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1440" viewBox="0 0 1080 1440">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="-8%" r="86%"><stop offset="0" stop-color="#17351f"/><stop offset="42%" stop-color="#0a0f0a"/><stop offset="100%" stop-color="#030403"/></radialGradient>
+    <linearGradient id="ring" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#4ade80"/><stop offset=".62" stop-color="#d7ffe6"/><stop offset="1" stop-color="#38bdf8"/></linearGradient>
+    <linearGradient id="green" x1="0" x2="1"><stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#22c55e"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="26" stdDeviation="26" flood-color="#000" flood-opacity=".42"/></filter>
+    <style>.h1{fill:#fff;font:900 38px Inter,Arial,sans-serif;letter-spacing:-.02em}.sub{fill:#94a3b8;font:700 22px Inter,Arial,sans-serif}.body{fill:#fff;font:800 24px Inter,Arial,sans-serif}.muted{fill:#94a3b8;font:700 19px Inter,Arial,sans-serif}.tiny{fill:#64748b;font:900 14px Inter,Arial,sans-serif;letter-spacing:2.2px}.dark{fill:#061006;font:900 19px Inter,Arial,sans-serif}.green{fill:#86efac;font:900 14px Inter,Arial,sans-serif;letter-spacing:2px}</style>
+  </defs>
+  <rect width="1080" height="1440" fill="url(#bg)"/><circle cx="540" cy="-42" r="370" fill="#4ade80" opacity=".09"/><circle cx="940" cy="250" r="260" fill="#38bdf8" opacity=".055"/>
+  <text x="72" y="96" class="h1">Clean IG Enhancement F</text><text x="72" y="132" class="sub">Ghost Mode accent</text>
+  <g transform="translate(90 190)" filter="url(#shadow)">
+    <rect width="900" height="960" rx="56" fill="#020403" stroke="rgba(255,255,255,.08)" stroke-width="2"/><rect x="28" y="28" width="844" height="904" rx="42" fill="#050806" stroke="rgba(255,255,255,.08)" stroke-width="2"/>
+    <g transform="translate(74 82)"><text x="0" y="30" class="body">@aarav.dares</text><rect x="616" y="-8" width="140" height="48" rx="24" fill="rgba(74,222,128,.12)" stroke="rgba(74,222,128,.28)"/><text x="686" y="22" text-anchor="middle" class="green">GHOST ON</text></g>
+    <g transform="translate(74 190)">
+      <circle cx="86" cy="86" r="76" fill="url(#ring)"/><circle cx="86" cy="86" r="66" fill="#07100b"/><circle cx="86" cy="72" r="31" fill="#d7ffe6"/><path d="M38 132 C50 101 122 101 134 132" fill="#d7ffe6"/>
+      <g transform="translate(250 34)"><text x="0" y="31" class="h1" font-size="35">48</text><text x="-2" y="68" class="tiny">POSTS</text><text x="158" y="31" class="h1" font-size="35">31</text><text x="154" y="68" class="tiny">DARES</text><text x="324" y="31" class="h1" font-size="35">126</text><text x="322" y="68" class="tiny">FRIENDS</text></g>
+      <text x="0" y="234" class="body">Aarav Sharma</text><text x="0" y="272" class="muted">Dare streaks, proof wins, close-friend stories.</text>
+      <rect x="0" y="308" width="278" height="46" rx="23" fill="rgba(74,222,128,.1)" stroke="rgba(74,222,128,.24)"/><circle cx="26" cy="331" r="8" fill="#4ade80"/><text x="48" y="337" class="green">PRIVATE CIRCLE ACTIVE</text>
+    </g>
+    <g transform="translate(74 590)"><rect width="340" height="58" rx="16" fill="rgba(255,255,255,.075)" stroke="rgba(255,255,255,.15)"/><text x="170" y="37" text-anchor="middle" class="body" font-size="20">Edit profile</text><rect x="360" width="274" height="58" rx="16" fill="rgba(255,255,255,.075)" stroke="rgba(255,255,255,.15)"/><text x="497" y="37" text-anchor="middle" class="body" font-size="20">Activity</text><rect x="656" width="102" height="58" rx="18" fill="rgba(74,222,128,.18)" stroke="rgba(74,222,128,.42)"/><path d="M696 16 C714 24 720 24 738 16 L738 31 C738 48 724 58 717 62 C710 58 696 48 696 31 Z" fill="none" stroke="#4ade80" stroke-width="4"/></g>
+    <g transform="translate(74 704)"><rect width="758" height="76" rx="38" fill="#07100b" stroke="rgba(255,255,255,.08)" stroke-width="2"/><rect x="8" y="8" width="244" height="60" rx="30" fill="url(#green)"/><text x="130" y="47" text-anchor="middle" class="dark">Posts</text><text x="380" y="47" text-anchor="middle" class="muted">Truths</text><text x="630" y="47" text-anchor="middle" class="muted">Dares</text></g>
+  </g>
+</svg>

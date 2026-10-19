@@ -25,7 +25,6 @@ export interface Dare {
   acceptedAt: string | null;
   proofSubmittedAt: string | null;
   completedAt: string | null;
-  ghostModeUntil: string | null; // Timer field
 }
 
 export interface DareVote {

@@ -11,8 +11,6 @@ export interface UserProfile {
   consentAccepted: boolean;
   daresCompleted: number;
   daresRefused: number;
-  ghostModeActive: boolean;
-  ghostModeExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -23,7 +21,6 @@ export interface UserProfileUpdate {
   bio?: string;
   avatarUrl?: string;
   visibility?: "PUBLIC" | "PRIVATE";
-  ghostModeActive?: boolean;
   daresCompleted?: number;
   daresRefused?: number;
 }
@@ -31,11 +28,12 @@ export interface UserProfileUpdate {
 export interface IUserRepository {
   getProfileById(profileId: string): Promise<UserProfile | null>;
   getProfileByUserId(userId: string): Promise<UserProfile | null>;
+  /** Fetch visible profiles in one request; preserves RLS visibility. */
+  getProfilesByUserIds(userIds: string[]): Promise<UserProfile[]>;
   updateProfile(
     profileId: string,
     updates: UserProfileUpdate,
   ): Promise<UserProfile>;
   searchProfiles(query: string, limit?: number): Promise<UserProfile[]>;
   canViewProfile(profileId: string, viewerId?: string): Promise<boolean>;
-  recordProfileView(profileId: string, viewerId: string): Promise<void>;
 }

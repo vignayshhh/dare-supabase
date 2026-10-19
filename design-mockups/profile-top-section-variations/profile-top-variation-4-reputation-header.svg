@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1440" viewBox="0 0 1080 1440">
+  <defs>
+    <radialGradient id="pageBg" cx="50%" cy="-8%" r="88%">
+      <stop offset="0" stop-color="#19351f"/>
+      <stop offset="40%" stop-color="#0a0f0a"/>
+      <stop offset="100%" stop-color="#030403"/>
+    </radialGradient>
+    <linearGradient id="surface" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#121b15"/>
+      <stop offset="1" stop-color="#060806"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#facc15"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <style>
+      .title { fill:#ffffff; font:900 38px Inter, Arial, sans-serif; letter-spacing:-0.02em; }
+      .subtitle { fill:#94a3b8; font:700 22px Inter, Arial, sans-serif; }
+      .body { fill:#ffffff; font:800 25px Inter, Arial, sans-serif; }
+      .muted { fill:#94a3b8; font:700 20px Inter, Arial, sans-serif; }
+      .tiny { fill:#64748b; font:900 15px Inter, Arial, sans-serif; letter-spacing:2.5px; }
+      .chip { fill:#86efac; font:900 15px Inter, Arial, sans-serif; letter-spacing:2.4px; }
+      .dark { fill:#061006; font:900 20px Inter, Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1080" height="1440" fill="url(#pageBg)"/>
+  <circle cx="540" cy="-60" r="390" fill="#4ade80" opacity="0.10"/>
+  <circle cx="914" cy="390" r="250" fill="#facc15" opacity="0.055"/>
+
+  <text x="72" y="96" class="title">Variation 4</text>
+  <text x="72" y="132" class="subtitle">Reputation Header</text>
+
+  <g transform="translate(90 190)" filter="url(#softShadow)">
+    <rect width="900" height="960" rx="56" fill="#020403" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+    <rect x="26" y="26" width="848" height="908" rx="42" fill="#050806" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+
+    <g transform="translate(68 72)">
+      <text x="0" y="28" class="body">@aarav.dares</text>
+      <rect x="622" y="-10" width="156" height="48" rx="24" fill="rgba(74,222,128,0.12)" stroke="rgba(74,222,128,0.24)"/>
+      <text x="700" y="20" text-anchor="middle" class="chip">GHOST READY</text>
+    </g>
+
+    <g transform="translate(68 148)">
+      <rect width="778" height="260" rx="42" fill="url(#surface)" stroke="rgba(255,255,255,0.09)" stroke-width="2"/>
+      <path d="M0 0 H778" stroke="#facc15" stroke-width="2" opacity="0.45"/>
+      <circle cx="108" cy="112" r="74" fill="url(#green)"/>
+      <circle cx="108" cy="112" r="64" fill="#07100b"/>
+      <circle cx="108" cy="94" r="30" fill="#d7ffe6"/>
+      <path d="M60 150 C72 118 144 118 156 150" fill="#d7ffe6"/>
+
+      <text x="220" y="78" class="title" font-size="38">Aarav Sharma</text>
+      <text x="220" y="116" class="muted">@aarav.dares</text>
+      <rect x="220" y="146" width="218" height="58" rx="29" fill="rgba(250,204,21,0.12)" stroke="rgba(250,204,21,0.28)"/>
+      <text x="329" y="182" text-anchor="middle" fill="#facc15" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="900">12 DAY STREAK</text>
+      <rect x="458" y="146" width="192" height="58" rx="29" fill="url(#green)"/>
+      <text x="554" y="182" text-anchor="middle" class="dark">Edit card</text>
+    </g>
+
+    <g transform="translate(68 446)">
+      <rect width="374" height="154" rx="36" fill="rgba(74,222,128,0.08)" stroke="rgba(74,222,128,0.2)"/>
+      <text x="34" y="54" class="title" font-size="48">31</text>
+      <text x="34" y="94" class="tiny">COMPLETED DARES</text>
+      <rect x="34" y="116" width="290" height="12" rx="6" fill="rgba(255,255,255,0.1)"/>
+      <rect x="34" y="116" width="228" height="12" rx="6" fill="url(#green)"/>
+
+      <rect x="404" width="374" height="154" rx="36" fill="rgba(56,189,248,0.07)" stroke="rgba(56,189,248,0.18)"/>
+      <text x="438" y="54" class="title" font-size="48">82%</text>
+      <text x="438" y="94" class="tiny">REAL SCORE</text>
+      <rect x="438" y="116" width="290" height="12" rx="6" fill="rgba(255,255,255,0.1)"/>
+      <rect x="438" y="116" width="238" height="12" rx="6" fill="url(#blue)"/>
+    </g>
+
+    <g transform="translate(68 630)">
+      <rect width="242" height="120" rx="30" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)"/>
+      <text x="34" y="50" class="title" font-size="36">19</text>
+      <text x="34" y="82" class="tiny">TRUTHS</text>
+      <rect x="268" width="242" height="120" rx="30" fill="rgba(250,204,21,0.08)" stroke="rgba(250,204,21,0.18)"/>
+      <text x="302" y="50" class="title" font-size="36">4</text>
+      <text x="302" y="82" class="tiny">SURRENDERED</text>
+      <rect x="536" width="242" height="120" rx="30" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)"/>
+      <text x="570" y="50" class="title" font-size="36">126</text>
+      <text x="570" y="82" class="tiny">FRIENDS</text>
+    </g>
+
+    <g transform="translate(68 790)">
+      <rect width="778" height="76" rx="38" fill="#07100b" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+      <rect x="8" y="8" width="250" height="60" rx="30" fill="url(#green)"/>
+      <text x="133" y="47" text-anchor="middle" class="dark">Posts</text>
+      <text x="389" y="47" text-anchor="middle" class="muted">Truths</text>
+      <text x="648" y="47" text-anchor="middle" class="muted">Dares</text>
+    </g>
+
+    <g transform="translate(68 906)">
+      <rect width="778" height="54" rx="27" fill="rgba(74,222,128,0.08)" stroke="rgba(74,222,128,0.18)"/>
+      <text x="28" y="35" class="chip">REPUTATION-FIRST TOP SECTION</text>
+    </g>
+  </g>
+</svg>

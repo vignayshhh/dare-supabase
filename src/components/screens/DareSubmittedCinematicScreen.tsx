@@ -1,6 +1,6 @@
 "use client";
 
-import { Send, Sparkles } from "lucide-react";
+import { CheckCircle2, Sparkles } from "lucide-react";
 
 interface DareSubmittedCinematicScreenProps {
   recipientLabel?: string;
@@ -12,8 +12,8 @@ export function DareSubmittedCinematicScreen({
   isExiting = false,
 }: DareSubmittedCinematicScreenProps) {
   const subtitle = recipientLabel
-    ? `Your proof is now under review for ${recipientLabel}.`
-    : "Your proof is now under review.";
+    ? `Your completed dare for ${recipientLabel} is now live in the feed.`
+    : "Your completed dare is now live in the feed.";
 
   return (
     <div className="screen-container relative h-[100dvh] max-h-[100dvh] items-center justify-center overflow-hidden bg-[#050805]">
@@ -63,9 +63,9 @@ export function DareSubmittedCinematicScreen({
                 "dareSubmittedIconPop 0.85s cubic-bezier(0.22,1,0.36,1) forwards",
             }}
           >
-            <Send
+            <CheckCircle2
               size={78}
-              className="translate-x-1 text-[#a8f0bf] sm:h-20 sm:w-20"
+              className="text-[#a8f0bf] sm:h-20 sm:w-20"
             />
           </div>
 
@@ -91,10 +91,10 @@ export function DareSubmittedCinematicScreen({
         >
           <div className="mx-auto mb-3 inline-flex items-center gap-2 rounded-full border border-[#79d99a]/20 bg-[#79d99a]/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-[#a8f0bf]">
             <Sparkles size={13} />
-            Under review
+            Completed
           </div>
           <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">
-            Dare Submitted
+            Dare Completed
           </h1>
           <p className="mt-4 text-base font-semibold leading-7 text-[#c7d2c9] sm:text-lg">
             {subtitle}

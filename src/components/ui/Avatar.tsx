@@ -1,10 +1,67 @@
 import React, { useState, useEffect } from "react";
-import { Ghost } from "lucide-react";
 import { useAvatarStore, getAggressiveAvatar } from "../../stores/avatarStore";
 import { useUserAvatar } from "../../hooks/useUserAvatar";
-import { useUserGhostMode } from "../../hooks/useUserGhostMode";
-import { useAuthStore } from "../../stores/useAuthStore-v2";
-import { useGhostModeStore } from "../../stores/useGhostModeStore";
+
+export const isPlaceholderAvatarUrl = (src?: string | null) =>
+  !src || /\/default-avatar\.(?:png|svg)(?:[?#].*)?$/i.test(src.trim());
+
+export function DefaultAvatarArtwork({
+  className = "",
+  label = "Default profile avatar",
+}: {
+  className?: string;
+  label?: string;
+}) {
+  return (
+    <div
+      className={`flex h-full w-full items-center justify-center overflow-hidden bg-[#101611] ${className}`}
+      role="img"
+      aria-label={label}
+    >
+      <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
+        <defs>
+          <linearGradient id="dare-avatar-bg" x1="12" y1="8" x2="88" y2="94">
+            <stop stopColor="#FACC15" />
+            <stop offset="0.52" stopColor="#4ADE80" />
+            <stop offset="1" stopColor="#38BDF8" />
+          </linearGradient>
+        </defs>
+        <rect width="100" height="100" rx="28" fill="#0B100C" />
+        <path d="M-8 76C17 51 29 87 53 67s39-7 55-26v67H-8Z" fill="url(#dare-avatar-bg)" opacity=".28" />
+        <circle cx="50" cy="42" r="25" fill="#111713" stroke="#F8FAFC" strokeWidth="4" />
+        <circle cx="41" cy="39" r="3.5" fill="#FACC15" />
+        <circle cx="59" cy="39" r="3.5" fill="#FACC15" />
+        <path d="M39 53c7 6 16 6 23-1" fill="none" stroke="#F8FAFC" strokeWidth="4" strokeLinecap="round" />
+        <path d="M50 68v22M50 76 31 88m19-12 19 12" fill="none" stroke="#F8FAFC" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m78 17 2.4 5.3L86 25l-5.6 2.2L78 33l-2.3-5.8L70 25l5.7-2.7Z" fill="#FB7185" />
+      </svg>
+    </div>
+  );
+}
+
+/** Abstract placeholder for stickman heads; avoids nesting another stickman. */
+export function DefaultStickmanHeadArtwork({
+  className = "",
+  label = "Default stickman head",
+}: {
+  className?: string;
+  label?: string;
+}) {
+  return (
+    <div
+      className={`flex h-full w-full items-center justify-center overflow-hidden bg-[#101611] ${className}`}
+      role="img"
+      aria-label={label}
+    >
+      <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
+        <rect width="100" height="100" rx="30" fill="#101611" />
+        <circle cx="40" cy="45" r="4" fill="#FACC15" />
+        <circle cx="60" cy="45" r="4" fill="#FACC15" />
+        <path d="M37 59c7 7 19 7 26 0" fill="none" stroke="#F8FAFC" strokeWidth="4" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
 
 interface AvatarProps {
   src?: string;
@@ -20,8 +77,7 @@ interface AvatarProps {
   borderColor?: string;
   userId?: string;
   username?: string;
-  forceGhostMode?: boolean;
-  disableGhostMode?: boolean;
+  disableRealtime?: boolean;
 }
 
 export const Avatar: React.FC<AvatarProps> = ({
@@ -30,8 +86,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   size,
   username,
   userId,
-  forceGhostMode,
-  disableGhostMode = false,
+  disableRealtime = false,
   className = "",
   style,
   onClick,
@@ -42,15 +97,12 @@ export const Avatar: React.FC<AvatarProps> = ({
 }) => {
   const AVATAR_SCALE = 0.94;
   const [imageError, setImageError] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const currentUserId = useAuthStore((state) => state.user?.id);
-  const currentUserGhostModeActive = useGhostModeStore((state) => state.isActive);
 
   // Use real-time avatar subscription for other users when userId is provided
   // This ensures avatars update in real-time when other users change their profile picture
-  const { avatar: realTimeAvatar } = useUserAvatar(userId);
-  const { isGhostModeActive: userGhostModeActive } = useUserGhostMode(userId);
+  const realtimeUserId = disableRealtime ? undefined : userId;
+  const { avatar: realTimeAvatar } = useUserAvatar(realtimeUserId);
 
   // Subscribe to avatar store so this component re-renders when avatars update.
   // Without this, using getState() alone can leave stale avatars on screen.
@@ -66,22 +118,12 @@ export const Avatar: React.FC<AvatarProps> = ({
     userId,
     username,
   );
-  const isCurrentUserAvatar = Boolean(userId && currentUserId === userId);
-  const showGhostAvatar =
-    disableGhostMode
-      ? false
-      : forceGhostMode ??
-        (isCurrentUserAvatar
-          ? currentUserGhostModeActive || userGhostModeActive
-          : userGhostModeActive);
+  const usableSrc = isPlaceholderAvatarUrl(finalSrc) ? "" : finalSrc;
 
-  const handleError = () => {
-    setImageError(true);
-  };
-
-  const handleLoad = () => {
-    setImageLoaded(true);
-  };
+  useEffect(() => {
+    setImageError(false);
+    setIsLoading(Boolean(usableSrc));
+  }, [usableSrc]);
 
   // Size classes mapping
   const sizeClasses = {
@@ -172,21 +214,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   // NORMAL RENDERING: Use proper logic with fallback
   // Always show fallback when there's no src, on error, OR while loading
-  const showFallback = !finalSrc || imageError || isLoading || showGhostAvatar;
-  const ghostIconSize =
-    scaledNumericSize !== null
-      ? Math.max(18, Math.round(scaledNumericSize * 0.54))
-      : presetSize === "xs"
-        ? 14
-        : presetSize === "sm"
-          ? 17
-          : presetSize === "md"
-            ? 22
-            : presetSize === "lg"
-              ? 28
-              : presetSize === "xl"
-                ? 34
-                : 40;
+  const showFallback = !usableSrc || imageError || isLoading;
 
   return (
     <div
@@ -201,34 +229,15 @@ export const Avatar: React.FC<AvatarProps> = ({
     >
       {/* Fallback: visible when no src, error, or still loading */}
       {showFallback && (
-        <div
-          className={`${
-            resolvedSizeClasses
-          } rounded-full flex items-center justify-center font-semibold absolute inset-0 ${
-            showGhostAvatar
-              ? "bg-[radial-gradient(circle_at_30%_30%,#dcfce7_0%,#86efac_18%,#22c55e_48%,#0b5d34_100%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.48),0_10px_24px_rgba(34,197,94,0.35)]"
-              : "bg-[#4ade80] text-black"
-          }`}
-        >
-          {showGhostAvatar ? (
-            <div className="relative flex h-full w-full items-center justify-center">
-              <div className="absolute inset-[12%] rounded-full border border-white/20 bg-[radial-gradient(circle_at_top,#ffffff33_0%,transparent_60%)]" />
-              <div className="absolute inset-[18%] rounded-full ring-1 ring-white/10" />
-              <Ghost
-                size={ghostIconSize}
-                strokeWidth={2.3}
-                className="relative drop-shadow-[0_3px_10px_rgba(6,78,59,0.45)]"
-              />
-            </div>
-          ) : (
-            <span className="select-none">{getFallbackText()}</span>
-          )}
+        <div className={`${resolvedSizeClasses} absolute inset-0 overflow-hidden rounded-full border-2 border-[#4ade80] text-white`}>
+          <DefaultAvatarArtwork label={`${alt || "User"} default avatar`} />
+          <span className="sr-only select-none">{getFallbackText()}</span>
         </div>
       )}
       {/* Image: render when we have a src and no error; hidden until loaded */}
-      {finalSrc && !imageError && !showGhostAvatar && (
+      {usableSrc && !imageError && (
         <img
-          src={finalSrc}
+          src={usableSrc}
           alt={alt}
           className="absolute inset-0 w-full h-full rounded-full object-cover"
           onError={handleImageError}

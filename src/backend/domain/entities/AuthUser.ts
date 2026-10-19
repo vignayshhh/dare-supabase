@@ -10,8 +10,6 @@ export class AuthUserEntity {
     public readonly visibility: "PUBLIC" | "PRIVATE",
     public readonly daresCompleted: number,
     public readonly daresRefused: number,
-    public readonly ghostModeActive: boolean,
-    public readonly ghostModeExpiresAt: string | null,
     public readonly createdAt: string,
     public readonly updatedAt: string,
   ) {}
@@ -27,8 +25,6 @@ export class AuthUserEntity {
     visibility: "PUBLIC" | "PRIVATE";
     daresCompleted: number;
     daresRefused: number;
-    ghostModeActive: boolean;
-    ghostModeExpiresAt: string | null;
     createdAt: string;
     updatedAt: string;
   }): AuthUserEntity {
@@ -43,29 +39,19 @@ export class AuthUserEntity {
       userData.visibility,
       userData.daresCompleted,
       userData.daresRefused,
-      userData.ghostModeActive,
-      userData.ghostModeExpiresAt,
       userData.createdAt,
       userData.updatedAt,
     );
   }
 
-  isGhostModeActive(): boolean {
-    if (!this.ghostModeActive || !this.ghostModeExpiresAt) {
-      return false;
-    }
-    return new Date(this.ghostModeExpiresAt) > new Date();
-  }
-
   canBeDared(): boolean {
-    return this.is18Plus && this.consentAccepted && !this.isGhostModeActive();
+    return this.is18Plus && this.consentAccepted;
   }
 
   updateProfile(updates: {
     displayName?: string;
     nickname?: string;
     visibility?: "PUBLIC" | "PRIVATE";
-    ghostModeActive?: boolean;
   }): AuthUserEntity {
     return new AuthUserEntity(
       this.userId,
@@ -78,8 +64,6 @@ export class AuthUserEntity {
       updates.visibility ?? this.visibility,
       this.daresCompleted,
       this.daresRefused,
-      updates.ghostModeActive ?? this.ghostModeActive,
-      this.ghostModeExpiresAt,
       this.createdAt,
       new Date().toISOString(),
     );

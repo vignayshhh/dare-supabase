@@ -1,0 +1,49 @@
+SUPABASE USAGE OPTIMIZATION — COMPLETION REPORT
+===============================================
+
+Scope: findings 2–16. Finding 1 (external Redis replacement) intentionally excluded.
+
+2 Cache invalidation: batch set/delete/increment, Circle generation keys, request-local Circle
+  audience memoization, profile write batching, obsolete feed pattern deletion removed.
+3 Materialized feed: Circle-scoped publishing now invalidates generations without feed_items or
+  feed_fanout_jobs writes; legacy tables/helpers retained for compatibility.
+4 Truth interactions: bounded snapshot RPC, authoritative counts/revision, client snapshot use,
+  event/visibility/reconnect reconciliation, healthy polling removed.
+5 Drama: ID-targeted feed reads, dirty-ID coalescing, merge stores, bounded event refresh.
+6 Realtime collections: community chat applies complete row events to bounded local state and
+  reconciles only incomplete/uncertain events.
+7 Dare voters: deduplicated profile IDs and profiles IN batches; authoritative snapshot path kept
+  compatible with existing fallback behavior.
+8 Signed media: project-host validation, object identity normalization, bounded cache, in-flight
+  signing dedupe, token-derived expiration.
+9 Community proofs: shared optimized upload path; dare-proofs bucket and limits preserved.
+10 Media encoding: PNG/WebP optimization improved; MIME/extension consistency and limits retained;
+  video originals preserved.
+11 Auth: fresh auth.getUser retained; duplicate calls within one Request share one Promise only.
+12 Inbox: targeted conversation IDs, coalesced updates, page cursor, member-change delivery,
+  broad member reload removed.
+13 Counters: additive transactional reaction/comment delta triggers; tap SUM semantics preserved;
+  no-op writes avoided.
+14 Maintenance: indexed bounded cache expiry cleanup; new media registry/reference lifecycle,
+  bounded cleanup, cron routes; historical objects report-only.
+15 Feed: Circle keyset index and created_at/id cursor support added; old cursor compatibility kept.
+16 Observability: database/Auth/Storage/failure/byte metrics, middleware/server/request-scoped
+  instrumentation coverage, refresh-controller tests.
+
+Validation completed
+--------------------
+* npm run type-check — pass.
+* npm run build — pass.
+* Focused resource/refresh tests — 4 tests pass.
+* Changed-file ESLint — 0 errors, 1 unused legacy helper warning.
+* npm run audit:supabase — completed; current static inventory: 363 files, 484 from calls,
+  98 RPC calls, 44 intervals. Static inventory is not a billing measurement.
+* Full lint still has one pre-existing repository error in tests/qa/verdict-comments-results.spec.ts
+  plus existing warnings.
+
+Deployment gates
+----------------
+Run the full migration sequence in an isolated database. Verify RLS/private Broadcast policies,
+function grants, trigger concurrency, media reference attachment in every authoritative mutation,
+Storage cleanup retries, and representative feed query plans. Capture browser and server resource
+envelopes before/after rollout. Do not delete historical Storage objects automatically.

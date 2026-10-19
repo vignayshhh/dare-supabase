@@ -80,8 +80,6 @@ class AuthService {
             visibility: authUser.visibility,
             daresCompleted: authUser.daresCompleted,
             daresRefused: authUser.daresRefused,
-            ghostModeActive: authUser.ghostModeActive,
-            ghostModeExpiresAt: authUser.ghostModeExpiresAt,
             createdAt: authUser.createdAt,
             updatedAt: authUser.updatedAt,
           });
@@ -181,8 +179,6 @@ class AuthService {
           visibility: response.user.visibility,
           daresCompleted: response.user.daresCompleted,
           daresRefused: response.user.daresRefused,
-          ghostModeActive: response.user.ghostModeActive,
-          ghostModeExpiresAt: response.user.ghostModeExpiresAt,
           createdAt: response.user.createdAt,
           updatedAt: response.user.updatedAt,
         });
@@ -266,7 +262,6 @@ class AuthService {
       const repositoryUpdates = {
         displayName: updates.displayName,
         visibility: updates.visibility,
-        ghostModeActive: updates.ghostModeActive,
       };
 
       const updatedUser = await this.authRepository.updateUserProfile(
@@ -285,8 +280,6 @@ class AuthService {
         visibility: updatedUser.visibility,
         daresCompleted: updatedUser.daresCompleted,
         daresRefused: updatedUser.daresRefused,
-        ghostModeActive: updatedUser.ghostModeActive,
-        ghostModeExpiresAt: updatedUser.ghostModeExpiresAt,
         createdAt: updatedUser.createdAt,
         updatedAt: updatedUser.updatedAt,
       });

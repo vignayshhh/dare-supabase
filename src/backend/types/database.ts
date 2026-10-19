@@ -22,8 +22,6 @@ export interface Database {
           consent_accepted: boolean;
           dares_completed: number;
           dares_refused: number;
-          ghost_mode_active: boolean;
-          ghost_mode_expires_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -78,21 +76,6 @@ export interface Database {
         >;
         Update: Partial<Database["public"]["Tables"]["post_likes"]["Insert"]>;
       };
-      post_views: {
-        Row: {
-          id: string;
-          post_id: string;
-          viewer_id: string;
-          view_count: number;
-          first_viewed_at: string;
-          last_viewed_at: string;
-        };
-        Insert: Omit<
-          Database["public"]["Tables"]["post_views"]["Row"],
-          "id" | "first_viewed_at" | "last_viewed_at"
-        >;
-        Update: Partial<Database["public"]["Tables"]["post_views"]["Insert"]>;
-      };
       dares: {
         Row: {
           id: string;
@@ -145,32 +128,13 @@ export interface Database {
         >;
         Update: Partial<Database["public"]["Tables"]["dare_votes"]["Insert"]>;
       };
-      profile_views: {
-        Row: {
-          id: string;
-          profile_id: string;
-          viewer_id: string;
-          view_count: number;
-          first_viewed_at: string;
-          last_viewed_at: string;
-        };
-        Insert: Omit<
-          Database["public"]["Tables"]["profile_views"]["Row"],
-          "id" | "first_viewed_at" | "last_viewed_at"
-        >;
-        Update: Partial<
-          Database["public"]["Tables"]["profile_views"]["Insert"]
-        >;
-      };
       presence: {
         Row: {
           id: string;
           user_id: string;
           is_online: boolean;
           last_seen: string;
-          current_profile_viewing: string | null;
           typing_in_chat_with: string | null;
-          ghost_mode: boolean;
           updated_at: string;
         };
         Insert: Omit<
@@ -372,10 +336,8 @@ export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Friendship = Database["public"]["Tables"]["friendships"]["Row"];
 export type Post = Database["public"]["Tables"]["posts"]["Row"];
 export type PostLike = Database["public"]["Tables"]["post_likes"]["Row"];
-export type PostView = Database["public"]["Tables"]["post_views"]["Row"];
 export type Dare = Database["public"]["Tables"]["dares"]["Row"];
 export type DareVote = Database["public"]["Tables"]["dare_votes"]["Row"];
-export type ProfileView = Database["public"]["Tables"]["profile_views"]["Row"];
 export type Presence = Database["public"]["Tables"]["presence"]["Row"];
 export type FeedEvent = Database["public"]["Tables"]["feed_events"]["Row"];
 export type Conversation = Database["public"]["Tables"]["conversations"]["Row"];

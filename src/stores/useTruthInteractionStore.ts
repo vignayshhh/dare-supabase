@@ -1,6 +1,6 @@
-// Truth Interaction Store
+﻿// Truth Interaction Store
 // Manages real-time truth votes and comments
-// UI components interact with this store only — never directly with Firebase
+// UI components interact with this store only â€” never directly with Supabase
 
 import { create } from "zustand";
 import { authService } from "@/middleware/services/auth-v2.service";
@@ -9,7 +9,7 @@ import {
   type TruthComment,
   type TruthVoteData,
 } from "@/middleware/services/truth-interactions.service";
-import { Unsubscribe } from "firebase/firestore";
+import type { Unsubscribe } from "@/types/realtime";
 import { votePersistence, type TruthVote } from "@/utils/votePersistence";
 import { commentLikePersistence } from "@/utils/commentLikePersistence";
 
@@ -24,6 +24,8 @@ interface TruthInteractionState {
   // Active subscriptions (not serialized)
   _voteSubs: Record<string, Unsubscribe>;
   _commentSubs: Record<string, Unsubscribe>;
+  _voteRefs: Record<string, number>;
+  _commentRefs: Record<string, number>;
 
   // Actions
   recordVote: (
@@ -60,11 +62,16 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
     loadingComments: {},
     _voteSubs: {},
     _commentSubs: {},
+    _voteRefs: {},
+    _commentRefs: {},
 
     // Subscribe to real-time vote data for a truth (used when vote modal is open)
     subscribeToVotes: (truthId: string, currentUserId: string) => {
       const { _voteSubs } = get();
-      if (_voteSubs[truthId]) return;
+      if (_voteSubs[truthId]) {
+        set((state: any) => ({ _voteRefs: { ...state._voteRefs, [truthId]: (state._voteRefs[truthId] || 1) + 1 } }));
+        return;
+      }
 
       set((state: any) => ({
         loadingVotes: { ...state.loadingVotes, [truthId]: true },
@@ -83,6 +90,7 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
 
       set((state: any) => ({
         _voteSubs: { ...state._voteSubs, [truthId]: unsub },
+        _voteRefs: { ...state._voteRefs, [truthId]: 1 },
       }));
     },
 
@@ -90,10 +98,13 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
     unsubscribeFromVotes: (truthId: string) => {
       const { _voteSubs } = get();
       if (_voteSubs[truthId]) {
+        const refs = get()._voteRefs[truthId] || 1;
+        if (refs > 1) { set((state: any) => ({ _voteRefs: { ...state._voteRefs, [truthId]: refs - 1 } })); return; }
         _voteSubs[truthId]();
         const newSubs = { ...get()._voteSubs };
+        const newRefs = { ...get()._voteRefs }; delete newRefs[truthId];
         delete newSubs[truthId];
-        set({ _voteSubs: newSubs });
+        set({ _voteSubs: newSubs, _voteRefs: newRefs });
       }
     },
 
@@ -106,14 +117,17 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
       try {
         await truthInteractionsService.recordVote(truthId, voterId, vote);
       } catch (error) {
-        console.error("❌ recordVote error:", error);
+        console.error("âŒ recordVote error:", error);
       }
     },
 
     // Subscribe to real-time comments for a truth
     subscribeToComments: (truthId: string) => {
       const { _commentSubs } = get();
-      if (_commentSubs[truthId]) return;
+      if (_commentSubs[truthId]) {
+        set((state: any) => ({ _commentRefs: { ...state._commentRefs, [truthId]: (state._commentRefs[truthId] || 1) + 1 } }));
+        return;
+      }
 
       set((state: any) => ({
         loadingComments: { ...state.loadingComments, [truthId]: true },
@@ -131,6 +145,7 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
 
       set((state: any) => ({
         _commentSubs: { ...state._commentSubs, [truthId]: unsub },
+        _commentRefs: { ...state._commentRefs, [truthId]: 1 },
       }));
     },
 
@@ -138,10 +153,13 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
     unsubscribeFromComments: (truthId: string) => {
       const { _commentSubs } = get();
       if (_commentSubs[truthId]) {
+        const refs = get()._commentRefs[truthId] || 1;
+        if (refs > 1) { set((state: any) => ({ _commentRefs: { ...state._commentRefs, [truthId]: refs - 1 } })); return; }
         _commentSubs[truthId]();
         const newSubs = { ...get()._commentSubs };
+        const newRefs = { ...get()._commentRefs }; delete newRefs[truthId];
         delete newSubs[truthId];
-        set({ _commentSubs: newSubs });
+        set({ _commentSubs: newSubs, _commentRefs: newRefs });
       }
     },
 
@@ -238,7 +256,7 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
 
         return newComment;
       } catch (error) {
-        console.error("❌ addComment error:", error);
+        console.error("âŒ addComment error:", error);
         return null;
       }
     },
@@ -267,7 +285,7 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
         }));
         truthInteractionsService.likeComment(commentId);
       } catch (error) {
-        console.error("❌ likeComment error:", error);
+        console.error("âŒ likeComment error:", error);
       }
     },
 
@@ -276,7 +294,7 @@ export const useTruthInteractionStore = create<TruthInteractionState>(
       const { _voteSubs, _commentSubs } = get();
       Object.values(_voteSubs).forEach((unsub) => unsub());
       Object.values(_commentSubs).forEach((unsub) => unsub());
-      set({ _voteSubs: {}, _commentSubs: {} });
+      set({ _voteSubs: {}, _commentSubs: {}, _voteRefs: {}, _commentRefs: {} });
     },
 
     // Persistent vote methods

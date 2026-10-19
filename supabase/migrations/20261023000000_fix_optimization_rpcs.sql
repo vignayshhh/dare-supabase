@@ -1,0 +1,35 @@
+create or replace function public.increment_cache_entry(p_key text,p_amount bigint default 1,p_ttl_ms bigint default null,p_refresh_expiry boolean default false)
+returns table(value bigint,expires_at timestamptz) language plpgsql security invoker set search_path=public as $$
+declare v_now timestamptz:=clock_timestamp();
+begin return query insert into public.cache_entries as entry(key,value,expires_at,updated_at) values(p_key,to_jsonb(p_amount),case when p_ttl_ms is null then null else v_now+(p_ttl_ms*interval '1 millisecond') end,v_now)
+on conflict(key) do update set value=to_jsonb(case when entry.expires_at is not null and entry.expires_at<=v_now then p_amount else coalesce((entry.value#>>'{}')::bigint,0)+p_amount end),expires_at=case when p_ttl_ms is null then entry.expires_at when entry.expires_at is null or entry.expires_at<=v_now or p_refresh_expiry then v_now+(p_ttl_ms*interval '1 millisecond') else entry.expires_at end,updated_at=v_now returning (entry.value#>>'{}')::bigint,entry.expires_at; end; $$;
+
+create or replace function public.mutate_cache_set(p_key text,p_value text,p_add boolean,p_ttl_ms bigint default null)
+returns jsonb language plpgsql security invoker set search_path=public as $$
+declare result jsonb; v_now timestamptz:=clock_timestamp();
+begin insert into public.cache_entries as entry(key,value,expires_at,updated_at) values(p_key,case when p_add then jsonb_build_array(p_value) else '[]'::jsonb end,case when p_ttl_ms is null then null else v_now+(p_ttl_ms*interval '1 millisecond') end,v_now)
+on conflict(key) do update set value=case when entry.expires_at is not null and entry.expires_at<=v_now then case when p_add then jsonb_build_array(p_value) else '[]'::jsonb end when p_add and not(entry.value?p_value) then entry.value||jsonb_build_array(p_value) when not p_add then coalesce((select jsonb_agg(item) from jsonb_array_elements(entry.value) item where item#>>'{}'<>p_value),'[]'::jsonb) else entry.value end,expires_at=case when p_ttl_ms is null then entry.expires_at else v_now+(p_ttl_ms*interval '1 millisecond') end,updated_at=v_now returning value into result; return result; end; $$;
+
+create or replace function public.record_legacy_story_view(p_story_id text,p_viewer_id text)
+returns jsonb language plpgsql security invoker set search_path=public as $$
+declare story_data jsonb; owner_id text; view_key text:=p_story_id||'_'||p_viewer_id; was_duplicate boolean; now_text text:=timezone('utc',now())::text;
+begin select data into story_data from public.data_documents where collection='stories' and document_id=p_story_id for update; if story_data is null then raise exception using errcode='P0002',message='story_not_found'; end if; owner_id:=coalesce(story_data->>'userId',story_data->>'user_id'); select exists(select 1 from public.data_documents where collection='story_views' and document_id=view_key) into was_duplicate;
+insert into public.data_documents(collection,document_id,data,updated_at) values('story_views',view_key,jsonb_build_object('storyId',p_story_id,'storyOwnerId',owner_id,'userId',p_viewer_id,'viewCount',case when was_duplicate then coalesce((select (sv.data->>'viewCount')::integer from public.data_documents sv where sv.collection='story_views' and sv.document_id=view_key),0)+1 else 1 end,'firstViewedAt',case when was_duplicate then (select sv.data->>'firstViewedAt' from public.data_documents sv where sv.collection='story_views' and sv.document_id=view_key) else now_text end,'lastViewedAt',now_text),timezone('utc',now())) on conflict(collection,document_id) do update set data=excluded.data,updated_at=excluded.updated_at;
+if not was_duplicate then insert into public.data_documents as target(collection,document_id,data,updated_at) values('story_view_stats',p_story_id,jsonb_build_object('storyId',p_story_id,'storyOwnerId',owner_id,'uniqueViewCount',1,'updatedAt',now_text),timezone('utc',now())) on conflict(collection,document_id) do update set data=jsonb_set(jsonb_set(target.data,'{uniqueViewCount}',to_jsonb(coalesce((target.data->>'uniqueViewCount')::integer,0)+1)),'{updatedAt}',to_jsonb(now_text)),updated_at=timezone('utc',now()); end if;
+return jsonb_build_object('duplicate',was_duplicate,'ownerId',owner_id); end; $$;
+
+create or replace function public.record_legacy_truth_vote(p_truth_id text,p_voter_id text,p_vote text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare truth_data jsonb; vote_collection text:='truths/'||p_truth_id||'/votes'; duplicate boolean; truth_votes integer; lie_votes integer; total integer; next_state text; now_text text:=timezone('utc',now())::text;
+begin if p_vote not in('TRUTH','LIE') then raise exception 'bad_vote'; end if; select data into truth_data from public.data_documents where collection='truths' and document_id=p_truth_id for update; if truth_data is null then raise exception using errcode='P0002',message='truth_not_found'; end if; duplicate:=exists(select 1 from public.data_documents where collection=vote_collection and document_id=p_voter_id);
+if not duplicate then insert into public.data_documents(collection,document_id,data,updated_at) values(vote_collection,p_voter_id,jsonb_build_object('voter_id',p_voter_id,'vote',p_vote,'created_at',now_text),timezone('utc',now())); update public.data_documents set data=jsonb_set(jsonb_set(data,array['votes',lower(p_vote)],to_jsonb(coalesce((data#>>array['votes',lower(p_vote)])::integer,0)+1)),array['votes','total'],to_jsonb(coalesce((data#>>array['votes','total'])::integer,0)+1)),updated_at=timezone('utc',now()) where collection='truths' and document_id=p_truth_id; end if;
+select count(*) filter(where data->>'vote'='TRUTH'),count(*) filter(where data->>'vote'='LIE'),count(*) into truth_votes,lie_votes,total from public.data_documents where collection=vote_collection; next_state:=null; if total>=3 then next_state:=case when truth_votes>lie_votes then 'APPROVED' else 'REJECTED' end; update public.data_documents set data=jsonb_set(jsonb_set(data,'{state}',to_jsonb(next_state)),'{reviewed_at}',to_jsonb(now_text)),updated_at=timezone('utc',now()) where collection='truths' and document_id=p_truth_id; end if; return jsonb_build_object('duplicate',duplicate,'total',total,'truthVotes',truth_votes,'lieVotes',lie_votes,'state',next_state); end; $$;
+
+revoke all on function public.increment_cache_entry(text,bigint,bigint,boolean) from public;
+revoke all on function public.mutate_cache_set(text,text,boolean,bigint) from public;
+revoke all on function public.record_legacy_story_view(text,text) from public;
+revoke all on function public.record_legacy_truth_vote(text,text,text) from public;
+grant execute on function public.increment_cache_entry(text,bigint,bigint,boolean) to service_role;
+grant execute on function public.mutate_cache_set(text,text,boolean,bigint) to service_role;
+grant execute on function public.record_legacy_story_view(text,text) to service_role;
+grant execute on function public.record_legacy_truth_vote(text,text,text) to service_role;

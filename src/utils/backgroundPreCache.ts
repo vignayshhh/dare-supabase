@@ -1,6 +1,3 @@
-import { friendsService } from "@/middleware/services/friends.service";
-import { userService } from "@/middleware/services/user.service";
-
 /**
  * Background pre-caching utility
  * Uses requestIdleCallback to pre-cache data during browser idle time
@@ -49,16 +46,7 @@ class BackgroundPreCache {
   }
 
   private async preCacheData(userId: string): Promise<void> {
-    try {
-      // Pre-cache friends (already cached for 15min, but warm it up)
-      await friendsService.getFriends(userId);
-
-      // Pre-cache user's own profile (already cached, but warm it up)
-      await userService.getProfile(userId);
-    } catch (error) {
-      // Non-fatal - pre-cache failures should not break the app
-      console.error("Background pre-cache error:", error);
-    }
+    void userId;
   }
 }
 

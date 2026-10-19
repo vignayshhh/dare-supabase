@@ -1,0 +1,61 @@
+.badge {
+  position: absolute;
+  z-index: 20;
+  bottom: 18px;
+  left: 16px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #fff8f6;
+  cursor: pointer;
+  isolation: isolate;
+  transform: rotate(-5deg);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.badge[data-side="right"] { left: auto; right: 16px; transform: rotate(5deg); }
+.badge:focus-visible { outline: 2px solid white; outline-offset: 6px; border-radius: 50%; }
+.badge:active { scale: 0.96; }
+
+.backing {
+  position: absolute;
+  inset: 2px -2px -2px 2px;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--like-accent);
+  opacity: 0.65;
+  transform: rotate(4deg);
+  transition: background-color 650ms ease;
+}
+
+.face {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 72px;
+  height: 72px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--like-accent) 58%, #ffffff 12%);
+  border-radius: 50%;
+  background: #221b20;
+  background: color-mix(in srgb, var(--like-accent) 14%, #161318);
+  box-shadow: 0 4px 12px #0005, inset 0 1px 0 #ffffff1a;
+  transition: background-color 650ms ease, border-color 650ms ease;
+  transform-origin: 50% 80%;
+}
+
+.heart { flex-shrink: 0; color: var(--like-accent); transform: rotate(-10deg); transition: color 650ms ease; }
+.copy { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.numberWindow { display: flex; align-items: baseline; gap: 2px; height: 25px; overflow: hidden; }
+.count { display: inline-block; font-size: 20px; line-height: 25px; font-weight: 850; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.multiplier { font-size: 12px; font-weight: 700; color: #ffffff80; }
+.glint { position: absolute; top: 10px; right: 12px; font-size: 10px; color: var(--like-accent); transition: color 650ms ease; }
+.delta { position: absolute; right: 4px; top: -14px; opacity: 0; pointer-events: none; color: #fff; font-size: 15px; font-weight: 850; text-shadow: 0 1px 4px #000c; }
+
+@media (prefers-reduced-motion: reduce) {
+  .badge:active { scale: 1; }
+}

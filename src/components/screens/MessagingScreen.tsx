@@ -1,22 +1,15 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+﻿import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   useMessagingStore,
   type MessageEvent,
 } from "../../stores/useMessagingStore";
 import { useAuthStore } from "../../stores/useAuthStore-v2";
-import { useGhostModeStore } from "../../stores/useGhostModeStore";
 import { Avatar } from "../ui/Avatar";
+import { joinsChatGroup, chatSenderColor, type ChatGroupEntry } from '../chat/chatPresentation';
+import '../chat/chat-presentation.css';
+import { useChatViewport } from '../chat/useChatViewport';
 import { useProfileDataStore } from "../../stores/profileDataStore";
-import {
-  getFirestore,
-  doc,
-  onSnapshot,
-  setDoc,
-  deleteDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth as firebaseAuth } from "../../backend/lib/firebase";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   messagingService,
   type ChatSwitchSignal,
@@ -25,6 +18,7 @@ import {
   chatInviteService,
   type ChatInvite,
 } from "../../middleware/services/chat-invite.service";
+import { GamesRoomScreen } from "./GamesRoomScreen";
 import { friendsService } from "../../middleware/services/service-factory";
 import {
   isSharedStoryPreviewActive,
@@ -34,10 +28,12 @@ import {
   type SharedStoryPayload,
 } from "../../utils/sharedPostMessage";
 import { uploadOptimizedMedia } from "../../utils/mediaUpload";
+import { signedUrlService } from "@/security/signedUrls";
 import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  MoreHorizontal,
   Reply,
   Search,
   UserMinus,
@@ -73,6 +69,7 @@ interface Msg {
   createdAt?: string | number;
   optimistic?: boolean;
   failed?: boolean;
+  deliveryStatus?: Status;
 }
 interface Evt {
   id: string;
@@ -80,8 +77,17 @@ interface Evt {
   type: EvType;
   text: string;
   targetUserId?: string;
+  data?: any;
+  createdAt?: string | number;
 }
 type TimelineItem = Msg | Evt;
+function groupEntry(item?: TimelineItem): ChatGroupEntry | undefined {
+  return item?.kind === 'msg' ? {
+    sender: item.senderId || item.from,
+    time: item.createdAt,
+    standalone: Boolean(item.replyTo || item.photoUrls.length || item.sharedPost || item.sharedStory || item.failed || item.optimistic),
+  } : undefined;
+}
 interface ChatPhoto {
   key: string;
   url: string;
@@ -114,12 +120,27 @@ interface OptimisticTextMessage {
   failed?: boolean;
 }
 
+
 const FRIEND = {
   name: "Nina Creates",
   avatar: "https://picsum.photos/seed/nina/100/100",
 };
 
 const MESSAGING_SCREEN_DEBUG = false;
+const LIVE_SCREEN_DEBUG = true;
+const REDUNDANT_SCREEN_LOGS = false;
+
+function redundantScreenLog(...args: unknown[]) {
+  if (REDUNDANT_SCREEN_LOGS) console.info(...args);
+}
+
+function liveScreenDebug(label: string, details: Record<string, unknown> = {}) {
+  if (!LIVE_SCREEN_DEBUG) return;
+  console.info(`[DARE_LIVE_DEBUG][screen] ${label}`, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
 
 function summarizeMessageForReply(msg: Msg): string {
   const trimmed = msg.text.trim();
@@ -256,12 +277,12 @@ function formatLastSeenLabel(
   return `last seen ${date} at ${time}`;
 }
 
-// ─── Event label helpers ─────────────────────────────────────────────────────
+// â”€â”€â”€ Event label helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const getScreenshotLabel = () => (
   <span>
     <span style={{ color: "#888" }}>You took a </span>
-    <span style={{ color: "#3df57f", fontWeight: 700 }}>screenshot</span>
+    <span style={{ color: "#d6dde8", fontWeight: 700 }}>screenshot</span>
     <span style={{ color: "#888" }}> of this chat</span>
   </span>
 );
@@ -272,7 +293,7 @@ const getChatSwitchLabel = (text: string) => {
     return (
       <span>
         <span style={{ color: "#888" }}>You went to chat with </span>
-        <span style={{ color: "#3df57f", fontWeight: 700 }}>{mine[1]}</span>
+        <span style={{ color: "#d6dde8", fontWeight: 700 }}>{mine[1]}</span>
       </span>
     );
   }
@@ -284,9 +305,9 @@ const getChatSwitchLabel = (text: string) => {
     return (
       <span>
         <span style={{ color: "#888" }}>Wait! </span>
-        <span style={{ color: "#3df57f", fontWeight: 700 }}>{m[1]}</span>
+        <span style={{ color: "#d6dde8", fontWeight: 700 }}>{m[1]}</span>
         <span style={{ color: "#888" }}> is now talking with </span>
-        <span style={{ color: "#3df57f", fontWeight: 700 }}>{m[2]}</span>
+        <span style={{ color: "#d6dde8", fontWeight: 700 }}>{m[2]}</span>
         <span style={{ color: "#888" }}> instead of you!</span>
       </span>
     );
@@ -298,9 +319,9 @@ const getOpenedNoReplyLabel = (text: string) => {
   const m = text.match(/^(.*?)\s+opened\s+(.*)$/i);
   return m ? (
     <span>
-      <span style={{ color: "#3df57f", fontWeight: 700 }}>{m[1]}</span>
+      <span style={{ color: "#d6dde8", fontWeight: 700 }}>{m[1]}</span>
       <span style={{ color: "#888" }}> opened the chat but </span>
-      <span style={{ color: "#3df57f", fontWeight: 700 }}>didn't reply</span>
+      <span style={{ color: "#d6dde8", fontWeight: 700 }}>didn&apos;t reply</span>
     </span>
   ) : (
     <span style={{ color: "#888" }}>{text}</span>
@@ -310,9 +331,9 @@ const getOpenedNoReplyLabel = (text: string) => {
 const getLongUnsentLabel = () => (
   <span>
     <span style={{ color: "#888" }}>You typed a </span>
-    <span style={{ color: "#3df57f", fontWeight: 700 }}>long message</span>
+    <span style={{ color: "#d6dde8", fontWeight: 700 }}>long message</span>
     <span style={{ color: "#888" }}> but </span>
-    <span style={{ color: "#3df57f", fontWeight: 700 }}>didn't send it</span>
+    <span style={{ color: "#d6dde8", fontWeight: 700 }}>didn&apos;t send it</span>
   </span>
 );
 
@@ -322,7 +343,7 @@ const getMentionLabel = (text: string) => {
   );
   return m ? (
     <span>
-      <span style={{ color: "#3df57f", fontWeight: 700 }}>{m[1]}</span>
+      <span style={{ color: "#d6dde8", fontWeight: 700 }}>{m[1]}</span>
       <span style={{ color: "#888" }}>
         {" "}
         was notified that you two are talking about them{m[2]}
@@ -342,7 +363,7 @@ const getIgnoredLabel = (text: string) => {
         <span style={{ color: "#ff6b6b", fontWeight: 700 }}>
           {currentUserIgnored[1]}
         </span>
-        <span style={{ color: "#888" }}>'s message</span>
+        <span style={{ color: "#888" }}>&apos;s message</span>
       </span>
     );
   }
@@ -366,7 +387,7 @@ const getInviteLabel = (text: string) => {
   );
   return m ? (
     <span>
-      <span style={{ color: "#3df57f", fontWeight: 700 }}>{m[1]}</span>
+      <span style={{ color: "#d6dde8", fontWeight: 700 }}>{m[1]}</span>
       <span style={{ color: "#888" }}> {m[2]}</span>
     </span>
   ) : (
@@ -379,35 +400,35 @@ const EV_CFG: Record<
   { icon: string; accent: string; label: (t: string) => React.ReactNode }
 > = {
   screenshot: {
-    icon: "📸",
-    accent: "#3df57f",
+    icon: "ðŸ“¸",
+    accent: "#d6dde8",
     label: () => getScreenshotLabel(),
   },
-  chat_switch: { icon: "💬", accent: "#3df57f", label: getChatSwitchLabel },
+  chat_switch: { icon: "ðŸ’¬", accent: "#d6dde8", label: getChatSwitchLabel },
   opened_noreply: {
-    icon: "👁",
-    accent: "#3df57f",
+    icon: "ðŸ‘",
+    accent: "#d6dde8",
     label: getOpenedNoReplyLabel,
   },
   long_unsent: {
-    icon: "✍️",
-    accent: "#3df57f",
+    icon: "âœï¸",
+    accent: "#d6dde8",
     label: () => getLongUnsentLabel(),
   },
-  mention: { icon: "🔔", accent: "#3df57f", label: getMentionLabel },
+  mention: { icon: "ðŸ””", accent: "#d6dde8", label: getMentionLabel },
   ignored: {
-    icon: "🫥",
+    icon: "ðŸ«¥",
     accent: "#ff6b6b",
     label: (text: string) => getIgnoredLabel(text),
   },
   invite: {
     icon: "+",
-    accent: "#3df57f",
+    accent: "#d6dde8",
     label: getInviteLabel,
   },
 };
 
-// ─── SysLine ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ SysLine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getMoodTheme(mood: string) {
   if (mood === "angry") {
@@ -451,9 +472,9 @@ function getMoodTheme(mood: string) {
     };
   }
   return {
-    accent: "#3df57f",
-    accentSoft: "rgba(61,245,127,0.18)",
-    accentGlow: "rgba(61,245,127,0.3)",
+    accent: "#d6dde8",
+    accentSoft: "rgba(214,221,232,0.18)",
+    accentGlow: "rgba(214,221,232,0.3)",
     panel:
       "linear-gradient(180deg, rgba(22,30,26,0.96) 0%, rgba(12,16,14,0.98) 100%)",
     label: "Mood Active",
@@ -465,19 +486,24 @@ function SysLine({
   text,
   collapsed,
   targetUserId,
+  data,
+  currentUserId,
+  onEnterGameInvite,
   onOpenUserProfile,
 }: {
   type: EvType;
   text: string;
   collapsed: boolean;
   targetUserId?: string;
+  data?: any;
+  currentUserId?: string;
+  onEnterGameInvite?: (sessionId: string) => void;
   onOpenUserProfile?: (userId: string) => void;
 }) {
   const cfg = EV_CFG[type];
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
-    setEntered(false);
     const raf = requestAnimationFrame(() => setEntered(true));
     return () => cancelAnimationFrame(raf);
   }, [type, text, collapsed, targetUserId]);
@@ -486,6 +512,163 @@ function SysLine({
     if (!targetUserId) return;
     onOpenUserProfile?.(targetUserId);
   };
+
+  if (
+    type === "invite" &&
+    (data?.action === "game_invite" || data?.action === "game_played")
+  ) {
+    const inviterName = String(data.inviter_name || "Someone");
+    const gameTitle = String(data.game_title || "This Or That");
+    const sessionId = String(data.session_id || "");
+    const mine = data.inviter_id === currentUserId;
+    const played = data.action === "game_played";
+    return (
+      <div
+        style={{
+          padding: "8px 14px 10px",
+          display: "flex",
+          justifyContent: "center",
+          opacity: entered ? 1 : 0,
+          transform: entered
+            ? "translateY(0) scale(1)"
+            : "translateY(12px) scale(0.98)",
+          transition:
+            "opacity 0.32s ease, transform 0.34s cubic-bezier(0.2, 0.9, 0.2, 1)",
+        }}
+      >
+        <div
+          style={{
+            width: "min(100%, 360px)",
+            position: "relative",
+            overflow: "hidden",
+            borderRadius: 26,
+            border: "1px solid rgba(214,221,232,0.22)",
+            background:
+              "linear-gradient(135deg, rgba(18,28,22,0.96), rgba(18,19,30,0.96) 50%, rgba(8,32,25,0.96))",
+            boxShadow:
+              "0 18px 46px rgba(0,0,0,0.34), 0 0 30px rgba(214,221,232,0.1)",
+            padding: 16,
+            color: "#fff",
+          }}
+        >
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: "0 auto auto 0",
+              width: "100%",
+              height: 2,
+              background:
+                "linear-gradient(90deg, transparent, rgba(214,221,232,0.9), rgba(103,232,249,0.7), transparent)",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background:
+                  "linear-gradient(135deg, rgba(214,221,232,0.95), rgba(103,232,249,0.82))",
+                color: "#07130c",
+                fontSize: 24,
+                boxShadow: "0 12px 30px rgba(214,221,232,0.22)",
+              }}
+            >
+              <UserPlus size={23} strokeWidth={2.8} />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  color: "#c8d0d8",
+                  fontSize: 10,
+                  fontWeight: 950,
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  marginBottom: 4,
+                }}
+              >
+                {played ? "Game receipt" : "Game invite"}
+              </div>
+              <div
+                style={{
+                  fontSize: 16,
+                  lineHeight: 1.22,
+                  fontWeight: 950,
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {played
+                  ? `You played ${gameTitle} together`
+                  : mine
+                    ? "You invited them"
+                    : `${inviterName} invited you`}
+              </div>
+            </div>
+          </div>
+          <div
+            style={{
+              marginTop: 14,
+              padding: "13px 14px",
+              borderRadius: 20,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.055)",
+            }}
+          >
+            <div
+              style={{
+                color: "#fff",
+                fontSize: 22,
+                lineHeight: 1,
+                fontWeight: 1000,
+              }}
+            >
+              {gameTitle}
+            </div>
+            <div
+              style={{
+                marginTop: 7,
+                color: "rgba(255,255,255,0.55)",
+                fontSize: 12,
+                fontWeight: 750,
+              }}
+            >
+              {played
+                ? "Finished together. The receipt stays in the chat."
+                : "Enter the waiting room. The round starts only when both people are in."}
+            </div>
+          </div>
+          {!played && (
+            <button
+              type="button"
+              data-game-session-id={sessionId || undefined}
+              disabled={!sessionId}
+              onClick={() => sessionId && onEnterGameInvite?.(sessionId)}
+              style={{
+                marginTop: 13,
+                width: "100%",
+                minHeight: 48,
+                border: "none",
+                borderRadius: 18,
+                background:
+                  "linear-gradient(135deg, #d6dde8 0%, #c8d0d8 48%, #67e8f9 100%)",
+                color: "#06120b",
+                fontSize: 14,
+                fontWeight: 1000,
+                cursor: sessionId ? "pointer" : "default",
+                boxShadow: "0 12px 28px rgba(214,221,232,0.22)",
+              }}
+            >
+              Enter waiting room
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const renderTargetName = (label: string) =>
     targetUserId && onOpenUserProfile ? (
@@ -496,7 +679,7 @@ function SysLine({
           border: "none",
           padding: 0,
           margin: 0,
-          color: "#3df57f",
+          color: "#d6dde8",
           fontWeight: 700,
           cursor: "pointer",
           font: "inherit",
@@ -505,7 +688,7 @@ function SysLine({
         {label}
       </button>
     ) : (
-      <span style={{ color: "#3df57f", fontWeight: 700 }}>{label}</span>
+      <span style={{ color: "#d6dde8", fontWeight: 700 }}>{label}</span>
     );
 
   const shortNode = (() => {
@@ -514,9 +697,9 @@ function SysLine({
       if (mine) {
         return (
           <span>
-            <span style={{ color: "#3df57f", fontWeight: 700 }}>You</span>
-            <span style={{ color: "#888" }}> → </span>
-            <span style={{ color: "#3df57f", fontWeight: 700 }}>{mine[1]}</span>
+            <span style={{ color: "#d6dde8", fontWeight: 700 }}>You</span>
+            <span style={{ color: "#888" }}> â†’ </span>
+            <span style={{ color: "#d6dde8", fontWeight: 700 }}>{mine[1]}</span>
           </span>
         );
       }
@@ -534,10 +717,10 @@ function SysLine({
       const m = text.match(/^(.*?)\s+opened/i);
       return (
         <span>
-          <span style={{ color: "#3df57f", fontWeight: 700 }}>
+          <span style={{ color: "#d6dde8", fontWeight: 700 }}>
             {m?.[1] ?? "User"}
           </span>
-          <span style={{ color: "#888" }}> opened • no reply</span>
+          <span style={{ color: "#888" }}> opened â€¢ no reply</span>
         </span>
       );
     }
@@ -545,7 +728,7 @@ function SysLine({
       const m = text.match(/^(@\S+)/);
       return m ? (
         <span>
-          <span style={{ color: "#3df57f", fontWeight: 700 }}>{m[1]}</span>
+          <span style={{ color: "#d6dde8", fontWeight: 700 }}>{m[1]}</span>
           <span style={{ color: "#888" }}> notified</span>
         </span>
       ) : (
@@ -556,14 +739,14 @@ function SysLine({
     if (type === "screenshot")
       return (
         <span>
-          <span style={{ color: "#888" }}>📸 </span>
-          <span style={{ color: "#3df57f", fontWeight: 700 }}>screenshot</span>
+          <span style={{ color: "#888" }}>ðŸ“¸ </span>
+          <span style={{ color: "#d6dde8", fontWeight: 700 }}>screenshot</span>
         </span>
       );
     if (type === "long_unsent")
       return (
         <span>
-          <span style={{ color: "#3df57f", fontWeight: 700 }}>Long msg</span>
+          <span style={{ color: "#d6dde8", fontWeight: 700 }}>Long msg</span>
           <span style={{ color: "#888" }}> unsent</span>
         </span>
       );
@@ -590,7 +773,7 @@ function SysLine({
             return (
               <span>
                 <span style={{ color: "#888" }}>Wait! - </span>
-                <span style={{ color: "#3df57f", fontWeight: 700 }}>
+                <span style={{ color: "#d6dde8", fontWeight: 700 }}>
                   {active[1]}
                 </span>
                 <span style={{ color: "#888" }}> is now talking with </span>
@@ -606,7 +789,7 @@ function SysLine({
             return (
               <span>
                 <span style={{ color: "#888" }}>Wait! - </span>
-                <span style={{ color: "#3df57f", fontWeight: 700 }}>
+                <span style={{ color: "#d6dde8", fontWeight: 700 }}>
                   {past[1]}
                 </span>
                 <span style={{ color: "#888" }}> was chatting with </span>
@@ -635,8 +818,9 @@ function SysLine({
     );
   return (
     <div
+      className="pop-message-banner"
       style={{
-        padding: collapsed ? "3px 14px 3px" : "6px 14px 10px",
+        padding: collapsed ? "2px 14px 2px" : "5px 14px 8px",
         display: "flex",
         justifyContent: "center",
         transition:
@@ -649,20 +833,21 @@ function SysLine({
       }}
     >
       <div
+        className="pop-micro-pill"
         style={{
           background:
-            "linear-gradient(180deg, rgba(22,26,22,0.98), rgba(13,16,13,0.98))",
+            "linear-gradient(180deg, rgba(24,24,24,0.98), rgba(13,13,13,0.98))",
           border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: collapsed ? 50 : 22,
-          padding: collapsed ? "7px 16px" : "20px 24px 18px",
+          borderRadius: collapsed ? 50 : 20,
+          padding: collapsed ? "5.5px 13px" : "16px 20px 15px",
           display: "flex",
           flexDirection: collapsed ? "row" : "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: collapsed ? 6 : 12,
+          gap: collapsed ? 5 : 10,
           overflow: "hidden",
           width: collapsed ? "fit-content" : "100%",
-          maxWidth: collapsed ? 240 : "100%",
+          maxWidth: collapsed ? 220 : "100%",
           transition:
             "border-radius 0.28s ease, padding 0.28s ease, width 0.28s ease, max-width 0.28s ease, box-shadow 0.28s ease",
           boxShadow: entered
@@ -673,19 +858,19 @@ function SysLine({
         }}
       >
         {collapsed ? (
-          <span style={{ fontSize: 12, lineHeight: 1 }}>{cfg.icon}</span>
+          <span style={{ fontSize: 11, lineHeight: 1 }}>{cfg.icon}</span>
         ) : (
           <div
             style={{
-              width: 44,
-              height: 44,
+              width: 38,
+              height: 38,
               borderRadius: "50%",
               background: "rgba(255,255,255,0.045)",
               border: `1.5px solid ${cfg.accent}55`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 20,
+              fontSize: 18,
               flexShrink: 0,
             }}
           >
@@ -693,9 +878,10 @@ function SysLine({
           </div>
         )}
         <div
+          className="pop-message-banner"
           style={{
-            fontSize: collapsed ? 12 : 15,
-            lineHeight: collapsed ? 1.2 : 1.6,
+            fontSize: collapsed ? 11.5 : 14,
+            lineHeight: collapsed ? 1.15 : 1.5,
             textAlign: collapsed ? "left" : "center",
             letterSpacing: "0.01em",
             whiteSpace: collapsed ? "nowrap" : "normal",
@@ -711,7 +897,7 @@ function SysLine({
   );
 }
 
-// ─── Shared Post Card (Instagram-DM style) ───────────────────────────────────
+// â”€â”€â”€ Shared Post Card (Instagram-DM style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function SharedPostCard({
   msg,
@@ -729,15 +915,15 @@ function SharedPostCard({
   const palette = isOwn
     ? {
         cardBg: "#0d0d0d",
-        cardBorder: "rgba(61,245,127,0.18)",
+        cardBorder: "rgba(214,221,232,0.18)",
         mediaBg: "#000",
         primaryText: "#ffffff",
         secondaryText: "rgba(255,255,255,0.55)",
         captionText: "#d7ffe6",
-        avatarBg: "rgba(61,245,127,0.15)",
-        avatarBorder: "rgba(61,245,127,0.35)",
+        avatarBg: "rgba(214,221,232,0.15)",
+        avatarBorder: "rgba(214,221,232,0.35)",
         footerBorder: "rgba(255,255,255,0.06)",
-        footerText: "#3df57f",
+        footerText: "#d6dde8",
       }
     : {
         cardBg: "#0d0d0d",
@@ -838,6 +1024,7 @@ function SharedPostCard({
       {/* Media (square, Instagram-like) */}
       {sp.media?.url ? (
         <div
+          className="pop-message-banner"
           style={{
             width: "100%",
             aspectRatio: "1 / 1",
@@ -898,7 +1085,7 @@ function SharedPostCard({
   );
 }
 
-// ─── Bubble ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Bubble â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Story replies carry their preview payload in the message itself, so rendering
 // the 24-hour card does not need an extra story document read.
@@ -925,55 +1112,69 @@ function StoryReplyCard({
     if (!story) return;
     const expiresAtMs = new Date(story.expiresAt).getTime();
     if (!Number.isFinite(expiresAtMs)) {
-      setPreviewActive(false);
-      return;
+      const timeout = window.setTimeout(() => setPreviewActive(false), 0);
+      return () => window.clearTimeout(timeout);
     }
 
     const remainingMs = expiresAtMs - Date.now();
     if (remainingMs <= 0) {
-      setPreviewActive(false);
-      return;
+      const timeout = window.setTimeout(() => setPreviewActive(false), 0);
+      return () => window.clearTimeout(timeout);
     }
 
-    setPreviewActive(true);
+    const activateTimeout = window.setTimeout(() => setPreviewActive(true), 0);
     const timeout = window.setTimeout(
       () => setPreviewActive(false),
       Math.min(remainingMs, 2147483647),
     );
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.clearTimeout(activateTimeout);
+      window.clearTimeout(timeout);
+    };
   }, [story?.expiresAt, story?.storyId]);
 
   useEffect(() => {
-    setStoryDeleted(false);
-    setLiveStoryMedia(null);
-    if (!story || !previewActive) return;
+    const resetTimeout = window.setTimeout(() => {
+      setStoryDeleted(false);
+      setLiveStoryMedia(null);
+    }, 0);
+    if (!story || !previewActive) {
+      return () => window.clearTimeout(resetTimeout);
+    }
 
-    const db = getFirestore();
-    return onSnapshot(
-      doc(db, "stories", story.storyId),
-      (snapshot) => {
-        const exists = snapshot.exists();
-        setStoryDeleted(!exists);
-        if (!exists) {
-          setLiveStoryMedia(null);
-          return;
-        }
-
-        const data = snapshot.data() as {
-          media?: { url?: string; thumbnail?: string };
-          mediaUrl?: string;
-          thumbnail?: string;
-        };
-        setLiveStoryMedia({
-          url: data.media?.url || data.mediaUrl || "",
-          thumbnail: data.media?.thumbnail || data.thumbnail || "",
-        });
-      },
-      () => {
-        setStoryDeleted(false);
+    const client = getSupabaseBrowserClient();
+    let active = true;
+    const applyStoryRow = (data: Record<string, unknown> | null) => {
+      const exists = Boolean(data);
+      setStoryDeleted(!exists);
+      if (!exists) {
         setLiveStoryMedia(null);
-      },
-    );
+        return;
+      }
+      const metadata = (data?.metadata ?? {}) as { media?: { url?: string; thumbnail?: string }; mediaUrl?: string; thumbnail?: string };
+      setLiveStoryMedia({
+        url: String(data?.media_url || (data?.media_urls as string[] | undefined)?.[0] || metadata.media?.url || metadata.mediaUrl || ""),
+        thumbnail: String(metadata.media?.thumbnail || metadata.thumbnail || ""),
+      });
+    };
+    const loadStory = async () => {
+      const { data, error } = await client.from("stories").select("id,media_url,media_urls,metadata").eq("id", story.storyId).maybeSingle();
+      if (!active) return;
+      applyStoryRow(error ? null : (data as Record<string, unknown> | null));
+    };
+    void loadStory();
+    // A conversation can contain several replies to the same Story. Supabase
+    // reuses a channel by name, and registering another callback after that
+    // shared channel has subscribed throws at runtime, so scope it per message.
+    const channel = client.channel(`story-preview:${msg.id}`).on("postgres_changes", { event: "*", schema: "public", table: "stories", filter: `id=eq.${story.storyId}` }, (payload) => {
+      if (!active) return;
+      applyStoryRow(payload.eventType === "DELETE" ? null : (payload.new as Record<string, unknown>));
+    }).subscribe();
+    return () => {
+      window.clearTimeout(resetTimeout);
+      active = false;
+      void client.removeChannel(channel);
+    };
   }, [previewActive, story?.storyId]);
 
   const previewUrl =
@@ -994,9 +1195,9 @@ function StoryReplyCard({
   const replyBubbleStyle: React.CSSProperties = isOwn
     ? {
         alignSelf: "flex-end",
-        background: "rgba(61,245,127,0.08)",
-        color: "#3df57f",
-        boxShadow: "0 2px 8px rgba(61,245,127,0.08)",
+        background: "rgba(214,221,232,0.08)",
+        color: "#d6dde8",
+        boxShadow: "0 2px 8px rgba(214,221,232,0.08)",
         borderTopRightRadius: 4,
       }
     : {
@@ -1007,13 +1208,15 @@ function StoryReplyCard({
       };
 
   useEffect(() => {
-    setSharpPreviewLoaded(false);
+    const timeout = window.setTimeout(() => setSharpPreviewLoaded(false), 0);
+    return () => window.clearTimeout(timeout);
   }, [previewUrl]);
 
   if (!story) return null;
 
   return (
     <div
+      className="pop-message-banner"
       style={{
         width: 224,
         maxWidth: "100%",
@@ -1024,6 +1227,7 @@ function StoryReplyCard({
       }}
     >
       <div
+        className="pop-message-input-shell"
         style={{
           position: "relative",
           width: 190,
@@ -1034,7 +1238,7 @@ function StoryReplyCard({
             ? "linear-gradient(180deg, #050505, #0c0c0c)"
             : "rgba(255,255,255,0.045)",
           border: isOwn
-            ? "1px solid rgba(61,245,127,0.2)"
+            ? "1px solid rgba(214,221,232,0.2)"
             : "1px solid rgba(255,255,255,0.1)",
           boxShadow: hasPreview
             ? "0 10px 26px rgba(0,0,0,0.34)"
@@ -1218,12 +1422,12 @@ function DailyChallengeStarterCard({
         overflow: "hidden",
         borderRadius: 26,
         border: isOwn
-          ? "1px solid rgba(61,245,127,0.28)"
+          ? "1px solid rgba(214,221,232,0.28)"
           : "1px solid rgba(255,255,255,0.1)",
         background:
-          "linear-gradient(180deg, rgba(18,24,20,0.98), rgba(8,10,9,0.99))",
+          "linear-gradient(180deg, rgba(22,22,22,0.98), rgba(8,8,8,0.99))",
         boxShadow: isOwn
-          ? "0 20px 52px rgba(0,0,0,0.42), 0 0 34px rgba(61,245,127,0.12), inset 0 1px 0 rgba(255,255,255,0.06)"
+          ? "0 20px 52px rgba(0,0,0,0.42), 0 0 34px rgba(214,221,232,0.12), inset 0 1px 0 rgba(255,255,255,0.06)"
           : "0 18px 46px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05)",
       }}
     >
@@ -1240,7 +1444,7 @@ function DailyChallengeStarterCard({
             inset: "0 22px auto",
             height: 1,
             background:
-              "linear-gradient(90deg, rgba(61,245,127,0), rgba(61,245,127,0.85), rgba(61,245,127,0))",
+              "linear-gradient(90deg, rgba(214,221,232,0), rgba(214,221,232,0.85), rgba(214,221,232,0))",
           }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1253,12 +1457,12 @@ function DailyChallengeStarterCard({
               alignItems: "center",
               justifyContent: "center",
               background:
-                "radial-gradient(circle at 30% 20%, rgba(255,255,255,0.28), rgba(61,245,127,0.18) 42%, rgba(6,8,7,0.9) 100%)",
-              border: "1px solid rgba(61,245,127,0.3)",
-              color: "#bbf7d0",
+                "radial-gradient(circle at 30% 20%, rgba(255,255,255,0.28), rgba(214,221,232,0.18) 42%, rgba(6,8,7,0.9) 100%)",
+              border: "1px solid rgba(214,221,232,0.3)",
+              color: "#e5e7eb",
               fontSize: 22,
               fontWeight: 900,
-              boxShadow: "0 14px 34px rgba(61,245,127,0.14)",
+              boxShadow: "0 14px 34px rgba(214,221,232,0.14)",
               flexShrink: 0,
             }}
           >
@@ -1273,9 +1477,9 @@ function DailyChallengeStarterCard({
                 marginBottom: 5,
                 padding: "5px 8px",
                 borderRadius: 999,
-                border: "1px solid rgba(61,245,127,0.2)",
-                background: "rgba(61,245,127,0.08)",
-                color: "#86efac",
+                border: "1px solid rgba(214,221,232,0.2)",
+                background: "rgba(214,221,232,0.08)",
+                color: "#c8d0d8",
                 fontSize: 10,
                 fontWeight: 900,
                 letterSpacing: "0.16em",
@@ -1338,9 +1542,9 @@ function DailyChallengeStarterCard({
           <span
             style={{
               borderRadius: 999,
-              background: "rgba(61,245,127,0.12)",
-              color: "#86efac",
-              border: "1px solid rgba(61,245,127,0.2)",
+              background: "rgba(214,221,232,0.12)",
+              color: "#c8d0d8",
+              border: "1px solid rgba(214,221,232,0.2)",
               padding: "6px 10px",
               fontSize: 11,
               fontWeight: 900,
@@ -1810,8 +2014,8 @@ function MessageGestureFrame({
           justifyContent: "center",
           color: "#07130c",
           background:
-            "linear-gradient(135deg, rgba(61,245,127,0.96), rgba(134,239,172,0.9))",
-          boxShadow: "0 10px 28px rgba(61,245,127,0.22)",
+            "linear-gradient(135deg, rgba(214,221,232,0.96), rgba(200,208,216,0.9))",
+          boxShadow: "0 10px 28px rgba(214,221,232,0.22)",
           opacity: showReplyCue ? 0.35 + replyProgress * 0.65 : 0,
           transform: `translateY(-50%) scale(${0.72 + replyProgress * 0.28})`,
           transition: isPulling
@@ -1855,16 +2059,17 @@ function InlineReplyPreview({
 
   return (
     <div
+      className="pop-message-reply-card chat-inline-reply"
       style={{
         position: "relative",
         margin: "0 0 7px",
         padding: "7px 9px 7px 11px",
         borderRadius: 10,
         background: own
-          ? "linear-gradient(135deg, rgba(3,18,10,0.46), rgba(61,245,127,0.09))"
+          ? "linear-gradient(135deg, rgba(3,18,10,0.46), rgba(214,221,232,0.09))"
           : "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.035))",
         border: own
-          ? "1px solid rgba(61,245,127,0.16)"
+          ? "1px solid rgba(214,221,232,0.16)"
           : "1px solid rgba(255,255,255,0.08)",
         color: own ? "#d7ffe6" : "rgba(255,255,255,0.82)",
         maxWidth: "100%",
@@ -1878,13 +2083,13 @@ function InlineReplyPreview({
           top: 0,
           bottom: 0,
           width: 3,
-          background: own ? "#3df57f" : "#8b9aaf",
+          background: own ? "#d6dde8" : "#8b9aaf",
           opacity: own ? 0.95 : 0.82,
         }}
       />
       <div
         style={{
-          color: own ? "#86efac" : "#d6dde8",
+          color: own ? "#c8d0d8" : "#d6dde8",
           fontSize: 12,
           fontWeight: 900,
           marginBottom: 3,
@@ -1923,7 +2128,11 @@ function Bubble({
   onOpenPhoto,
   onReply,
   onLongPress,
+  onRetryPhoto,
+  onCancelPhoto,
   showSenderName,
+  joinedBefore = false,
+  joinedAfter = false,
 }: {
   msg: Msg;
   showStatus: boolean;
@@ -1932,22 +2141,61 @@ function Bubble({
   onOpenPhoto?: (msg: Msg, photoIndex: number) => void;
   onReply?: (msg: Msg) => void;
   onLongPress?: (msg: Msg) => void;
+  onRetryPhoto?: (msg: Msg) => void;
+  onCancelPhoto?: (msg: Msg) => void;
   showSenderName?: boolean;
+  joinedBefore?: boolean;
+  joinedAfter?: boolean;
 }) {
   const own = msg.from === "me";
+  const [entered, setEntered] = useState(false);
+  const [mountedAt] = useState(() => Date.now());
   const dailyChallengeStarter = parseDailyChallengeStarter(msg.text);
   const senderLabel = (msg.senderName || (own ? "You" : "Guest")).trim();
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const createdMs = parsePresenceTimestamp(msg.createdAt);
+  const shouldAnimateEntrance =
+    !!msg.optimistic ||
+    (createdMs !== null && mountedAt - createdMs < 4_000);
+  const initialTranslate = "translateY(4px)";
+  const messageEntranceStyle: React.CSSProperties = {
+    opacity: shouldAnimateEntrance
+      ? entered
+        ? msg.optimistic
+          ? 0.9
+          : 1
+        : 0
+      : 1,
+    transform: shouldAnimateEntrance
+      ? entered
+        ? "translateY(0) scale(1)"
+        : initialTranslate
+      : "none",
+    transition: shouldAnimateEntrance
+      ? "opacity 140ms ease-out, transform 160ms cubic-bezier(0.2, 0.86, 0.2, 1)"
+      : undefined,
+    willChange: shouldAnimateEntrance
+      ? "opacity, transform"
+      : undefined,
+    transformOrigin: own ? "right bottom" : "left bottom",
+  };
+
   const wrapMessage = (node: React.ReactNode) => (
     <MessageGestureFrame msg={msg} onReply={onReply} onLongPress={onLongPress}>
-      <div>
-        {showSenderName && senderLabel && (
+      <div data-message-id={msg.id} style={messageEntranceStyle}>
+        {showSenderName && !own && !joinedBefore && senderLabel && (
           <div
             style={{
               display: "flex",
               justifyContent: own ? "flex-end" : "flex-start",
               padding: own ? "0 30px 2px 14px" : "0 14px 2px 30px",
               marginTop: 4,
-              color: own ? "rgba(134,239,172,0.78)" : "rgba(255,255,255,0.52)",
+              color: chatSenderColor(msg.senderId),
               fontSize: 11,
               fontWeight: 850,
               lineHeight: 1.2,
@@ -2002,7 +2250,7 @@ function Bubble({
                   borderRadius: 17,
                   borderTopRightRadius: 4,
                   background:
-                    "linear-gradient(180deg, rgba(31,37,35,0.78) 0%, rgba(18,23,21,0.86) 62%, rgba(10,14,12,0.92) 100%)",
+                    "linear-gradient(180deg, rgba(31,34,37,0.78) 0%, rgba(18,19,20,0.86) 62%, rgba(10,10,10,0.92) 100%)",
                   border: "1px solid rgba(148,163,184,0.1)",
                   overflow: "hidden",
                   position: "relative",
@@ -2106,10 +2354,14 @@ function Bubble({
                       alignItems: "flex-end",
                       justifyContent: "flex-end",
                       padding: 8,
-                      pointerEvents: "none",
+                      pointerEvents: "auto",
                     }}
                   >
-                    <span
+                    <button
+                      type="button"
+                      aria-label={showFailedOverlay ? "Retry photo upload" : "Cancel photo upload"}
+                      onClick={() => (showFailedOverlay ? onRetryPhoto?.(msg) : onCancelPhoto?.(msg))}
+                      disabled={showFailedOverlay ? !showFailedOverlay : false}
                       style={{
                         borderRadius: 999,
                         background: "rgba(0,0,0,0.58)",
@@ -2118,10 +2370,11 @@ function Bubble({
                         fontWeight: 800,
                         padding: "5px 8px",
                         border: "1px solid rgba(255,255,255,0.12)",
+                        cursor: showFailedOverlay ? "pointer" : "default",
                       }}
                     >
-                      {showFailedOverlay ? "Failed" : "Sending..."}
-                    </span>
+                      {showFailedOverlay ? "Retry" : "Cancel"}
+                    </button>
                   </div>
                 )}
                 {isDisplayCaption && (
@@ -2144,7 +2397,7 @@ function Bubble({
                 viewBox="0 0 12 12"
                 style={{ flexShrink: 0, marginTop: 4 }}
               >
-                <path d="M 0 0 L 12 0 L 0 10 Z" fill="rgba(31,37,35,0.78)" />
+                <path d="M 0 0 L 12 0 L 0 10 Z" fill="rgba(31,34,37,0.78)" />
               </svg>
             </>
           ) : (
@@ -2155,7 +2408,7 @@ function Bubble({
                 viewBox="0 0 12 12"
                 style={{ flexShrink: 0, marginTop: 4 }}
               >
-                <path d="M 12 0 L 0 0 L 12 10 Z" fill="rgba(16,23,17,0.82)" />
+                <path d="M 12 0 L 0 0 L 12 10 Z" fill="rgba(20,20,20,0.82)" />
               </svg>
               <div
                 style={{
@@ -2164,8 +2417,8 @@ function Bubble({
                   borderRadius: 17,
                   borderTopLeftRadius: 4,
                   background:
-                    "linear-gradient(180deg, rgba(16,23,17,0.82) 0%, rgba(10,15,11,0.9) 66%, rgba(5,8,6,0.94) 100%)",
-                  border: "1px solid rgba(134,239,172,0.075)",
+                    "linear-gradient(180deg, rgba(20,20,20,0.82) 0%, rgba(13,13,13,0.9) 66%, rgba(8,8,8,0.94) 100%)",
+                  border: "1px solid rgba(200,208,216,0.075)",
                   overflow: "hidden",
                   position: "relative",
                   boxShadow:
@@ -2316,7 +2569,7 @@ function Bubble({
                 Screenshot
               </span>
             ) : (
-              <span style={{ fontSize: 12, color: "#444", fontWeight: 500 }}>
+              <span style={{ fontSize: 12, color: "var(--chat-muted)", fontWeight: 500 }}>
                 {status === "seen" ? "Seen" : "Delivered"}
               </span>
             )}
@@ -2356,7 +2609,7 @@ function Bubble({
                 Screenshot
               </span>
             ) : (
-              <span style={{ fontSize: 12, color: "#444", fontWeight: 500 }}>
+              <span style={{ fontSize: 12, color: "var(--chat-muted)", fontWeight: 500 }}>
                 {status === "seen" ? "Seen" : "Delivered"}
               </span>
             )}
@@ -2390,10 +2643,10 @@ function Bubble({
           >
             {status === "screenshot" ? (
               <span style={{ fontSize: 12, color: "#facc15", fontWeight: 600 }}>
-                ðŸ“¸ Screenshot
+                Ã°Å¸â€œÂ¸ Screenshot
               </span>
             ) : (
-              <span style={{ fontSize: 12, color: "#444", fontWeight: 500 }}>
+              <span style={{ fontSize: 12, color: "var(--chat-muted)", fontWeight: 500 }}>
                 {status === "seen" ? "Seen" : "Delivered"}
               </span>
             )}
@@ -2432,10 +2685,10 @@ function Bubble({
           >
             {status === "screenshot" ? (
               <span style={{ fontSize: 12, color: "#facc15", fontWeight: 600 }}>
-                📸 Screenshot
+                ðŸ“¸ Screenshot
               </span>
             ) : (
-              <span style={{ fontSize: 12, color: "#444", fontWeight: 500 }}>
+              <span style={{ fontSize: 12, color: "var(--chat-muted)", fontWeight: 500 }}>
                 {status === "seen" ? "Seen" : "Delivered"}
               </span>
             )}
@@ -2446,7 +2699,7 @@ function Bubble({
   }
 
   return wrapMessage(
-    <div style={{ padding: "4px 14px" }}>
+    <div className={`chat-message-row ${own ? "is-own" : ""} ${!joinedBefore ? "is-group-start" : ""}`}>
       <div
         style={{
           display: "flex",
@@ -2455,69 +2708,10 @@ function Bubble({
           gap: 0,
         }}
       >
-        {own ? (
-          <>
-            <div
-              style={{
-                maxWidth: "82%",
-                padding: "10.5px 14px",
-                fontSize: 16,
-                lineHeight: 1.45,
-                wordBreak: "break-word",
-                borderRadius: 17,
-                borderTopRightRadius: 4,
-                background:
-                  "linear-gradient(180deg, rgba(31,37,35,0.8) 0%, rgba(18,23,21,0.88) 62%, rgba(10,14,12,0.94) 100%)",
-                color: "#e5e7eb",
-                border: "1px solid rgba(148,163,184,0.11)",
-                boxShadow:
-                  "0 10px 28px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.045)",
-              }}
-            >
-              <InlineReplyPreview replyTo={msg.replyTo} own={own} />
-              {msg.text}
-            </div>
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              style={{ flexShrink: 0, marginTop: 4 }}
-            >
-              <path d="M 0 0 L 12 0 L 0 10 Z" fill="rgba(31,37,35,0.8)" />
-            </svg>
-          </>
-        ) : (
-          <>
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              style={{ flexShrink: 0, marginTop: 4 }}
-            >
-              <path d="M 12 0 L 0 0 L 12 10 Z" fill="rgba(16,23,17,0.84)" />
-            </svg>
-            <div
-              style={{
-                maxWidth: "82%",
-                padding: "10.5px 14px",
-                fontSize: 16,
-                lineHeight: 1.45,
-                wordBreak: "break-word",
-                borderRadius: 17,
-                borderTopLeftRadius: 4,
-                background:
-                  "linear-gradient(180deg, rgba(16,23,17,0.84) 0%, rgba(10,15,11,0.9) 66%, rgba(5,8,6,0.94) 100%)",
-                color: "#f1f5f9",
-                border: "1px solid rgba(134,239,172,0.075)",
-                boxShadow:
-                  "0 10px 28px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.035)",
-              }}
-            >
-              <InlineReplyPreview replyTo={msg.replyTo} own={own} />
-              {msg.text}
-            </div>
-          </>
-        )}
+        <div className={`chat-text-bubble ${own ? 'is-own' : ''} ${joinedBefore ? 'is-joined-before' : ''} ${joinedAfter ? 'is-joined-after' : ''}`}>
+          <InlineReplyPreview replyTo={msg.replyTo} own={own} />
+          {msg.text}
+        </div>
       </div>
       {showStatus && (
         <div
@@ -2529,10 +2723,10 @@ function Bubble({
         >
           {status === "screenshot" ? (
             <span style={{ fontSize: 12, color: "#facc15", fontWeight: 600 }}>
-              📸 Screenshot
+              ðŸ“¸ Screenshot
             </span>
           ) : (
-            <span style={{ fontSize: 12, color: "#444", fontWeight: 500 }}>
+            <span style={{ fontSize: 12, color: "var(--chat-muted)", fontWeight: 500 }}>
               {status === "seen" ? "Seen" : "Delivered"}
             </span>
           )}
@@ -2542,19 +2736,26 @@ function Bubble({
   );
 }
 
-// ─── MoodBlockTimer ───────────────────────────────────────────────────────────
+// â”€â”€â”€ MoodBlockTimer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function getMoodTimeLeft(endTime: number): number {
+  return Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+}
 
 function MoodBlockTimer({ endTime }: { endTime: number }) {
-  const [timeLeft, setTimeLeft] = useState(
-    Math.max(0, Math.floor((endTime - Date.now()) / 1000)),
-  );
+  const [timeLeft, setTimeLeft] = useState(0);
 
   useEffect(() => {
+    const initialTimer = setTimeout(() => {
+      setTimeLeft(getMoodTimeLeft(endTime));
+    }, 0);
     const timer = setInterval(() => {
-      const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-      setTimeLeft(remaining);
+      setTimeLeft(getMoodTimeLeft(endTime));
     }, 1000);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(timer);
+    };
   }, [endTime]);
 
   const minutes = Math.floor(timeLeft / 60);
@@ -2564,7 +2765,7 @@ function MoodBlockTimer({ endTime }: { endTime: number }) {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function MessagingScreen({
   onBack,
@@ -2583,23 +2784,20 @@ export default function MessagingScreen({
   onOpenUserProfile?: (userId: string) => void;
 }) {
   const { user } = useAuthStore();
-  const [firebaseAuthReady, setFirebaseAuthReady] = useState(
-    () => !user?.id || firebaseAuth?.currentUser?.uid === user.id,
-  );
+  const [supabaseAuthReady, setSupabaseAuthReady] = useState(() => !user?.id);
   const {
     conversations,
     currentConversation,
     messages,
-    messageEvents,
+    events,
     loadingMessages,
     sendingMessage,
     typingUsers,
     onlineFriends,
     frozenBy,
     subscribeToRealTimeMessages,
-    unsubscribeFromRealTimeMessages,
     subscribeToRealTimeEvents,
-    unsubscribeFromRealTimeEvents,
+    unsubscribeFromRealTimeMessages,
     subscribeToTypingIndicators,
     unsubscribeFromTypingIndicators,
     subscribeToFreezeStatus,
@@ -2609,10 +2807,6 @@ export default function MessagingScreen({
     sendRealTimeMessage,
     setTypingIndicator,
     setCurrentConversation,
-    trackScreenshot,
-    trackOpenedNoReply,
-    trackLongUnsent,
-    trackMention,
     trackSeenMessage,
     markMessageAsSeen,
     deleteMessage,
@@ -2622,26 +2816,29 @@ export default function MessagingScreen({
 
   useEffect(() => {
     if (!user?.id) {
-      setFirebaseAuthReady(true);
+      setSupabaseAuthReady(true);
       return;
     }
 
-    if (firebaseAuth?.currentUser?.uid === user.id) {
-      setFirebaseAuthReady(true);
-      return;
-    }
-
-    setFirebaseAuthReady(false);
-    if (!firebaseAuth) return;
-
-    return onAuthStateChanged(firebaseAuth, (firebaseUser) => {
-      setFirebaseAuthReady(firebaseUser?.uid === user.id);
-    });
+    setSupabaseAuthReady(false);
+    const client = getSupabaseBrowserClient();
+    void client.auth.getUser().then(({ data }) => setSupabaseAuthReady(data.user?.id === user.id));
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => setSupabaseAuthReady(session?.user.id === user.id));
+    return () => listener.subscription.unsubscribe();
   }, [user?.id]);
 
   const [input, setInput] = useState("");
+  const composerInput = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const field = composerInput.current;
+    if (field) { field.style.height = 'auto'; field.style.height = `${Math.min(field.scrollHeight, 112)}px`; }
+  }, [input]);
   const [status, setStatus] = useState<Status>("seen");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [gamesRoomOpen, setGamesRoomOpen] = useState(false);
+  const [gamesRoomSessionId, setGamesRoomSessionId] = useState<string | null>(
+    null,
+  );
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [inviteSearch, setInviteSearch] = useState("");
   const [inviteFriends, setInviteFriends] = useState<any[]>([]);
@@ -2659,6 +2856,7 @@ export default function MessagingScreen({
   const [optimisticTextMessages, setOptimisticTextMessages] = useState<
     OptimisticTextMessage[]
   >([]);
+  const [refreshedMediaUrls, setRefreshedMediaUrls] = useState<Record<string, string>>({});
   const [photoViewer, setPhotoViewer] = useState<{
     photos: ChatPhoto[];
     index: number;
@@ -2674,6 +2872,7 @@ export default function MessagingScreen({
   const [optimisticSwitchEvents, setOptimisticSwitchEvents] = useState<
     MessageEvent[]
   >([]);
+  const eventTimestampCacheRef = useRef<Map<string, number>>(new Map());
   const [livePresenceSwitchTarget, setLivePresenceSwitchTarget] = useState<{
     userId: string;
     userName: string;
@@ -2699,6 +2898,29 @@ export default function MessagingScreen({
         : [],
     [activeConversationId, messages],
   );
+  useEffect(() => {
+    const urls = activeMessages
+      .map((message) => message.mediaUrl || message.media_url)
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
+    if (!urls.length) return;
+    let active = true;
+    void Promise.all(urls.map(async (url) => [url, await signedUrlService.refreshStoredMediaUrl(url)] as const))
+      .then((resolved) => {
+        if (!active) return;
+        setRefreshedMediaUrls((current) => {
+          let changed = false;
+          const next = { ...current };
+          for (const [original, refreshed] of resolved) {
+            if (refreshed !== original && next[original] !== refreshed) {
+              next[original] = refreshed;
+              changed = true;
+            }
+          }
+          return changed ? next : current;
+        });
+      });
+    return () => { active = false; };
+  }, [activeMessages]);
   const originalParticipantIds = useMemo(
     () =>
       [currentConversation?.user1_id, currentConversation?.user2_id].filter(
@@ -2706,8 +2928,10 @@ export default function MessagingScreen({
       ) as string[],
     [currentConversation?.user1_id, currentConversation?.user2_id],
   );
+  const isCurrentUserTemporaryParticipant =
+    !!user?.id && conversationInvites.some((invite) => invite.invitee_id === user.id);
   const isOriginalParticipant =
-    !!user?.id && originalParticipantIds.includes(user.id);
+    !!user?.id && originalParticipantIds.includes(user.id) && !isCurrentUserTemporaryParticipant;
   const acceptedTemporaryInvites = useMemo(
     () => conversationInvites.filter((invite) => invite.status === "accepted"),
     [conversationInvites],
@@ -2750,46 +2974,29 @@ export default function MessagingScreen({
       });
   }, [currentConversation?.id, currentUserTemporaryInvite, user?.id]);
 
-  const [localFrozenBy, setLocalFrozenBy] = useState<string | null>(null);
-  const [_rtdbOnline, setRtdbOnline] = useState(false);
-  const [friendGhostMode, setFriendGhostMode] = useState(false);
+  const [friendPresenceOnline, setFriendPresenceOnline] = useState(false);
+  const currentFriendId =
+    currentConversation?.other_user?.user_id ||
+    currentConversation?.other_user?.id ||
+    "";
   const friendOnline =
-    _rtdbOnline ||
-    onlineFriends.includes(
-      currentConversation?.other_user?.user_id ||
-        currentConversation?.other_user?.id ||
-        "",
-    );
-  const [friendRealtimeLastSeenAt, setFriendRealtimeLastSeenAt] = useState<
+    onlineFriends.includes(currentFriendId) || friendPresenceOnline;
+  const [friendPostgresLastSeenAt, setFriendPostgresLastSeenAt] = useState<
     number | null
   >(null);
-  const [friendRealtimeTimeZone, setFriendRealtimeTimeZone] =
+  const [friendPostgresTimeZone, setFriendPostgresTimeZone] =
     useState(getBrowserTimeZone);
-  const [friendFirestoreLastSeenAt, setFriendFirestoreLastSeenAt] = useState<
-    number | null
-  >(null);
-  const [friendFirestoreTimeZone, setFriendFirestoreTimeZone] =
-    useState(getBrowserTimeZone);
-  const friendLastSeenAt =
-    friendRealtimeLastSeenAt ?? friendFirestoreLastSeenAt;
-  const friendTimeZone = friendRealtimeLastSeenAt
-    ? friendRealtimeTimeZone
-    : friendFirestoreTimeZone;
+  const friendLastSeenAt = friendPostgresLastSeenAt;
+  const friendTimeZone = friendPostgresTimeZone;
   const [liveDraft, setLiveDraft] = useState<string | null>(null);
 
   const draftThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDraftRef = useRef<string>("");
 
-  const frozen = !!localFrozenBy;
-  const canUnfreeze = localFrozenBy === user?.id;
+  const frozen = !!frozenBy;
+  const canUnfreeze = frozenBy === user?.id;
 
-  const [vpHeight, setVpHeight] = useState(
-    typeof window !== "undefined"
-      ? (window.visualViewport?.height ?? window.innerHeight)
-      : 800,
-  );
-  const [vpOffsetTop, setVpOffsetTop] = useState(0);
-  const ghost = useGhostModeStore((s) => s.isActive);
+  const viewport = useChatViewport<HTMLDivElement>();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const longTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2797,16 +3004,34 @@ export default function MessagingScreen({
   const subscribedConvId = useRef<string | null>(null);
   const enteredInviteEventIdsRef = useRef(new Set<string>());
   const pendingSeenMarksRef = useRef(new Set<string>());
-  const ghostRef = useRef(false);
+  const seenMarkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queuedSeenMarkRef = useRef<{ messageId: string; conversationId: string } | null>(null);
   const isTypingRef = useRef(false);
+  const lastTypingHeartbeatRef = useRef(0);
   const temporaryAccessEndedRef = useRef(false);
   const lastPresenceSwitchRef = useRef<string>("");
   const mutualChatEstablishedRef = useRef(false);
+  const previousChatSwitchConversationRef = useRef<{
+    conversationId: string;
+    otherUserId: string;
+    otherUserName: string;
+  } | null>(null);
   const frozenRef = useRef(frozen);
   const convRef = useRef(currentConversation);
   const userIdRef = useRef(user?.id);
   const optimisticPhotoMessagesRef = useRef<OptimisticPhotoMessage[]>([]);
+  const cancelledPhotoIdsRef = useRef(new Set<string>());
   const menuActionPointerHandledRef = useRef(0);
+  const previousFriendTypingVisibleRef = useRef(false);
+
+  const scrollChatToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const target = scrollRef.current;
+    if (!target) return;
+    target.scrollTo({
+      top: target.scrollHeight,
+      behavior,
+    });
+  }, []);
 
   useEffect(() => {
     frozenRef.current = frozen;
@@ -2814,9 +3039,6 @@ export default function MessagingScreen({
   useEffect(() => {
     convRef.current = currentConversation;
   }, [currentConversation]);
-  useEffect(() => {
-    ghostRef.current = ghost;
-  }, [ghost]);
   useEffect(() => {
     userIdRef.current = user?.id;
   }, [user?.id]);
@@ -2832,7 +3054,9 @@ export default function MessagingScreen({
       clearTimeout(draftThrottleRef.current);
       draftThrottleRef.current = null;
     }
-    longTimer.current && clearTimeout(longTimer.current);
+    if (longTimer.current) {
+      clearTimeout(longTimer.current);
+    }
     longTimer.current = null;
     lastDraftRef.current = "";
     isTypingRef.current = false;
@@ -2841,13 +3065,11 @@ export default function MessagingScreen({
     setLiveDraft(null);
     setOptimisticSwitchEvents([]);
     unsubscribeFromRealTimeMessages();
-    unsubscribeFromRealTimeEvents();
     unsubscribeFromTypingIndicators();
     unsubscribeFromFreezeStatus();
   }, [
     temporaryAccessEnded,
     unsubscribeFromRealTimeMessages,
-    unsubscribeFromRealTimeEvents,
     unsubscribeFromTypingIndicators,
     unsubscribeFromFreezeStatus,
   ]);
@@ -2909,17 +3131,62 @@ export default function MessagingScreen({
 
   useEffect(() => {
     if (!currentConversation?.id) return;
-    onConversationActiveChange?.(
-      currentConversation.id,
+    const otherUserId =
       currentConversation.other_user?.user_id ||
-        currentConversation.other_user?.id,
-    );
-  }, [currentConversation?.id, onConversationActiveChange]);
+      currentConversation.other_user?.id ||
+      "";
+    const otherUserName =
+      currentConversation.other_user?.display_name ||
+      currentConversation.other_user?.username ||
+      "someone";
+    const previousChatSwitchConversation =
+      previousChatSwitchConversationRef.current;
+
+    if (
+      user?.id &&
+      otherUserId &&
+      previousChatSwitchConversation &&
+      previousChatSwitchConversation.conversationId !== currentConversation.id &&
+      previousChatSwitchConversation.otherUserId &&
+      previousChatSwitchConversation.otherUserId !== otherUserId
+    ) {
+      liveScreenDebug("chat_switch_screen_emit_started", {
+        fromConversationId: previousChatSwitchConversation.conversationId,
+        previousOtherUserId: previousChatSwitchConversation.otherUserId,
+        nextConversationId: currentConversation.id,
+        nextOtherUserId: otherUserId,
+        nextOtherUserName: otherUserName,
+      });
+    }
+
+    previousChatSwitchConversationRef.current = {
+      conversationId: currentConversation.id,
+      otherUserId,
+      otherUserName,
+    };
+    liveScreenDebug("active_conversation_changed", {
+      conversationId: currentConversation.id,
+      currentUserId: user?.id ?? null,
+      otherUserId,
+      otherUsername: currentConversation.other_user?.username,
+    });
+    onConversationActiveChange?.(currentConversation.id, otherUserId);
+  }, [
+    currentConversation?.id,
+    currentConversation?.other_user?.user_id,
+    currentConversation?.other_user?.id,
+    currentConversation?.other_user?.display_name,
+    currentConversation?.other_user?.username,
+    onConversationActiveChange,
+    user?.id,
+  ]);
 
   useEffect(() => {
     mutualChatEstablishedRef.current = false;
     lastPresenceSwitchRef.current = "";
     setLivePresenceSwitchTarget(null);
+    setLiveDraft(null);
+    setCurrentMoodBlock(null);
   }, [currentConversation?.id]);
 
   useEffect(() => {
@@ -2931,41 +3198,39 @@ export default function MessagingScreen({
       currentConversation?.other_user?.display_name ||
       currentConversation?.other_user?.username ||
       "";
-    if (!uid || !firebaseAuthReady) return;
-    const db = getFirestore();
-    const presenceRef = doc(db, "presence", uid);
+    liveScreenDebug("current_chat_presence_effect", {
+      uid,
+      conversationId: currentConversation?.id ?? null,
+      otherUserId: otherUserId || null,
+      otherUserName,
+    });
+    if (!uid) return;
     if (!otherUserId) {
-      void setDoc(
-        presenceRef,
-        {
-          current_chat_user_id: "",
-          current_chat_user_name: "",
-        },
-        { merge: true },
-      ).catch(() => {});
+      messagingService.clearCurrentChatPresence(uid);
       return;
     }
-    void setDoc(
-      presenceRef,
-      {
-        current_chat_user_id: otherUserId,
-        current_chat_user_name: otherUserName,
-        is_online: true,
-        last_seen: serverTimestamp(),
-        timezone: getBrowserTimeZone(),
-        updated_at: serverTimestamp(),
-      },
-      { merge: true },
-    ).catch(() => {});
+    const publishPresence = () => {
+      messagingService.setCurrentChatPresence(uid, otherUserId, otherUserName);
+    };
+    const publishPresenceWhenVisible = () => {
+      if (document.visibilityState === "visible") publishPresence();
+    };
+    publishPresence();
+    liveScreenDebug("current_chat_presence_published", {
+      uid,
+      conversationId: currentConversation?.id ?? null,
+      otherUserId,
+      otherUserName,
+    });
+    window.addEventListener("focus", publishPresence);
+    document.addEventListener("visibilitychange", publishPresenceWhenVisible);
     return () => {
-      void setDoc(
-        presenceRef,
-        {
-          current_chat_user_id: "",
-          current_chat_user_name: "",
-        },
-        { merge: true },
-      ).catch(() => {});
+      window.removeEventListener("focus", publishPresence);
+      document.removeEventListener(
+        "visibilitychange",
+        publishPresenceWhenVisible,
+      );
+      messagingService.clearCurrentChatPresence(uid);
     };
   }, [
     user?.id,
@@ -2974,16 +3239,25 @@ export default function MessagingScreen({
     currentConversation?.other_user?.id,
     currentConversation?.other_user?.display_name,
     currentConversation?.other_user?.username,
-    firebaseAuthReady,
   ]);
 
   useEffect(() => {
     setOptimisticSwitchEvents([]);
+    liveScreenDebug("chat_switch_listener_effect", {
+      conversationId: currentConversation?.id ?? null,
+      userId: user?.id ?? null,
+      temporaryAccessEnded,
+    });
     if (!currentConversation?.id || !user?.id || temporaryAccessEnded) return;
     return messagingService.subscribeToOptimisticChatSwitchSignals(
       currentConversation.id,
       user.id,
       (signal: ChatSwitchSignal) => {
+        liveScreenDebug("chat_switch_signal_received", {
+          conversationId: currentConversation.id,
+          userId: user.id,
+          signal,
+        });
         const optimisticEvent: MessageEvent = {
           id: `optimistic-switch-${signal.id}`,
           conversation_id: signal.conversation_id,
@@ -3010,21 +3284,34 @@ export default function MessagingScreen({
   }, [currentConversation?.id, user?.id, temporaryAccessEnded]);
 
   function writeDraftHelper(text: string, convId?: string) {
-    if (temporaryAccessEndedRef.current) return;
+    if (temporaryAccessEndedRef.current) {
+      liveScreenDebug("draft_helper_skipped_temporary_access_ended", {
+        requestedConversationId: convId ?? null,
+        textLength: text.length,
+      });
+      return;
+    }
     const id = convId ?? convRef.current?.id;
     const uid = userIdRef.current;
-    if (!id || !uid || !firebaseAuthReady) return;
-    const db = getFirestore();
-    const draftRef = doc(db, "conversations", id, "drafts", uid);
-    console.log("[draft write]", { convId: id, uid, textLen: text.length });
+    if (!id || !uid) {
+      liveScreenDebug("draft_helper_skipped_missing_context", {
+        requestedConversationId: convId ?? null,
+        resolvedConversationId: id ?? null,
+        userId: uid ?? null,
+        textLength: text.length,
+      });
+      return;
+    }
+    liveScreenDebug("draft_helper_write_requested", {
+      conversationId: id,
+      userId: uid,
+      textLength: text.length,
+      action: text.length > 0 ? "set" : "clear",
+    });
     if (text.length > 0) {
-      setDoc(draftRef, { text, updated_at: serverTimestamp() }).catch((err) =>
-        console.error("[draft write error]", id, uid, err),
-      );
+      messagingService.setDraftText(id, uid, text);
     } else {
-      deleteDoc(draftRef).catch((err) =>
-        console.error("[draft delete error]", id, uid, err),
-      );
+      messagingService.clearDraftText(id, uid);
     }
   }
 
@@ -3034,7 +3321,7 @@ export default function MessagingScreen({
     isTypingRef.current = false;
     if (temporaryAccessEndedRef.current) return;
     setTypingIndicator(conv.id, false);
-  }, [setTypingIndicator]); // eslint-disable-line
+  }, [setTypingIndicator]);
 
   const getDraftStorageKey = useCallback((cId: string) => {
     const uid = userIdRef.current ?? "anon";
@@ -3096,143 +3383,98 @@ export default function MessagingScreen({
     if (temporaryAccessEndedRef.current) return;
     writeDraftHelper("", conv.id);
     setTypingIndicator(conv.id, false);
-  }, [setTypingIndicator]); // eslint-disable-line
+  }, [setTypingIndicator]);
 
   function writeDraft(text: string, convId?: string) {
-    if (temporaryAccessEndedRef.current) return;
+    if (temporaryAccessEndedRef.current) {
+      liveScreenDebug("draft_write_skipped_temporary_access_ended", {
+        requestedConversationId: convId ?? null,
+        textLength: text.length,
+      });
+      return;
+    }
     const id = convId ?? convRef.current?.id;
     const uid = userIdRef.current;
-    if (!id || !uid || !firebaseAuthReady) return;
-    const db = getFirestore();
-    const draftRef = doc(db, "conversations", id, "drafts", uid);
-    console.log("[draft write 2]", { convId: id, uid, textLen: text.length });
+    if (!id || !uid) {
+      liveScreenDebug("draft_write_skipped_missing_context", {
+        requestedConversationId: convId ?? null,
+        resolvedConversationId: id ?? null,
+        userId: uid ?? null,
+        textLength: text.length,
+      });
+      return;
+    }
+    liveScreenDebug("draft_write_requested", {
+      conversationId: id,
+      userId: uid,
+      textLength: text.length,
+      action: text.length > 0 ? "set" : "clear",
+    });
     if (text.length > 0) {
-      setDoc(draftRef, { text, updated_at: serverTimestamp() }).catch((err) =>
-        console.error("[draft write 2 error]", id, uid, err),
-      );
+      messagingService.setDraftText(id, uid, text);
     } else {
-      deleteDoc(draftRef).catch((err) =>
-        console.error("[draft delete 2 error]", id, uid, err),
-      );
+      messagingService.clearDraftText(id, uid);
     }
   }
 
-  // ── Own presence ──────────────────────────────────────────────────────────
-  // ── Freeze listener ───────────────────────────────────────────────────────
-  useEffect(() => {
-    const convId = currentConversation?.id;
-    if (!convId || temporaryAccessEnded || !firebaseAuthReady) {
-      setLocalFrozenBy(null);
-      return;
-    }
-    const db = getFirestore();
-    const unsub = onSnapshot(
-      doc(db, "conversations", convId, "meta", "freeze"),
-      (snap) => {
-        setLocalFrozenBy(
-          snap.exists() ? (snap.data()?.frozen_by ?? null) : null,
-        );
-      },
-      (error) => {
-        if (error?.code !== "permission-denied") {
-          console.error("Unable to subscribe to freeze status:", error);
-        }
-        setLocalFrozenBy(null);
-      },
-    );
-    return () => unsub();
-  }, [currentConversation?.id, temporaryAccessEnded, firebaseAuthReady]);
-
-  // ── Friend online listener ────────────────────────────────────────────────
+  // â”€â”€ Own presence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ Freeze listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ Friend online listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const friendId =
       currentConversation?.other_user?.user_id ||
       currentConversation?.other_user?.id;
     if (!friendId) {
-      setFriendGhostMode(false);
-      setFriendFirestoreLastSeenAt(null);
-      setFriendFirestoreTimeZone(getBrowserTimeZone());
+      setFriendPresenceOnline(false);
+      setFriendPostgresLastSeenAt(null);
+      setFriendPostgresTimeZone(getBrowserTimeZone());
       setLivePresenceSwitchTarget(null);
       lastPresenceSwitchRef.current = "";
       return;
     }
-    if (!firebaseAuthReady) return;
-    setFriendFirestoreLastSeenAt(null);
-    setFriendFirestoreTimeZone(getBrowserTimeZone());
-    const db = getFirestore();
-    const handlePresenceUnavailable = () => {
-      setFriendGhostMode(false);
-      setFriendFirestoreLastSeenAt(null);
-      setFriendFirestoreTimeZone(getBrowserTimeZone());
-      setLivePresenceSwitchTarget(null);
-      lastPresenceSwitchRef.current = "";
-    };
+    setFriendPresenceOnline(false);
+    setFriendPostgresLastSeenAt(null);
+    setFriendPostgresTimeZone(getBrowserTimeZone());
+    const unsub = messagingService.subscribeToActiveUserChatStatus(
+      friendId,
+      (status) => {
+        setFriendPresenceOnline(status.isOnline);
+        setFriendPostgresLastSeenAt(parsePresenceTimestamp(status.lastSeen));
+        setFriendPostgresTimeZone(status.timezone || getBrowserTimeZone());
 
-    const unsub = onSnapshot(
-      doc(db, "presence", friendId),
-      (snap) => {
-        if (snap.exists()) {
-          const d = snap.data();
-          setFriendFirestoreLastSeenAt(parsePresenceTimestamp(d?.last_seen));
-          setFriendFirestoreTimeZone(
-            typeof d?.timezone === "string" && d.timezone
-              ? d.timezone
-              : getBrowserTimeZone(),
-          );
-          const ghostExpiryRaw =
-            d?.ghost_mode_expires_at?.toDate?.()?.toISOString?.() ||
-            d?.ghost_mode_expires_at ||
-            null;
-          const ghostExpiryMs = ghostExpiryRaw
-            ? new Date(ghostExpiryRaw).getTime()
-            : 0;
-          setFriendGhostMode(
-            d?.ghost_mode === true &&
-              Number.isFinite(ghostExpiryMs) &&
-              ghostExpiryMs > Date.now(),
-          );
-          const targetUserId = String(d?.current_chat_user_id || "");
-          const targetUserName = String(d?.current_chat_user_name || "");
-          const currentUserId = String(user?.id || "");
-          const friendIsActivelyInThisConversation =
-            !!targetUserId && !!currentUserId && targetUserId === currentUserId;
+        const targetUserId = status.currentChatUserId;
+        const targetUserName = status.currentChatUserName;
+        const currentUserId = String(user?.id || "");
+        const friendIsActivelyInThisConversation =
+          !!targetUserId && !!currentUserId && targetUserId === currentUserId;
 
-          if (friendIsActivelyInThisConversation) {
-            mutualChatEstablishedRef.current = true;
-            lastPresenceSwitchRef.current = "";
-            setLivePresenceSwitchTarget(null);
-            return;
-          }
+        if (friendIsActivelyInThisConversation) {
+          mutualChatEstablishedRef.current = true;
+          lastPresenceSwitchRef.current = "";
+          setLivePresenceSwitchTarget(null);
+          return;
+        }
 
-          if (
-            mutualChatEstablishedRef.current &&
-            targetUserId &&
-            currentUserId &&
-            targetUserId !== currentUserId &&
-            targetUserId !== friendId
-          ) {
-            const nextKey = `${friendId}:${targetUserId}:${targetUserName}`;
-            if (lastPresenceSwitchRef.current !== nextKey) {
-              lastPresenceSwitchRef.current = nextKey;
-              setLivePresenceSwitchTarget({
-                userId: targetUserId,
-                userName: targetUserName || "someone",
-                isActive: true,
-              });
-            }
-          } else {
-            lastPresenceSwitchRef.current = "";
-            setLivePresenceSwitchTarget(null);
+        if (
+          mutualChatEstablishedRef.current &&
+          targetUserId &&
+          currentUserId &&
+          targetUserId !== currentUserId &&
+          targetUserId !== friendId
+        ) {
+          const nextKey = `${friendId}:${targetUserId}:${targetUserName}`;
+          if (lastPresenceSwitchRef.current !== nextKey) {
+            lastPresenceSwitchRef.current = nextKey;
+            setLivePresenceSwitchTarget({
+              userId: targetUserId,
+              userName: targetUserName || "someone",
+              isActive: true,
+            });
           }
         } else {
-          handlePresenceUnavailable();
+          lastPresenceSwitchRef.current = "";
+          setLivePresenceSwitchTarget(null);
         }
-      },
-      (error) => {
-        if (error?.code !== "permission-denied") {
-          console.error("Unable to subscribe to friend presence:", error);
-        }
-        handlePresenceUnavailable();
       },
     );
     return () => unsub();
@@ -3240,126 +3482,58 @@ export default function MessagingScreen({
     currentConversation?.other_user?.user_id,
     currentConversation?.other_user?.id,
     user?.id,
-    firebaseAuthReady,
   ]);
 
-  // ── Friend RTDB online status ────────────────────────────────────────────
-  useEffect(() => {
-    const friendId =
-      currentConversation?.other_user?.user_id ||
-      currentConversation?.other_user?.id;
-    if (MESSAGING_SCREEN_DEBUG) {
-      console.log("🔍 [MessagingScreen DEBUG] Presence subscription setup:", {
-        friendId,
-        conversationId: currentConversation?.id,
-        hasFriend: !!friendId,
-      });
-    }
-
-    if (!friendId) {
-      if (MESSAGING_SCREEN_DEBUG) {
-        console.log(
-          "🔍 [MessagingScreen DEBUG] No friendId, clearing presence",
-        );
-      }
-      setRtdbOnline(false);
-      setFriendRealtimeLastSeenAt(null);
-      setFriendRealtimeTimeZone(getBrowserTimeZone());
-      return;
-    }
-    setFriendRealtimeLastSeenAt(null);
-    setFriendRealtimeTimeZone(getBrowserTimeZone());
-
-    const unsub = messagingService.subscribeToUsersLivePresenceStatus(
-      [friendId],
-      (statuses) => {
-        if (MESSAGING_SCREEN_DEBUG) {
-          console.log("🔍 [MessagingScreen DEBUG] Presence status callback:", {
-            friendId,
-            allStatuses: statuses,
-            status: statuses.find((entry) => entry.userId === friendId),
-          });
-        }
-        const status = statuses.find((entry) => entry.userId === friendId);
-        const isOnline = status?.isOnline ?? false;
-        const lastSeen = parsePresenceTimestamp(status?.lastSeen);
-        const timezone = status?.timezone || getBrowserTimeZone();
-
-        if (MESSAGING_SCREEN_DEBUG) {
-          console.log("🔍 [MessagingScreen DEBUG] Updating presence state:", {
-            friendId,
-            isOnline,
-            lastSeen,
-            timezone,
-          });
-        }
-
-        setRtdbOnline(isOnline);
-        setFriendRealtimeLastSeenAt(lastSeen);
-        setFriendRealtimeTimeZone(timezone);
-      },
-    );
-    return () => {
-      if (MESSAGING_SCREEN_DEBUG) {
-        console.log(
-          "🔍 [MessagingScreen DEBUG] Unsubscribing presence for:",
-          friendId,
-        );
-      }
-      unsub();
-    };
-  }, [
-    currentConversation?.other_user?.user_id,
-    currentConversation?.other_user?.id,
-  ]);
 
   useEffect(() => {
     const convId = currentConversation?.id;
-    const friendId = currentConversation?.other_user?.user_id;
-    if (!convId || !friendId || temporaryAccessEnded || !firebaseAuthReady) {
+    const friendId =
+      currentConversation?.other_user?.user_id ||
+      currentConversation?.other_user?.id;
+    const currentUserId = user?.id;
+    if (
+      !convId ||
+      !friendId ||
+      !currentUserId ||
+      temporaryAccessEnded
+    ) {
       setLiveDraft(null);
       return;
     }
-    const db = getFirestore();
-    const unsub = onSnapshot(
-      doc(db, "conversations", convId, "drafts", friendId),
-      (snap) => {
+    const unsub = messagingService.subscribeToUserDraftText(
+      convId,
+      friendId,
+      (draft) => {
         setLiveDraft(
-          snap.exists() && snap.data()?.text ? snap.data().text : null,
+          draft?.userId === friendId && draft.text ? draft.text : null,
         );
-      },
-      (error) => {
-        if (error?.code !== "permission-denied") {
-          console.error("Unable to subscribe to live draft:", error);
-        }
-        setLiveDraft(null);
       },
     );
     return () => unsub();
   }, [
     currentConversation?.id,
     currentConversation?.other_user?.user_id,
+    currentConversation?.other_user?.id,
+    user?.id,
     temporaryAccessEnded,
-    firebaseAuthReady,
   ]);
 
-  // ── Boot ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Boot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!user?.id) return;
     return () => {
       subscribedConvId.current = null;
       clearRealtimeTypingSignals();
       unsubscribeFromRealTimeMessages();
-      unsubscribeFromRealTimeEvents();
       unsubscribeFromTypingIndicators();
       unsubscribeFromFreezeStatus();
     };
   }, [user?.id, clearRealtimeTypingSignals]); // eslint-disable-line
 
-  // ── Subscribe to conversation ─────────────────────────────────────────────
+  // â”€â”€ Subscribe to conversation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (temporaryAccessEnded) return;
-    if (!user?.id || !firebaseAuthReady || conversations.length === 0) return;
+    if (!user?.id || conversations.length === 0) return;
     const targetId =
       conversationId ??
       currentConversation?.id ??
@@ -3372,8 +3546,8 @@ export default function MessagingScreen({
     if (subscribedConvId.current) clearRealtimeTypingSignals();
     subscribedConvId.current = conversation.id;
     setCurrentConversation(conversation);
-    console.log(
-      "🔍 [MessagingScreen DEBUG] Subscribing to RTDB for conversation:",
+    redundantScreenLog(
+      "ðŸ” [MessagingScreen DEBUG] Subscribing to Realtime for conversation:",
       conversation.id,
     );
     subscribeToRealTimeMessages(conversation.id);
@@ -3384,13 +3558,12 @@ export default function MessagingScreen({
     setHasOpenedChat(false);
     setInput(loadLocalDraft(conversation.id));
     lastDraftRef.current = "";
-  }, [user?.id, firebaseAuthReady, conversationId, conversations, temporaryAccessEnded]); // eslint-disable-line
+  }, [user?.id, conversationId, conversations, temporaryAccessEnded]); // eslint-disable-line
 
   useEffect(() => {
     if (
       temporaryAccessEnded ||
       !user?.id ||
-      !firebaseAuthReady ||
       !conversationId ||
       currentConversation?.id === conversationId
     ) {
@@ -3422,13 +3595,11 @@ export default function MessagingScreen({
     };
   }, [
     user?.id,
-    firebaseAuthReady,
     conversationId,
     currentConversation?.id,
     conversations,
     setCurrentConversation,
     subscribeToRealTimeMessages,
-    subscribeToRealTimeEvents,
     subscribeToTypingIndicators,
     subscribeToFreezeStatus,
     loadLocalDraft,
@@ -3436,7 +3607,7 @@ export default function MessagingScreen({
   ]);
 
   useEffect(() => {
-    if (!currentConversation?.id || !user?.id || !firebaseAuthReady) {
+    if (!currentConversation?.id || !user?.id || !supabaseAuthReady) {
       setConversationInvites([]);
       setConversationInvitesReady(false);
       return;
@@ -3466,49 +3637,22 @@ export default function MessagingScreen({
     inviteFriends,
     isOriginalParticipant,
     user?.id,
-    firebaseAuthReady,
+    supabaseAuthReady,
   ]);
 
-  // ── Viewport ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const vv = window.visualViewport;
-    const update = () => {
-      setVpHeight(vv ? vv.height : window.innerHeight);
-      setVpOffsetTop(vv ? vv.offsetTop : 0);
-      requestAnimationFrame(() => {
-        if (scrollRef.current)
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      });
-    };
-    if (vv) {
-      vv.addEventListener("resize", update);
-      vv.addEventListener("scroll", update);
-    } else {
-      window.addEventListener("resize", update);
-      window.addEventListener("orientationchange", update);
-    }
-    update();
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-    return () => {
-      if (vv) {
-        vv.removeEventListener("resize", update);
-        vv.removeEventListener("scroll", update);
-      } else {
-        window.removeEventListener("resize", update);
-        window.removeEventListener("orientationchange", update);
-      }
-      document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
-    };
-  }, []);
+  // â”€â”€ Viewport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
   useEffect(() => {
-    if (scrollRef.current)
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [activeMessages, messageEvents, livePresenceSwitchTarget]);
+    scrollChatToBottom();
+  }, [
+    activeMessages,
+    optimisticSwitchEvents,
+    livePresenceSwitchTarget,
+    scrollChatToBottom,
+  ]);
 
-  // ── Seen tracking (only the most recent incoming message) ────────────────
+  // â”€â”€ Seen tracking (only the most recent incoming message) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!currentConversation || !user?.id) return;
     const otherUserId = currentConversation.other_user?.user_id;
@@ -3533,12 +3677,22 @@ export default function MessagingScreen({
     const unseenIncoming = activeMessages.filter(
       (msg) => msg.senderId !== user.id && !msg.is_seen,
     );
-    const unseenIds = new Set(unseenIncoming.map((msg) => msg.id));
-    unseenIncoming.forEach((msg) => {
-      if (pendingSeenMarksRef.current.has(msg.id)) return;
-      pendingSeenMarksRef.current.add(msg.id);
-      markMessageAsSeen(msg.id).finally(() => {});
-    });
+    const latestUnseen = unseenIncoming[unseenIncoming.length - 1];
+    const unseenIds = new Set(latestUnseen ? [latestUnseen.id] : []);
+    if (latestUnseen && !pendingSeenMarksRef.current.has(latestUnseen.id)) {
+      pendingSeenMarksRef.current.add(latestUnseen.id);
+      // mark_conversation_read advances every receipt through this message;
+      // coalesce burst arrivals into one bounded write.
+      queuedSeenMarkRef.current = { messageId: latestUnseen.id, conversationId: currentConversation.id };
+      if (!seenMarkTimerRef.current) {
+        seenMarkTimerRef.current = setTimeout(() => {
+          seenMarkTimerRef.current = null;
+          const queued = queuedSeenMarkRef.current;
+          queuedSeenMarkRef.current = null;
+          if (queued) markMessageAsSeen(queued.messageId).finally(() => {});
+        }, 250);
+      }
+    }
     for (const pendingId of pendingSeenMarksRef.current) {
       if (!unseenIds.has(pendingId))
         pendingSeenMarksRef.current.delete(pendingId);
@@ -3546,14 +3700,28 @@ export default function MessagingScreen({
   }, [activeMessages, currentConversation?.id, user?.id, markMessageAsSeen]);
 
   useEffect(() => {
+    if (seenMarkTimerRef.current) clearTimeout(seenMarkTimerRef.current);
+    seenMarkTimerRef.current = null;
+    queuedSeenMarkRef.current = null;
     pendingSeenMarksRef.current.clear();
   }, [currentConversation?.id]);
 
-  // ── Mood block ────────────────────────────────────────────────────────────
+  useEffect(() => () => {
+    if (seenMarkTimerRef.current) clearTimeout(seenMarkTimerRef.current);
+  }, []);
+
+  // â”€â”€ Mood block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleMoodBlock = async (
     mood: "angry" | "crying" | "irritated" | "depressed",
   ) => {
-    if (!currentConversation || !user?.id) return;
+    if (!currentConversation || !user?.id) {
+      liveScreenDebug("mood_block_skipped_missing_context", {
+        conversationId: currentConversation?.id ?? null,
+        userId: user?.id ?? null,
+        mood,
+      });
+      return;
+    }
     const now = Date.now();
     const endTime = now + 10 * 60 * 1000;
     const moodBlock = {
@@ -3563,64 +3731,69 @@ export default function MessagingScreen({
       startTime: now,
       endTime,
     };
-    const db = getFirestore();
-    await setDoc(
-      doc(db, "conversations", currentConversation.id, "meta", "moodBlock"),
+    liveScreenDebug("mood_block_write_requested", {
+      conversationId: currentConversation.id,
+      userId: user.id,
+      mood,
+      endTime,
+    });
+    const wroteMoodBlock = await messagingService.setMoodBlock(
+      currentConversation.id,
       moodBlock,
     );
-    setCurrentMoodBlock(moodBlock);
+    liveScreenDebug("mood_block_write_result", {
+      conversationId: currentConversation.id,
+      userId: user.id,
+      mood,
+      wroteMoodBlock,
+    });
+    if (wroteMoodBlock) {
+      setCurrentMoodBlock(moodBlock);
+    }
   };
 
   useEffect(() => {
-    if (!currentConversation?.id || temporaryAccessEnded || !firebaseAuthReady) {
+    if (!currentConversation?.id || temporaryAccessEnded) {
+      liveScreenDebug("mood_block_listener_skipped", {
+        conversationId: currentConversation?.id ?? null,
+        temporaryAccessEnded,
+      });
       setCurrentMoodBlock(null);
       return;
     }
-    const db = getFirestore();
-    const moodBlockRef = doc(
-      db,
-      "conversations",
+    let expiryTimer: ReturnType<typeof setTimeout> | null = null;
+    liveScreenDebug("mood_block_listener_start", {
+      conversationId: currentConversation.id,
+    });
+    const unsub = messagingService.subscribeToMoodBlock(
       currentConversation.id,
-      "meta",
-      "moodBlock",
-    );
-    const unsub = onSnapshot(
-      moodBlockRef,
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data() as {
-            mood: "angry" | "crying" | "irritated" | "depressed";
-            initiatedBy: string;
-            initiatedByName: string;
-            startTime: number;
-            endTime: number;
-          };
-          if (data.endTime > Date.now()) {
-            setCurrentMoodBlock(data);
-            const timeUntilExpiry = data.endTime - Date.now();
-            setTimeout(() => {
-              setCurrentMoodBlock(null);
-              deleteDoc(moodBlockRef).catch(() => {});
-            }, timeUntilExpiry);
-          } else {
-            setCurrentMoodBlock(null);
-            deleteDoc(moodBlockRef).catch(() => {});
-          }
-        } else {
-          setCurrentMoodBlock(null);
+      (moodBlock) => {
+        liveScreenDebug("mood_block_listener_payload", {
+          conversationId: currentConversation.id,
+          hasMoodBlock: Boolean(moodBlock),
+          moodBlock,
+        });
+        setCurrentMoodBlock(moodBlock);
+        if (expiryTimer) {
+          clearTimeout(expiryTimer);
+          expiryTimer = null;
         }
-      },
-      (error) => {
-        if (error?.code !== "permission-denied") {
-          console.error("Unable to subscribe to mood block:", error);
-        }
-        setCurrentMoodBlock(null);
-      },
-    );
-    return () => unsub();
-  }, [currentConversation?.id, temporaryAccessEnded, firebaseAuthReady]);
+        if (!moodBlock) return;
 
-  // ── Progress bar ──────────────────────────────────────────────────────────
+        const timeUntilExpiry = moodBlock.endTime - Date.now();
+        expiryTimer = setTimeout(() => {
+          setCurrentMoodBlock(null);
+          messagingService.clearMoodBlock(currentConversation.id);
+        }, Math.max(0, timeUntilExpiry));
+      },
+    );
+    return () => {
+      if (expiryTimer) clearTimeout(expiryTimer);
+      unsub();
+    };
+  }, [currentConversation?.id, temporaryAccessEnded]);
+
+  // â”€â”€ Progress bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!currentMoodBlock) {
       setCurrentMoodBlockVisible(false);
@@ -3663,32 +3836,60 @@ export default function MessagingScreen({
     return () => cancelAnimationFrame(frame);
   }, [moodBlockModalOpen]);
 
-  // ── Freeze actions ────────────────────────────────────────────────────────
+  // â”€â”€ Freeze actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const doFreeze = async () => {
     const conv = convRef.current;
     const uid = userIdRef.current;
-    if (!conv || !uid) return;
-    const db = getFirestore();
-    await setDoc(doc(db, "conversations", conv.id, "meta", "freeze"), {
-      frozen_by: uid,
-      frozen_at: serverTimestamp(),
-    });
+    if (!conv || !uid) {
+      liveScreenDebug("freeze_skipped_missing_context", {
+        conversationId: conv?.id ?? null,
+        userId: uid ?? null,
+      });
+      return;
+    }
     try {
-      freezeChat(conv.id);
-    } catch (_) {}
+      liveScreenDebug("freeze_requested", {
+        conversationId: conv.id,
+        userId: uid,
+      });
+      const froze = await freezeChat(conv.id);
+      if (!froze) throw new Error("Unable to freeze this conversation");
+    } catch (error) {
+      liveScreenDebug("freeze_threw", {
+        conversationId: conv.id,
+        userId: uid,
+        error,
+      });
+    }
   };
 
   const doUnfreeze = async () => {
     const conv = convRef.current;
-    if (!conv) return;
-    const db = getFirestore();
-    await deleteDoc(doc(db, "conversations", conv.id, "meta", "freeze"));
+    const uid = userIdRef.current;
+    if (!conv) {
+      liveScreenDebug("unfreeze_skipped_missing_context", {
+        conversationId: null,
+        userId: uid ?? null,
+      });
+      return;
+    }
     try {
-      unfreezeChat(conv.id);
-    } catch (_) {}
+      liveScreenDebug("unfreeze_requested", {
+        conversationId: conv.id,
+        userId: uid ?? null,
+      });
+      const unfroze = await unfreezeChat(conv.id);
+      if (!unfroze) throw new Error("Unable to unfreeze this conversation");
+    } catch (error) {
+      liveScreenDebug("unfreeze_threw", {
+        conversationId: conv.id,
+        userId: uid ?? null,
+        error,
+      });
+    }
   };
 
-  // ── Event helpers ─────────────────────────────────────────────────────────
+  // â”€â”€ Event helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const isValidEventType = (t: string): t is EvType =>
     [
       "screenshot",
@@ -3731,7 +3932,7 @@ export default function MessagingScreen({
             : `You ignored ${ignoredName}'s message`;
         }
         if (event.user_id === user?.id) {
-          // Current user did the ignoring â show whose message they ignored
+          // Current user did the ignoring Ã¢ show whose message they ignored
           const ignoredName =
             event.data?.ignored_user_name ||
             event.data?.target_user_name ||
@@ -3751,6 +3952,13 @@ export default function MessagingScreen({
         }
       case "invite": {
         const invitedName = event.data?.user_name || "Someone";
+        if (event.data?.action === "game_invite") {
+          const inviterName = event.data?.inviter_name || "Someone";
+          const gameTitle = event.data?.game_title || "This Or That";
+          return event.user_id === user?.id
+            ? `You invited ${currentConversation?.other_user?.display_name || currentConversation?.other_user?.username || "them"} to play ${gameTitle}`
+            : `${inviterName} invited you to play ${gameTitle}`;
+        }
         switch (event.data?.action) {
           case "invited":
             return `${invitedName} was invited`;
@@ -3769,39 +3977,25 @@ export default function MessagingScreen({
     }
   };
 
-  const timelineEvents = [
-    ...messageEvents,
-    ...optimisticSwitchEvents.filter(
-      (optimisticEvent) =>
-        !messageEvents.some((persistedEvent) => {
-          if (
-            persistedEvent.event_type !== "chat_switch" ||
-            optimisticEvent.event_type !== "chat_switch"
-          )
-            return false;
-          const sameInitiator =
-            persistedEvent.user_id === optimisticEvent.user_id;
-          const sameTargetUser =
-            String(persistedEvent.data?.target_user_id ?? "") ===
-            String(optimisticEvent.data?.target_user_id ?? "");
-          const sameRecipient =
-            String(persistedEvent.data?.recipient_user_id ?? "") ===
-            String(optimisticEvent.data?.recipient_user_id ?? "");
-          const persistedAt = new Date(
-            String(persistedEvent.created_at || ""),
-          ).getTime();
-          const optimisticAt = new Date(
-            String(optimisticEvent.created_at || ""),
-          ).getTime();
-          return (
-            sameInitiator &&
-            sameTargetUser &&
-            sameRecipient &&
-            Math.abs(persistedAt - optimisticAt) < 15000
-          );
-        }),
-    ),
+  const timelineEvents: typeof optimisticSwitchEvents = [
+    ...events.filter((event) => event.conversation_id === currentConversation?.id),
+    ...optimisticSwitchEvents,
   ];
+  const livePresenceSwitchTargetAlreadyInTimeline =
+    !!livePresenceSwitchTarget &&
+    timelineEvents.some((event) => {
+      if (event.event_type !== "chat_switch") return false;
+      const targetUserId = String(event.data?.target_user_id ?? "");
+      const targetUserName = String(event.data?.target_user_name ?? "")
+        .trim()
+        .toLowerCase();
+      return (
+        (!!targetUserId && targetUserId === livePresenceSwitchTarget.userId) ||
+        (!!targetUserName &&
+          targetUserName ===
+            livePresenceSwitchTarget.userName.trim().toLowerCase())
+      );
+    });
 
   const msgUserProfiles = useProfileDataStore((s) => s.userProfiles);
   const friendInfo = currentConversation?.other_user
@@ -3818,7 +4012,7 @@ export default function MessagingScreen({
           "https://picsum.photos/seed/default/100/100",
       }
     : FRIEND;
-  const friendTyping = useMemo(() => {
+  const friendTypingRaw = useMemo(() => {
     const convId = currentConversation?.id;
     const friendId =
       currentConversation?.other_user?.user_id ||
@@ -3839,6 +4033,42 @@ export default function MessagingScreen({
     currentConversation?.other_user?.id,
     typingUsers,
   ]);
+  const [friendTypingVisible, setFriendTypingVisible] = useState(false);
+  useEffect(() => {
+    const delayMs = friendTypingRaw ? 120 : 850;
+    const timer = window.setTimeout(() => {
+      setFriendTypingVisible(friendTypingRaw);
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [friendTypingRaw]);
+  const friendTyping = friendTypingVisible;
+  useEffect(() => {
+    if (!friendTyping) {
+      previousFriendTypingVisibleRef.current = false;
+      return;
+    }
+    if (previousFriendTypingVisibleRef.current) return;
+    previousFriendTypingVisibleRef.current = true;
+
+    let firstFrame = 0;
+    let secondFrame = 0;
+    const followUp = window.setTimeout(() => scrollChatToBottom("smooth"), 180);
+    firstFrame = requestAnimationFrame(() => {
+      scrollChatToBottom("smooth");
+      secondFrame = requestAnimationFrame(() => scrollChatToBottom("smooth"));
+    });
+
+    return () => {
+      window.clearTimeout(followUp);
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [friendTyping, scrollChatToBottom]);
+  useEffect(() => {
+    if (!friendTyping || !liveDraft) return;
+    const timer = window.setTimeout(() => scrollChatToBottom("smooth"), 90);
+    return () => window.clearTimeout(timer);
+  }, [friendTyping, liveDraft, scrollChatToBottom]);
   const friendStatusLabel = useMemo(() => {
     if (friendTyping) return "TYPING...";
     if (friendOnline) return "ACTIVE NOW";
@@ -3852,7 +4082,7 @@ export default function MessagingScreen({
     const friendId =
       currentConversation?.other_user?.user_id ||
       currentConversation?.other_user?.id;
-    console.log("[MessagingScreen DEBUG] final header indicators:", {
+    redundantScreenLog("[MessagingScreen DEBUG] final header indicators:", {
       conversationId: convId,
       friendId,
       friendUsername: currentConversation?.other_user?.username,
@@ -3924,12 +4154,19 @@ export default function MessagingScreen({
     ...activeMessages
       .filter((msg) => !hiddenMessageIds.has(msg.id))
       .map((msg) => {
-        const mediaUrl = msg.mediaUrl || msg.media_url || null;
-        const mediaType = String(
+        const storedMediaUrl = msg.mediaUrl || msg.media_url || null;
+        const mediaUrl = storedMediaUrl ? refreshedMediaUrls[storedMediaUrl] || storedMediaUrl : null;
+        // Native messages persist the storage path, while the current table has
+        // no separate media-type column. Treat a durable path as a photo unless
+        // it is one of the structured shared-content payloads handled below.
+        const persistedMediaType = String(
           msg.media_type || msg.mediaType || "",
         ).toUpperCase();
         const sharedPost = parseSharedPostPayload(mediaUrl);
         const sharedStory = parseSharedStoryPayload(mediaUrl);
+        const mediaType =
+          persistedMediaType ||
+          (mediaUrl && !sharedPost && !sharedStory ? "PHOTO" : "");
         const replyToRaw = msg.reply_to || msg.replyTo || null;
         return {
           id: msg.id,
@@ -3966,6 +4203,11 @@ export default function MessagingScreen({
             mediaUrl && mediaType === "PHOTO" && !sharedPost && !sharedStory
               ? [mediaUrl]
               : [],
+          deliveryStatus: (msg.is_seen
+            ? "seen"
+            : msg.is_delivered
+              ? "delivered"
+              : undefined) as Status | undefined,
         };
       }),
     ...optimisticTextMessages
@@ -4062,7 +4304,7 @@ export default function MessagingScreen({
             return false;
         }
         if (e.event_type === "mention") {
-          console.log("[@mention] Filtering mention event:", e);
+          redundantScreenLog("[@mention] Filtering mention event:", e);
         }
         return true;
       })
@@ -4072,23 +4314,25 @@ export default function MessagingScreen({
         type: event.event_type as EvType,
         text: getEventText(event),
         targetUserId: String(event.data?.target_user_id ?? "") || undefined,
+        data: event.data,
+        createdAt: (() => {
+          const parsed = parsePresenceTimestamp(event.created_at);
+          if (parsed !== null) {
+            eventTimestampCacheRef.current.set(event.id, parsed);
+            return parsed;
+          }
+          const cached = eventTimestampCacheRef.current.get(event.id);
+          if (cached !== undefined) return cached;
+
+          const fallback = Date.now();
+          eventTimestampCacheRef.current.set(event.id, fallback);
+          return fallback;
+        })(),
       })),
   ].sort((a, b) => {
     const getMs = (item: TimelineItem): number => {
-      const src =
-        item.kind === "msg"
-          ? activeMessages.find((m) => m.id === item.id)
-          : timelineEvents.find((e) => e.id === item.id);
-      const raw =
-        item.kind === "msg"
-          ? (item.createdAt ??
-            (src as any)?.timestamp ??
-            (src as any)?.created_at)
-          : (src as any)?.created_at;
-      if (!raw) return Date.now();
-      if (typeof raw === "object" && "toDate" in raw)
-        return (raw as any).toDate().getTime();
-      return new Date(String(raw)).getTime();
+      const parsed = parsePresenceTimestamp(item.createdAt);
+      return parsed ?? 0;
     };
     const tA = getMs(a),
       tB = getMs(b);
@@ -4166,13 +4410,19 @@ export default function MessagingScreen({
     );
   };
 
-  const deleteMessageForMe = (msg: Msg) => {
-    setHiddenMessageIds((current) => {
-      const next = new Set(current);
-      msg.sourceIds.forEach((id) => next.add(id));
-      persistHiddenMessageIds(next);
-      return next;
-    });
+  const deleteMessageForMe = async (msg: Msg) => {
+    try {
+      await Promise.all(msg.sourceIds.map((id) => messagingService.hideMessageForMe(id)));
+      setHiddenMessageIds((current) => {
+        const next = new Set(current);
+        msg.sourceIds.forEach((id) => next.add(id));
+        persistHiddenMessageIds(next);
+        return next;
+      });
+    } catch (error) {
+      console.error("Unable to persist hidden message", error);
+      return;
+    }
     if (replyTarget && msg.sourceIds.includes(replyTarget.id)) {
       setReplyTarget(null);
     }
@@ -4204,58 +4454,91 @@ export default function MessagingScreen({
     return false;
   };
 
-  // ── Input handler ─────────────────────────────────────────────────────────
+  // â”€â”€ Input handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function handleInput(val: string) {
-    if (temporaryAccessEndedRef.current) return;
+    if (temporaryAccessEndedRef.current) {
+      liveScreenDebug("input_skipped_temporary_access_ended", {
+        attemptedLength: val.length,
+        conversationId: convRef.current?.id ?? null,
+        userId: userIdRef.current ?? null,
+      });
+      return;
+    }
+    const convAtInput = convRef.current;
+    const uidAtInput = userIdRef.current;
+    liveScreenDebug("input_changed", {
+      conversationId: convAtInput?.id ?? null,
+      userId: uidAtInput ?? null,
+      textLength: val.length,
+      hadDraftTimer: Boolean(draftThrottleRef.current),
+      isTypingBefore: isTypingRef.current,
+    });
     setInput(val);
     saveLocalDraft(val);
-    if (!ghostRef.current) {
-      const nowTyping = val.length > 0;
-      if (nowTyping !== isTypingRef.current) {
-        isTypingRef.current = nowTyping;
-        const conv = convRef.current;
-        if (conv) setTypingIndicator(conv.id, nowTyping);
-      }
-    } else if (isTypingRef.current) {
-      isTypingRef.current = false;
+    const nowTyping = val.length > 0;
+    if (nowTyping !== isTypingRef.current) {
+      isTypingRef.current = nowTyping;
+      lastTypingHeartbeatRef.current = nowTyping ? Date.now() : 0;
       const conv = convRef.current;
-      if (conv) setTypingIndicator(conv.id, false);
+      liveScreenDebug("typing_state_transition", {
+        conversationId: conv?.id ?? null,
+        userId: uidAtInput ?? null,
+        isTyping: nowTyping,
+      });
+      if (conv) setTypingIndicator(conv.id, nowTyping);
+    } else if (
+      nowTyping &&
+      Date.now() - lastTypingHeartbeatRef.current >= 3_000
+    ) {
+      lastTypingHeartbeatRef.current = Date.now();
+      const conv = convRef.current;
+      if (conv) setTypingIndicator(conv.id, true);
     }
-    if (!ghostRef.current) {
-      const conv = convRef.current;
-      if (conv) {
+    const conv = convRef.current;
+    if (conv) {
         if (val.length === 0) {
           if (draftThrottleRef.current) {
             clearTimeout(draftThrottleRef.current);
             draftThrottleRef.current = null;
           }
           lastDraftRef.current = "";
+          liveScreenDebug("draft_clear_from_input", {
+            conversationId: conv.id,
+            userId: uidAtInput ?? null,
+          });
           writeDraft("");
         } else if (val !== lastDraftRef.current) {
           if (draftThrottleRef.current) clearTimeout(draftThrottleRef.current);
+          liveScreenDebug("draft_write_scheduled_from_input", {
+            conversationId: conv.id,
+            userId: uidAtInput ?? null,
+            textLength: val.length,
+            delayMs: 100,
+          });
           draftThrottleRef.current = setTimeout(() => {
             lastDraftRef.current = val;
+            liveScreenDebug("draft_write_timer_fired", {
+              conversationId: conv.id,
+              userId: uidAtInput ?? null,
+              textLength: val.length,
+            });
             writeDraft(val);
             draftThrottleRef.current = null;
           }, 100);
         }
-      }
     }
     if (longTimer.current) {
       clearTimeout(longTimer.current);
       longTimer.current = null;
     }
-    if (val.length > 80) {
-      longTimer.current = setTimeout(() => {
-        const c = convRef.current;
-        if (c) trackLongUnsent(c.id, val);
-      }, 4000);
-    }
   }
 
-  // ── Send ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Send â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function send() {
     if (!currentConversation && conversations.length > 0) {
+      liveScreenDebug("send_selected_first_conversation", {
+        fallbackConversationId: conversations[0]?.id ?? null,
+      });
       setCurrentConversation(conversations[0]);
       subscribeToRealTimeMessages(conversations[0].id);
       return;
@@ -4267,8 +4550,17 @@ export default function MessagingScreen({
       sendingMessage ||
       currentMoodBlock ||
       temporaryAccessEnded
-    )
+    ) {
+      liveScreenDebug("send_blocked", {
+        hasInput: Boolean(input.trim()),
+        frozen: frozenRef.current,
+        conversationId: currentConversation?.id ?? null,
+        sendingMessage,
+        hasMoodBlock: Boolean(currentMoodBlock),
+        temporaryAccessEnded,
+      });
       return;
+    }
     if (longTimer.current) {
       clearTimeout(longTimer.current);
       longTimer.current = null;
@@ -4290,18 +4582,14 @@ export default function MessagingScreen({
           media_type: replyTarget.mediaType || "TEXT",
         }
       : undefined;
-    for (const m of [...text.matchAll(/@(\w+)/g)]) {
-      const u = m[1];
-      if (!trackedMentions.current.has(u)) {
-        trackedMentions.current.add(u);
-        setTimeout(() => {
-          console.log("[@mention] Tracking after send:", u);
-          trackMention(currentConversation.id, u);
-        }, 500);
-      }
-    }
     try {
-      console.log("[MessagingScreen] Sending message:", {
+      liveScreenDebug("send_started", {
+        conversationId: currentConversation.id,
+        userId: userIdRef.current ?? null,
+        textLength: text.length,
+        hasReply: Boolean(replyPayload),
+      });
+      redundantScreenLog("[MessagingScreen] Sending message:", {
         conversationId: currentConversation.id,
         text: text,
         conversation: currentConversation,
@@ -4320,7 +4608,6 @@ export default function MessagingScreen({
         isTypingRef.current = false;
         setTypingIndicator(currentConversation.id, false);
       }
-      setStatus("delivered");
       await sendRealTimeMessage(
         currentConversation.id,
         text,
@@ -4328,12 +4615,23 @@ export default function MessagingScreen({
         undefined,
         replyPayload,
       );
+      liveScreenDebug("send_service_resolved", {
+        conversationId: currentConversation.id,
+        userId: userIdRef.current ?? null,
+        optimisticMessageId: optimisticMessage.id,
+      });
       setOptimisticTextMessages((current) =>
         current.filter((message) => message.id !== optimisticMessage.id),
       );
-      console.log("[MessagingScreen] Message sent successfully");
-      setTimeout(() => setStatus("seen"), 2200);
+      setStatus("delivered");
+      redundantScreenLog("[MessagingScreen] Message sent successfully");
     } catch (err) {
+      liveScreenDebug("send_failed", {
+        conversationId: currentConversation.id,
+        userId: userIdRef.current ?? null,
+        optimisticMessageId: optimisticMessage.id,
+        error: err,
+      });
       console.error("[MessagingScreen] Failed to send:", err);
       setOptimisticTextMessages((current) =>
         current.map((message) =>
@@ -4345,6 +4643,57 @@ export default function MessagingScreen({
       setInput(text);
       saveLocalDraft(text, currentConversation.id);
     }
+  }
+
+  async function uploadAndSendPhoto(message: OptimisticPhotoMessage, conversation: any) {
+    if (!user?.id) return;
+    if (cancelledPhotoIdsRef.current.has(message.id)) return;
+    try {
+      const uploadedPhoto = await uploadOptimizedMedia({
+        source: message.file,
+        userId: user.id,
+        context: "messages",
+        fileName: message.file.name,
+        mediaKind: "image",
+      });
+      if (cancelledPhotoIdsRef.current.has(message.id)) return;
+      setOptimisticPhotoMessages((current) => current.map((item) =>
+        item.id === message.id ? { ...item, uploadedUrl: uploadedPhoto.url, failed: false } : item,
+      ));
+      const sentMessage = await sendRealTimeMessage(conversation.id, "Photo", uploadedPhoto.url, "PHOTO");
+      if (uploadedPhoto.assetId && sentMessage?.id) {
+        await getSupabaseBrowserClient().rpc("attach_media_asset", {
+          p_asset_id: uploadedPhoto.assetId,
+          p_reference_type: "message",
+          p_reference_id: sentMessage.id,
+        });
+      }
+    } catch (err) {
+      console.error("[MessagingScreen] Failed to send photo:", err);
+      setOptimisticPhotoMessages((current) => current.map((item) =>
+        item.id === message.id ? { ...item, failed: true, uploadedUrl: undefined } : item,
+      ));
+    }
+  }
+
+  function retryPhotoUpload(messageId: string) {
+    const message = optimisticPhotoMessagesRef.current.find((item) => item.id === messageId);
+    if (!message || !currentConversation || !user?.id) return;
+    cancelledPhotoIdsRef.current.delete(messageId);
+    setOptimisticPhotoMessages((current) => current.map((item) =>
+      item.id === messageId ? { ...item, failed: false } : item,
+    ));
+    setSendingMedia(true);
+    void uploadAndSendPhoto(message, currentConversation).finally(() => setSendingMedia(false));
+  }
+
+  function cancelPhotoUpload(messageId: string) {
+    cancelledPhotoIdsRef.current.add(messageId);
+    setOptimisticPhotoMessages((current) => {
+      const target = current.find((item) => item.id === messageId);
+      if (target) URL.revokeObjectURL(target.localUrl);
+      return current.filter((item) => item.id !== messageId);
+    });
   }
 
   async function sendPhotoFiles(files: FileList | null) {
@@ -4380,43 +4729,8 @@ export default function MessagingScreen({
     setStatus("delivered");
 
     void Promise.allSettled(
-      optimisticMessages.map(async (message) => {
-        try {
-          const uploadedPhoto = await uploadOptimizedMedia({
-            source: message.file,
-            userId: user.id,
-            context: "messages",
-            fileName: message.file.name,
-            mediaKind: "image",
-          });
-
-          setOptimisticPhotoMessages((current) =>
-            current.map((item) =>
-              item.id === message.id
-                ? { ...item, uploadedUrl: uploadedPhoto.url }
-                : item,
-            ),
-          );
-
-          await sendRealTimeMessage(
-            conversation.id,
-            "Photo",
-            uploadedPhoto.url,
-            "PHOTO",
-          );
-        } catch (err) {
-          console.error("[MessagingScreen] Failed to send photo:", err);
-          setOptimisticPhotoMessages((current) =>
-            current.map((item) =>
-              item.id === message.id ? { ...item, failed: true } : item,
-            ),
-          );
-        }
-      }),
-    ).then(() => {
-      setTimeout(() => setStatus("seen"), 2200);
-      setSendingMedia(false);
-    });
+      optimisticMessages.map((message) => uploadAndSendPhoto(message, conversation)),
+    ).then(() => setSendingMedia(false));
   }
 
   const loadInviteFriends = useCallback(async () => {
@@ -4537,6 +4851,16 @@ export default function MessagingScreen({
   };
 
   const menuActions: [string, string, () => void, boolean][] = [
+    [
+      "Games",
+      "",
+      () => {
+        setMenuOpen(false);
+        setGamesRoomSessionId(null);
+        setGamesRoomOpen(true);
+      },
+      false,
+    ],
     ...(isOriginalParticipant
       ? ([
           [
@@ -4575,7 +4899,7 @@ export default function MessagingScreen({
           });
         }
       },
-      frozen,
+      frozen && !canUnfreeze,
     ],
     [
       "Clear chat",
@@ -4586,12 +4910,12 @@ export default function MessagingScreen({
           if (
             confirm("Are you sure you want to clear all messages in this chat?")
           ) {
-            console.log(
+            redundantScreenLog(
               "Clearing chat for conversation:",
               currentConversation.id,
             );
             clearMessages(currentConversation.id)
-              .then(() => console.log("Chat cleared successfully"))
+              .then(() => redundantScreenLog("Chat cleared successfully"))
               .catch((error) => console.error("Error clearing chat:", error));
           }
         }
@@ -4601,36 +4925,42 @@ export default function MessagingScreen({
   ];
 
   const moodEmoji = (mood: string) => {
-    if (mood === "angry") return "😠";
-    if (mood === "crying") return "😢";
-    if (mood === "irritated") return "😤";
-    if (mood === "depressed") return "😔";
-    return "😶";
+    if (mood === "angry") return "ðŸ˜ ";
+    if (mood === "crying") return "ðŸ˜¢";
+    if (mood === "irritated") return "ðŸ˜¤";
+    if (mood === "depressed") return "ðŸ˜”";
+    return "ðŸ˜¶";
   };
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div
+      ref={viewport}
+      className="pop-messaging-screen dare-chat chat-viewport"
       style={{
-        position: "relative",
-        top: vpOffsetTop,
+        position: "absolute",
+        top: 0,
         left: 0,
         right: 0,
         display: "flex",
         flexDirection: "column",
         background:
-          "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.18), transparent 34%), radial-gradient(circle at 12% 18%, rgba(14,165,233,0.12), transparent 28%), linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%)",
+          "radial-gradient(ellipse at 85% 0%, #4ade8009, transparent 40%), #08090d",
         fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif",
+          "var(--font-ui)",
         color: "#fff",
         overflow: "hidden",
-        height: `${vpHeight}px`,
+        height: "100%",
       }}
     >
       <style>{`
         @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
         @keyframes blink{50%{opacity:0}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+        @keyframes typingDot{
+          0%,80%,100%{transform:translateY(0);opacity:0.42}
+          40%{transform:translateY(-3px);opacity:1}
+        }
         @keyframes capsuleIn{from{opacity:0;transform:translateX(12px) scale(0.92)}to{opacity:1;transform:translateX(0) scale(1)}}
         @keyframes capsuleReveal{
           0%{opacity:0;transform:scaleX(0.4) scaleY(0.6);filter:blur(8px)}
@@ -4671,19 +5001,30 @@ export default function MessagingScreen({
         input,textarea{outline:none;}
         input::placeholder,textarea::placeholder{color:#64748b}
         ::-webkit-scrollbar{display:none}
+        .messaging-header-action {
+          border-color: transparent !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        html[data-dare-theme="pop-social"] .pop-messaging-header,
+        html[data-dare-theme="pop-social"] .pop-messaging-header .messaging-header-action {
+          border-color: transparent !important;
+          box-shadow: none !important;
+        }
       `}</style>
 
-      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div
+        className="pop-messaging-header messaging-header-surface"
         style={{
           position: "relative",
           zIndex: 120,
           flexShrink: 0,
           background:
-            "radial-gradient(ellipse at 24% -34%, rgba(74,222,128,0.2), transparent 62%), radial-gradient(ellipse at 78% -28%, rgba(14,165,233,0.14), transparent 60%), linear-gradient(180deg, rgba(6,8,6,0.98) 0%, rgba(10,15,10,0.97) 52%, rgba(3,4,3,0.96) 100%)",
-          padding: "calc(14px + var(--safe-area-top)) 14px 12px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 20px 54px rgba(0,0,0,0.38)",
+            "rgba(16,17,22,.94)",
+          padding: "calc(10px + var(--safe-area-top)) 12px 10px",
+          borderBottom: "none",
+          boxShadow: "none",
           backdropFilter: "blur(20px)",
         }}
       >
@@ -4693,17 +5034,13 @@ export default function MessagingScreen({
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              background:
-                "radial-gradient(ellipse at 24% -45%, rgba(74,222,128,0.15), transparent 64%), radial-gradient(ellipse at 82% -40%, rgba(14,165,233,0.1), transparent 62%), linear-gradient(180deg, rgba(13,19,14,0.92), rgba(8,13,9,0.96))",
-              borderRadius: 30,
-              padding: "12px",
-              border: "1px solid rgba(255,255,255,0.08)",
-              boxShadow:
-                "0 24px 70px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.05)",
+              padding: "0",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
+              <button
+                aria-label="Back to chats"
+                className="messaging-back-action"
                 onClick={() => {
                   clearRealtimeTypingSignals();
                   onBack?.();
@@ -4711,7 +5048,8 @@ export default function MessagingScreen({
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 20,
+                  flexShrink: 0,
+                  borderRadius: 18,
                   border: "1px solid rgba(255,255,255,0.08)",
                   background: "rgba(255,255,255,0.045)",
                   color: "#94a3b8",
@@ -4722,19 +5060,18 @@ export default function MessagingScreen({
                   justifyContent: "center",
                   userSelect: "none",
                   boxShadow:
-                    "0 14px 34px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
+                    "0 10px 28px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.04)",
                 }}
               >
-                <ChevronLeft size={20} />
-              </span>
-              <div style={{ position: "relative" }}>
+                <ChevronLeft size={18} />
+              </button>
+              <div className="chat-header-avatar" style={{ position: "relative", flexShrink: 0 }}>
                 <Avatar
                   src={friendInfo.avatar}
                   alt={friendInfo.name}
-                  size="lg"
+                  size={40}
                   userId={currentConversation?.other_user?.user_id}
                   username={currentConversation?.other_user?.username}
-                  forceGhostMode={friendGhostMode}
                   showStatus={false}
                 />
                 <div
@@ -4742,83 +5079,86 @@ export default function MessagingScreen({
                     position: "absolute",
                     bottom: 0,
                     right: 0,
-                    width: 12,
-                    height: 12,
+                    width: 10,
+                    height: 10,
                     borderRadius: "50%",
-                    background: friendOnline ? "#22c55e" : "#334155",
-                    border: "2.5px solid #0d100d",
+                    background: friendOnline ? "#aeb7c2" : "#334155",
+                    border: "2px solid #0d100d",
                     transition: "background 0.35s ease",
                     boxShadow: friendOnline
-                      ? "0 0 6px rgba(61,245,127,0.6)"
+                      ? "0 0 6px rgba(214,221,232,0.6)"
                       : "none",
                   }}
                 />
               </div>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <div style={{ fontSize: 16, fontWeight: 850, color: "#fff" }}>
+              <div className="chat-header-identity" style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {friendInfo.name}
                 </div>
                 <div
                   style={{
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: friendStatusIsLive ? 700 : 500,
                     letterSpacing: friendStatusIsLive ? "0.09em" : 0,
-                    color: friendStatusIsLive ? "#86efac" : "#94a3b8",
-                    marginTop: 2,
-                    transition: "color 0.3s ease",
+                    color: friendStatusIsLive ? "#c8d0d8" : "#94a3b8",
+                    marginTop: 1,
+                    transition:
+                      "color 0.28s ease, letter-spacing 0.28s ease, opacity 0.28s ease",
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
-                    maxWidth: 180,
+                    maxWidth: 170,
+                    minHeight: 13,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
                   }}
                 >
-                  {friendStatusLabel}
+                  <span>{friendStatusLabel}</span>
+                  {friendTyping && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 2.5,
+                        transform: "translateY(1px)",
+                      }}
+                    >
+                      {[0, 1, 2].map((dot) => (
+                        <span
+                          key={dot}
+                          style={{
+                            width: 3,
+                            height: 3,
+                            borderRadius: "50%",
+                            background: "#c8d0d8",
+                            animation: `typingDot 1.15s ${dot * 0.14}s ease-in-out infinite`,
+                          }}
+                        />
+                      ))}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
             <div style={{ position: "relative" }}>
               <button
-                onClick={() => setMenuOpen((o) => !o)}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 20,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.045)",
-                  color: "#e2e8f0",
-                  fontSize: 18,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  letterSpacing: "0.05em",
-                }}
+                aria-label="Chat options"
+                className="messaging-header-action"
+                onClick={() => setMenuOpen(value => !value)}
+                style={{ width: 44, height: 44, border: 0, background: 'transparent', color: '#e2e8f0', display: 'grid', placeItems: 'center', cursor: 'pointer' }}
               >
-                •••
+                <MoreHorizontal size={22} />
               </button>
-              {messageEvents.length > 0 && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 2,
-                    right: 2,
-                    width: 8,
-                    height: 8,
-                    background: "#22c55e",
-                    borderRadius: "50%",
-                    border: "2px solid #000",
-                    animation: "pulse 2s infinite",
-                  }}
-                />
-              )}
               {menuOpen && (
                 <>
                   <div
                     style={{
                       position: "fixed",
-                      top: "calc(78px + var(--safe-area-top))",
-                      right: 14,
+                      top: "calc(68px + var(--safe-area-top))",
+                      right: 12,
                       zIndex: 10000,
                       display: "flex",
                       flexDirection: "column",
@@ -4859,23 +5199,23 @@ export default function MessagingScreen({
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: 8,
-                          padding: "10px 16px",
+                          gap: 7,
+                          padding: "8.5px 14px",
                           border: active
-                            ? "1px solid rgba(61,245,127,0.5)"
+                            ? "1px solid rgba(214,221,232,0.5)"
                             : "1px solid rgba(255,255,255,0.1)",
                           borderRadius: 50,
                           background: active
-                            ? "rgba(74,222,128,0.14)"
+                            ? "rgba(214,221,232,0.14)"
                             : "rgba(12,16,12,0.97)",
                           backdropFilter: "blur(20px)",
                           color:
                             label === "Frozen by them"
                               ? "#444"
                               : active
-                                ? "#86efac"
+                                ? "#c8d0d8"
                                 : "#fff",
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: 600,
                           cursor:
                             label === "Frozen by them"
@@ -4889,7 +5229,7 @@ export default function MessagingScreen({
                           animation: `capsuleIn 0.18s ${i * 0.04}s ease both`,
                         }}
                       >
-                        <span style={{ fontSize: 16 }}>{icon}</span>
+                        <span style={{ fontSize: 14 }}>{icon}</span>
                         {label}
                       </button>
                     ))}
@@ -4901,8 +5241,8 @@ export default function MessagingScreen({
         </div>
       </div>
 
-      {/* ── Status banners ─────────────────────────────────────────────────── */}
-      {ghost && (
+      {/* â”€â”€ Status banners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {false && (
         <div
           style={{
             flexShrink: 0,
@@ -4918,7 +5258,6 @@ export default function MessagingScreen({
             fontWeight: 500,
           }}
         >
-          👻 Ghost Mode — your typing is hidden
         </div>
       )}
       {frozen && (
@@ -4937,14 +5276,14 @@ export default function MessagingScreen({
             fontWeight: 600,
           }}
         >
-          ❄️{" "}
+          â„ï¸{" "}
           {canUnfreeze
             ? "You froze this chat"
             : "Chat frozen by the other person"}
         </div>
       )}
 
-      {/* ── TIMELINE ───────────────────────────────────────────────────────── */}
+      {/* â”€â”€ TIMELINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {currentConversation && enteredTemporaryInvites.length > 0 && (
         <div
           style={{
@@ -4959,6 +5298,7 @@ export default function MessagingScreen({
             const isMe = invite.invitee_id === user?.id;
             return (
               <div
+                className="pop-temporary-pill"
                 key={invite.id}
                 style={{
                   display: "inline-flex",
@@ -4967,9 +5307,9 @@ export default function MessagingScreen({
                   padding: "8px 10px 8px 12px",
                   borderRadius: 999,
                   background:
-                    "linear-gradient(180deg, rgba(74,222,128,0.14), rgba(12,18,13,0.92))",
-                  border: "1px solid rgba(74,222,128,0.2)",
-                  color: "#d8ffe6",
+                    "linear-gradient(180deg, rgba(214,221,232,0.14), rgba(18,18,18,0.92))",
+                  border: "1px solid rgba(214,221,232,0.2)",
+                  color: "#eef2f5",
                   fontSize: 12,
                   fontWeight: 800,
                   whiteSpace: "nowrap",
@@ -5009,6 +5349,7 @@ export default function MessagingScreen({
       )}
       {temporaryAccessEnded && (
         <div
+          className="pop-message-banner"
           style={{
             flexShrink: 0,
             margin: "8px 14px 0",
@@ -5029,10 +5370,12 @@ export default function MessagingScreen({
 
       <div
         ref={scrollRef}
+        className="chat-message-feed"
         style={{
           flex: 1,
           overflowY: "auto",
-          paddingTop: 22,
+          minHeight: 0,
+          paddingTop: 16,
           paddingBottom: currentMoodBlock ? 172 : 12,
         }}
         onClick={() => setMenuOpen(false)}
@@ -5051,7 +5394,7 @@ export default function MessagingScreen({
               padding: "20px",
             }}
           >
-            <div style={{ fontSize: 24, marginBottom: 16 }}>💬</div>
+            <div style={{ fontSize: 24, marginBottom: 16 }}>ðŸ’¬</div>
             <div
               style={{
                 fontSize: 17,
@@ -5105,7 +5448,7 @@ export default function MessagingScreen({
                   fontSize: 13,
                 }}
               >
-                ⏳ Loading messages...
+                â³ Loading messages...
               </div>
             )}
 
@@ -5117,9 +5460,17 @@ export default function MessagingScreen({
                     type={item.type}
                     text={item.text}
                     collapsed={
-                      item.type === "invite" ? true : getCollapsed(index)
+                      item.type === "invite"
+                        ? item.data?.action !== "game_invite"
+                        : getCollapsed(index)
                     }
                     targetUserId={item.targetUserId}
+                    data={item.data}
+                    currentUserId={user?.id}
+                    onEnterGameInvite={(sessionId) => {
+                      setGamesRoomSessionId(sessionId);
+                      setGamesRoomOpen(true);
+                    }}
                     onOpenUserProfile={onOpenUserProfile}
                   />
                 );
@@ -5129,17 +5480,22 @@ export default function MessagingScreen({
                   key={item.id}
                   msg={item}
                   showStatus={item.from === "me" && item.id === lastMineId}
-                  status={status}
+                  status={item.deliveryStatus || status}
                   onOpenSharedPost={onOpenSharedPost}
                   onOpenPhoto={openPhotoViewer}
                   onReply={setReplyFromMessage}
                   onLongPress={setMessageActionTarget}
+                  onRetryPhoto={(message) => retryPhotoUpload(message.id)}
+                  onCancelPhoto={(message) => cancelPhotoUpload(message.id)}
                   showSenderName={temporaryGroupModeActive}
+                  joinedBefore={joinsChatGroup(groupEntry(timeline[index - 1]), groupEntry(item))}
+                  joinedAfter={joinsChatGroup(groupEntry(item), groupEntry(timeline[index + 1]))}
                 />
               );
             })}
 
-            {livePresenceSwitchTarget && (
+            {livePresenceSwitchTarget &&
+              !livePresenceSwitchTargetAlreadyInTimeline && (
               <SysLine
                 key={`live-switch-${livePresenceSwitchTarget.userId}-${livePresenceSwitchTarget.userName}-${livePresenceSwitchTarget.isActive ? "active" : "inactive"}`}
                 type="chat_switch"
@@ -5150,6 +5506,7 @@ export default function MessagingScreen({
                 }
                 collapsed={!livePresenceSwitchTarget.isActive}
                 targetUserId={livePresenceSwitchTarget.userId}
+                currentUserId={user?.id}
                 onOpenUserProfile={onOpenUserProfile}
               />
             )}
@@ -5170,8 +5527,8 @@ export default function MessagingScreen({
                     padding: "10px 14px",
                     borderRadius: "18px 18px 18px 4px",
                     background:
-                      "linear-gradient(180deg, rgba(74,222,128,0.1), rgba(12,18,13,0.9))",
-                    border: "1px solid rgba(74,222,128,0.18)",
+                      "linear-gradient(180deg, rgba(214,221,232,0.1), rgba(18,18,18,0.9))",
+                    border: "1px solid rgba(214,221,232,0.18)",
                     color: "rgba(255,255,255,0.5)",
                     fontSize: 16,
                     lineHeight: 1.4,
@@ -5190,7 +5547,7 @@ export default function MessagingScreen({
                       top: -18,
                       left: 4,
                       fontSize: 10,
-                      color: "#86efac",
+                      color: "#c8d0d8",
                       fontWeight: 600,
                       letterSpacing: "0.06em",
                       fontStyle: "normal",
@@ -5204,7 +5561,7 @@ export default function MessagingScreen({
                       display: "inline-block",
                       width: 2,
                       height: 16,
-                      background: "#4ade80",
+                      background: "#d6dde8",
                       marginLeft: 1,
                       verticalAlign: "middle",
                       animation: "blink 1s step-end infinite",
@@ -5234,27 +5591,29 @@ export default function MessagingScreen({
         )}
       </div>
 
-      {/* ── INPUT ──────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ INPUT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div
+        className="pop-message-input-bar"
         style={{
           flexShrink: 0,
-          padding: "8px 14px calc(20px + var(--safe-area-bottom))",
+          padding: "8px 12px calc(8px + var(--safe-area-bottom))",
           background:
-            "linear-gradient(180deg, rgba(5,7,5,0.82), rgba(5,7,5,0.98))",
+            "linear-gradient(180deg, rgba(8,8,8,0.82), rgba(8,8,8,0.98))",
           borderTop: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 -20px 54px rgba(0,0,0,0.36)",
+          boxShadow: "none",
           backdropFilter: "blur(20px)",
         }}
       >
         {replyTarget && !currentMoodBlock && !frozen && (
           <div
+            className="pop-message-reply-card chat-reply-draft"
             style={{
               position: "relative",
-              margin: "0 0 9px 54px",
+              margin: "0 0 8px",
               padding: "9px 42px 9px 12px",
               borderRadius: 18,
               background:
-                "linear-gradient(135deg, rgba(13,22,17,0.94), rgba(16,16,16,0.96))",
+                "linear-gradient(135deg, rgba(18,18,18,0.94), rgba(16,16,16,0.96))",
               border: "1px solid rgba(255,255,255,0.08)",
               boxShadow:
                 "0 14px 34px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06)",
@@ -5263,6 +5622,7 @@ export default function MessagingScreen({
             }}
           >
             <div
+              className="pop-message-input-shell"
               style={{
                 position: "absolute",
                 left: 0,
@@ -5270,13 +5630,13 @@ export default function MessagingScreen({
                 bottom: 0,
                 width: 4,
                 background:
-                  "linear-gradient(180deg, #4ade80, rgba(134,239,172,0.74))",
-                boxShadow: "0 0 22px rgba(74,222,128,0.46)",
+                  "linear-gradient(180deg, #d6dde8, rgba(200,208,216,0.74))",
+                boxShadow: "0 0 22px rgba(214,221,232,0.46)",
               }}
             />
             <div
               style={{
-                color: "#9af5b9",
+                color: "#d6dde8",
                 fontSize: 12,
                 fontWeight: 900,
                 marginBottom: 3,
@@ -5330,6 +5690,7 @@ export default function MessagingScreen({
           <div style={{ height: 8 }} />
         ) : frozen ? (
           <div
+            className="pop-modal-sheet"
             style={{
               textAlign: "center",
               fontSize: 15,
@@ -5342,10 +5703,10 @@ export default function MessagingScreen({
                 style={{ color: "#3b82f6", cursor: "pointer", fontWeight: 600 }}
                 onClick={doUnfreeze}
               >
-                ❄️ Tap to unfreeze chat
+                â„ï¸ Tap to unfreeze chat
               </span>
             ) : (
-              <span style={{ color: "#2a4060" }}>Chat is frozen ❄️</span>
+              <span style={{ color: "#2a4060" }}>Chat is frozen â„ï¸</span>
             )}
           </div>
         ) : temporaryAccessEnded ? (
@@ -5361,7 +5722,7 @@ export default function MessagingScreen({
             Temporary chat ended
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
+          <div className="chat-compose-row" style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
             <label
               style={{
                 width: 44,
@@ -5371,7 +5732,7 @@ export default function MessagingScreen({
                 background: sendingMedia
                   ? "rgba(255,255,255,0.035)"
                   : "rgba(255,255,255,0.055)",
-                color: sendingMedia ? "#94a3b8" : "#86efac",
+                color: sendingMedia ? "#94a3b8" : "#c8d0d8",
                 fontSize: sendingMedia ? 13 : 24,
                 fontWeight: 300,
                 cursor: sendingMedia ? "default" : "pointer",
@@ -5408,7 +5769,7 @@ export default function MessagingScreen({
                     try {
                       await sendRealTimeMessage(
                         currentConversation.id,
-                        `📎 ${file.name}`,
+                        `ðŸ“Ž ${file.name}`,
                       );
                       setStatus("delivered");
                       setTimeout(() => setStatus("seen"), 2200);
@@ -5422,12 +5783,13 @@ export default function MessagingScreen({
             </label>
 
             <div
+              className="chat-compose-shell"
               style={{
                 flex: 1,
                 display: "flex",
                 alignItems: "flex-end",
                 background:
-                  "linear-gradient(180deg, rgba(22,26,22,0.98), rgba(13,16,13,0.98))",
+                  "linear-gradient(180deg, rgba(24,24,24,0.98), rgba(13,13,13,0.98))",
                 borderRadius: 24,
                 padding: "11px 14px",
                 gap: 8,
@@ -5437,6 +5799,9 @@ export default function MessagingScreen({
               }}
             >
               <textarea
+                ref={composerInput}
+                className="chat-compose-input"
+                aria-label="Message"
                 value={input}
                 onChange={(e) => handleInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -5450,20 +5815,20 @@ export default function MessagingScreen({
                   writeDraft("");
                 }}
                 disabled={!!currentMoodBlock}
-                placeholder={ghost ? "Ghost mode active..." : "Message..."}
+                placeholder="Message..."
                 style={{
                   flex: 1,
                   background: "transparent",
                   border: "none",
                   color: "#fff",
-                  fontSize: 17,
+                  fontSize: 16,
                   lineHeight: 1.4,
-                  caretColor: "#4ade80",
+                  caretColor: "#d6dde8",
                   resize: "none",
                   outline: "none",
                   fontFamily: "inherit",
                   minHeight: 24,
-                  maxHeight: 120,
+                  maxHeight: 112,
                   paddingTop: 1,
                   opacity: 1,
                   cursor: "text",
@@ -5473,6 +5838,8 @@ export default function MessagingScreen({
             </div>
 
             <button
+              className="chat-send"
+              aria-label="Send message"
               onClick={send}
               disabled={!input.trim()}
               style={{
@@ -5480,17 +5847,17 @@ export default function MessagingScreen({
                 height: 44,
                 borderRadius: 20,
                 border: input.trim()
-                  ? "1px solid rgba(187,247,208,0.28)"
+                  ? "1px solid rgba(214,221,232,0.28)"
                   : "1px solid rgba(255,255,255,0.08)",
                 flexShrink: 0,
                 cursor: input.trim() ? "pointer" : "default",
                 background: input.trim()
-                  ? "linear-gradient(135deg,#4ade80,#22c55e)"
+                  ? "var(--chat-accent)"
                   : "rgba(255,255,255,0.045)",
                 boxShadow: input.trim()
-                  ? "0 14px 34px rgba(74,222,128,0.22)"
+                  ? "0 14px 34px rgba(214,221,232,0.22)"
                   : "inset 0 1px 0 rgba(255,255,255,0.04)",
-                transition: "all 0.2s",
+                transition: "transform 140ms ease-out, opacity 140ms ease-out",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -5538,7 +5905,7 @@ export default function MessagingScreen({
               zIndex: 211,
               maxHeight: "min(76vh, 620px)",
               background:
-                "radial-gradient(circle at 50% -18%, rgba(74,222,128,0.16), transparent 42%), linear-gradient(180deg, rgba(19,23,19,0.98), rgba(9,11,9,0.99))",
+                "radial-gradient(circle at 50% -18%, rgba(214,221,232,0.16), transparent 42%), linear-gradient(180deg, rgba(19,23,19,0.98), rgba(9,11,9,0.99))",
               border: "1px solid rgba(255,255,255,0.08)",
               borderRadius: 30,
               boxShadow:
@@ -5594,6 +5961,7 @@ export default function MessagingScreen({
 
             <div style={{ padding: 14 }}>
               <div
+                className="pop-message-input-shell"
                 style={{
                   height: 46,
                   display: "flex",
@@ -5602,11 +5970,11 @@ export default function MessagingScreen({
                   padding: "0 14px",
                   borderRadius: 999,
                   background:
-                    "linear-gradient(180deg, rgba(22,26,22,0.98), rgba(13,16,13,0.98))",
+                    "linear-gradient(180deg, rgba(24,24,24,0.98), rgba(13,13,13,0.98))",
                   border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
-                <Search size={17} color="#86efac" />
+                <Search size={17} color="#c8d0d8" />
                 <input
                   value={inviteSearch}
                   onChange={(event) => setInviteSearch(event.target.value)}
@@ -5720,7 +6088,7 @@ export default function MessagingScreen({
                           width: 34,
                           height: 34,
                           borderRadius: "50%",
-                          background: "linear-gradient(135deg,#4ade80,#22c55e)",
+                          background: "linear-gradient(135deg,#d6dde8,#aeb7c2)",
                           color: "#000",
                           display: "flex",
                           alignItems: "center",
@@ -5738,7 +6106,7 @@ export default function MessagingScreen({
         </>
       )}
 
-      {/* ── MOOD BLOCK MODAL — sibling of input, not nested inside it ─────── */}
+      {/* â”€â”€ MOOD BLOCK MODAL â€” sibling of input, not nested inside it â”€â”€â”€â”€â”€â”€â”€ */}
       {moodBlockModalOpen && (
         <>
           <div
@@ -6005,7 +6373,7 @@ export default function MessagingScreen({
         </>
       )}
 
-      {/* ── MOOD BLOCK ACTIVE CARD — fixed to bottom, always visible ──────── */}
+      {/* â”€â”€ MOOD BLOCK ACTIVE CARD â€” fixed to bottom, always visible â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {currentMoodBlock && (
         <>
           <div
@@ -6126,8 +6494,8 @@ export default function MessagingScreen({
                       gap: 8,
                     }}
                   >
-                    <span>⏳ Please wait...</span>
-                    <span style={{ color: "#666" }}>·</span>
+                    <span>â³ Please wait...</span>
+                    <span style={{ color: "#666" }}>Â·</span>
                     <MoodBlockTimer endTime={currentMoodBlock.endTime} />
                   </div>
                 </div>
@@ -6135,16 +6503,7 @@ export default function MessagingScreen({
                 <button
                   onClick={() => {
                     if (currentConversation?.id) {
-                      const db = getFirestore();
-                      deleteDoc(
-                        doc(
-                          db,
-                          "conversations",
-                          currentConversation.id,
-                          "meta",
-                          "moodBlock",
-                        ),
-                      ).catch(() => {});
+                      messagingService.clearMoodBlock(currentConversation.id);
                     }
                     setCurrentMoodBlock(null);
                   }}
@@ -6292,7 +6651,7 @@ export default function MessagingScreen({
             </button>
             <button
               type="button"
-              onClick={() => deleteMessageForMe(messageActionTarget)}
+              onClick={() => void deleteMessageForMe(messageActionTarget)}
               style={{
                 width: "100%",
                 minHeight: 54,
@@ -6354,6 +6713,36 @@ export default function MessagingScreen({
             </div>
           </div>
         </div>
+      )}
+
+      {gamesRoomOpen && currentConversation?.id && user?.id && (
+        <GamesRoomScreen
+          conversationId={currentConversation.id}
+          currentUserId={user.id}
+          initialSessionId={gamesRoomSessionId}
+          participantIds={[
+            currentConversation.user1_id,
+            currentConversation.user2_id,
+            ...(currentConversation.temporary_participant_ids || []),
+          ].filter((id): id is string => Boolean(id))}
+          otherUser={{
+            id:
+              currentConversation.other_user?.user_id ||
+              currentConversation.other_user?.id ||
+              "",
+            name:
+              currentConversation.other_user?.display_name ||
+              currentConversation.other_user?.username ||
+              "Someone",
+            username: currentConversation.other_user?.username,
+            avatarUrl: currentConversation.other_user?.avatar_url,
+          }}
+          currentUserName={user.displayName || user.username || "You"}
+          onClose={() => {
+            setGamesRoomOpen(false);
+            setGamesRoomSessionId(null);
+          }}
+        />
       )}
 
       {photoViewer && (

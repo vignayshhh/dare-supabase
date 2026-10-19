@@ -3,19 +3,19 @@ import { useAuthStore } from "../stores/useAuthStore-v2";
 
 /**
  * SURESHOT AVATAR SYNC UTILITY
- * Ensures avatars are properly synced between Firebase and local storage
+ * Ensures avatars are properly synced between Supabase and local storage
  */
 
 export class AvatarSyncManager {
   /**
-   * Sync current user's avatar from Firebase to local storage
+   * Sync current user's avatar from Supabase to local storage
    */
   static syncCurrentUserAvatar() {
     const { user } = useAuthStore.getState();
     const { setGlobalAvatar, setUserAvatar } = useAvatarStore.getState();
     
     if (user?.id && user?.avatar) {
-      console.log("🔄 SYNCING USER AVATAR FROM FIREBASE:", user.id);
+      console.log("🔄 SYNCING USER AVATAR FROM SUPABASE:", user.id);
       setGlobalAvatar(user.avatar);
       setUserAvatar(user.id, user.avatar);
       return true;
@@ -25,7 +25,7 @@ export class AvatarSyncManager {
   }
   
   /**
-   * Force refresh all avatars from Firebase
+   * Force refresh all avatars from Supabase
    */
   static async refreshAllAvatars() {
     const { user } = useAuthStore.getState();
@@ -43,7 +43,7 @@ export class AvatarSyncManager {
       if ('clearCachedData' in postsStore) {
         (postsStore as any).clearCachedData();
       }
-    } catch (error) {
+    } catch {
       console.log("🔄 Could not clear posts cache");
     }
   }
@@ -57,28 +57,20 @@ export class AvatarSyncManager {
     // Sync current user avatar immediately
     this.syncCurrentUserAvatar();
     
-    // Set up periodic sync (every 30 seconds)
-    const syncInterval = setInterval(() => {
-      this.syncCurrentUserAvatar();
-    }, 30000);
-    
-    // Clear interval on page unload
-    window.addEventListener('beforeunload', () => {
-      clearInterval(syncInterval);
-    });
-    
-    return syncInterval;
+    // Profile/avatar subscriptions own freshness. A timer here only repeated
+    // local work and could not observe a newer avatar by itself.
+    return null;
   }
   
   /**
    * Get avatar for any user with fallback to stored avatar
    */
-  static getUserAvatar(userId: string, firebaseAvatar?: string): string {
+  static getUserAvatar(userId: string, supabaseAvatar?: string): string {
     const { getStoredAvatar } = useAvatarStore.getState();
     
-    // Priority: Firebase avatar > stored avatar
-    if (firebaseAvatar) {
-      return firebaseAvatar;
+    // Priority: Supabase avatar > stored avatar
+    if (supabaseAvatar) {
+      return supabaseAvatar;
     }
     
     const storedAvatar = getStoredAvatar(userId);
@@ -92,7 +84,7 @@ export class AvatarSyncManager {
 }
 
 // Auto-initialize on import
-let syncInterval: NodeJS.Timeout | null = null;
+let syncInterval: ReturnType<typeof AvatarSyncManager.initializeAvatarSync> | null = null;
 
 export const startAvatarSync = () => {
   if (!syncInterval) {
@@ -102,8 +94,5 @@ export const startAvatarSync = () => {
 };
 
 export const stopAvatarSync = () => {
-  if (syncInterval) {
-    clearInterval(syncInterval);
-    syncInterval = null;
-  }
+  syncInterval = null;
 };

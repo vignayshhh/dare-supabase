@@ -1,3 +1,4 @@
+import { getActiveCircleId } from "@/lib/circleContext";
 /**
  * FeedCacheManager - Intelligent caching layer for social media feed
  *
@@ -8,8 +9,6 @@
  * - Smart cache invalidation
  * - Batch operations
  */
-
-import { PostWithAuthor } from "../services/feed.service";
 
 interface CacheEntry<T> {
   data: T;
@@ -44,12 +43,12 @@ export class FeedCacheManager {
   private memoryCache: Map<string, CacheEntry<any>> = new Map();
   private inFlightRequests: Map<string, InFlightRequest<any>> = new Map();
   private config: CacheConfig;
-  private storageKey = "dare-feed-cache-v2";
+  private storageKey = "dare-feed-cache-v3";
+  private lastCleanupAt = 0;
 
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.loadFromPersistentStorage();
-    this.startCleanupInterval();
   }
 
   /**
@@ -60,6 +59,7 @@ export class FeedCacheManager {
     fetcher: () => Promise<T>,
     options: { skipCache?: boolean; forceRefresh?: boolean } = {},
   ): Promise<T> {
+    this.cleanupIfDue();
     const cacheKey = this.getCacheKey(key);
 
     // Force refresh bypasses all caching
@@ -268,13 +268,15 @@ export class FeedCacheManager {
   }
 
   /**
-   * Periodic cleanup of expired entries and stale in-flight requests
+   * Cleanup runs lazily during cache use. Permanent timers waste client
+   * resources and keep otherwise idle cache instances alive.
    */
-  private startCleanupInterval(): void {
-    setInterval(() => {
-      this.cleanupExpired();
-      this.cleanupStaleInFlight();
-    }, 60 * 1000); // Every minute
+  private cleanupIfDue(): void {
+    const now = Date.now();
+    if (now - this.lastCleanupAt < 60 * 1000) return;
+    this.lastCleanupAt = now;
+    this.cleanupExpired();
+    this.cleanupStaleInFlight();
   }
 
   private cleanupExpired(): void {
@@ -365,7 +367,7 @@ export class FeedCacheManager {
 
       // Sort entries by timestamp (newest first) to prioritize recent data
       const sortedEntries = Array.from(this.memoryCache.entries())
-        .filter(([_, entry]) => now < entry.expiresAt)
+        .filter(([, entry]) => now < entry.expiresAt)
         .sort((a, b) => b[1].timestamp - a[1].timestamp);
 
       for (const [key, entry] of sortedEntries) {
@@ -419,7 +421,7 @@ export class FeedCacheManager {
     if (Array.isArray(data)) {
       const lightData = data.map((item: any) => {
         if (item && typeof item === "object") {
-          // Drop base64 data URLs but keep normal URLs (Firebase Storage, CDN, etc.)
+          // Drop base64 data URLs but keep normal URLs (Supabase Storage, CDN, etc.)
           const isDataUrl = (v?: string) =>
             typeof v === "string" && v.startsWith("data:");
 
@@ -471,7 +473,7 @@ export class FeedCacheManager {
       const MAX_ENTRIES = 10; // Only save 10 most recent entries
 
       const sortedEntries = Array.from(this.memoryCache.entries())
-        .filter(([_, entry]) => now < entry.expiresAt)
+        .filter(([, entry]) => now < entry.expiresAt)
         .sort((a, b) => b[1].timestamp - a[1].timestamp)
         .slice(0, MAX_ENTRIES);
 
@@ -512,6 +514,7 @@ export class FeedCacheManager {
   }
 
   private getCacheKey(key: string): string {
+    key = `${getActiveCircleId() || "no-circle"}:${key}`;
     return `feed:${key}`;
   }
 

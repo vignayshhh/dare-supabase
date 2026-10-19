@@ -1,0 +1,259 @@
+<svg width="2200" height="1380" viewBox="0 0 2200 1380" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pageBg" x1="0" y1="0" x2="2200" y2="1380" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#050706"/>
+      <stop offset="0.34" stop-color="#10130f"/>
+      <stop offset="0.68" stop-color="#090b10"/>
+      <stop offset="1" stop-color="#030405"/>
+    </linearGradient>
+    <radialGradient id="stageGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1100 -80) rotate(90) scale(920 1500)">
+      <stop stop-color="#4ade80" stop-opacity="0.22"/>
+      <stop offset="0.35" stop-color="#67e8f9" stop-opacity="0.09"/>
+      <stop offset="0.62" stop-color="#f43f5e" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cardBg" x1="0" y1="0" x2="0" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#191d18"/>
+      <stop offset="1" stop-color="#070908"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="145%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="18" flood-color="#000000" flood-opacity="0.54"/>
+    </filter>
+    <filter id="greenGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#4ade80" flood-opacity="0.58"/>
+    </filter>
+    <filter id="cyanGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#22d3ee" flood-opacity="0.5"/>
+    </filter>
+    <filter id="pinkGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#fb7185" flood-opacity="0.5"/>
+    </filter>
+    <style>
+      .title { font: 950 62px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .sub { font: 650 20px Inter, SF Pro Display, Arial, sans-serif; fill: #a5adba; letter-spacing: 0; }
+      .name { font: 920 23px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .desc { font: 650 14px Inter, SF Pro Display, Arial, sans-serif; fill: #9ca3af; letter-spacing: 0; }
+      .tag { font: 900 11px Inter, SF Pro Display, Arial, sans-serif; fill: #86efac; letter-spacing: 1.6px; }
+      .inkRound { stroke: #111; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+      .inkSharp { stroke: #060606; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+      .thinInk { stroke: #111; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .neon { stroke: #4ade80; stroke-width: 3; stroke-linecap: round; }
+      .cyan { stroke: #22d3ee; stroke-width: 3; stroke-linecap: round; }
+      .pink { stroke: #fb7185; stroke-width: 3; stroke-linecap: round; }
+      .caption { font: 800 12px Inter, SF Pro Display, Arial, sans-serif; fill: #020403; letter-spacing: 1.1px; }
+    </style>
+  </defs>
+
+  <rect width="2200" height="1380" fill="url(#pageBg)"/>
+  <rect width="2200" height="1380" fill="url(#stageGlow)"/>
+  <path d="M0 1060 C320 945 545 1075 858 982 C1218 875 1452 1000 2200 890 V1380 H0 Z" fill="#07100b"/>
+  <path d="M0 1115 C440 1015 760 1138 1095 1030 C1454 914 1745 1038 2200 970" stroke="#4ade80" stroke-width="2" stroke-opacity="0.14"/>
+
+  <text x="78" y="104" class="title">Steve Casting Board: Actually Different Humans</text>
+  <text x="78" y="144" class="sub">Different face shapes, noses, hair, age, clothes, pose, and drawing language. No shared base face.</text>
+
+  <!-- 1 Square jaw buzzcut noir -->
+  <g transform="translate(70 210)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#cardBg)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">1. Noir Buzzcut Steve</text>
+    <text x="30" y="78" class="desc">Square jaw, buzzcut, severe nose, film-noir edge.</text>
+    <g transform="translate(88 104)">
+      <rect x="42" y="36" width="260" height="330" rx="26" fill="#0c1010"/>
+      <path d="M65 335 C80 248 112 207 171 207 C229 207 263 248 278 335 Z" fill="#171717"/>
+      <path d="M103 214 L171 302 L240 214" fill="#1f2937"/>
+      <path d="M111 126 C111 73 135 46 171 46 C209 46 233 74 233 126 C233 177 211 206 171 206 C132 206 111 176 111 126 Z" fill="#b57958"/>
+      <path d="M108 96 C114 53 142 29 172 29 C204 29 230 54 237 96 C214 73 137 73 108 96 Z" fill="#101010"/>
+      <path d="M116 105 L236 105" stroke="#101010" stroke-width="12" stroke-linecap="round"/>
+      <path d="M130 132 C144 123 156 124 166 134" class="inkSharp"/>
+      <path d="M184 134 C195 124 209 123 222 132" class="inkSharp"/>
+      <circle cx="154" cy="145" r="3.5" fill="#050505"/>
+      <circle cx="202" cy="145" r="3.5" fill="#050505"/>
+      <path d="M178 145 L168 168 L181 171" class="thinInk"/>
+      <path d="M148 188 C166 199 195 199 215 188" stroke="#16100f" stroke-width="5" stroke-linecap="round"/>
+      <path d="M95 128 L77 166" stroke="#4ade80" stroke-width="3" opacity="0.5"/>
+      <circle cx="260" cy="79" r="12" fill="#4ade80" filter="url(#greenGlow)"/>
+    </g>
+    <text x="30" y="455" class="tag">RECTANGULAR FACE / BUZZCUT / NOIR POSTER</text>
+  </g>
+
+  <!-- 2 Round curly friend -->
+  <g transform="translate(600 210)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#cardBg)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">2. Curly Soft-Face Steve</text>
+    <text x="30" y="78" class="desc">Round face, curls, glasses, genuinely approachable.</text>
+    <g transform="translate(88 104)">
+      <circle cx="172" cy="183" r="142" fill="#162019"/>
+      <path d="M70 338 C86 258 122 218 172 218 C223 218 260 258 276 338 Z" fill="#e5e7eb"/>
+      <path d="M103 337 C110 275 131 240 172 240 C213 240 235 275 243 337 Z" fill="#0f172a"/>
+      <circle cx="105" cy="83" r="34" fill="#16110d"/>
+      <circle cx="136" cy="57" r="36" fill="#16110d"/>
+      <circle cx="176" cy="51" r="39" fill="#16110d"/>
+      <circle cx="216" cy="64" r="36" fill="#16110d"/>
+      <circle cx="244" cy="93" r="31" fill="#16110d"/>
+      <path d="M105 138 C105 88 133 59 172 59 C212 59 243 90 243 139 C243 193 217 224 172 224 C127 224 105 193 105 138 Z" fill="#efc7a9"/>
+      <path d="M105 111 C121 82 150 72 173 73 C204 74 232 91 244 119 C229 101 119 101 105 111 Z" fill="#16110d"/>
+      <circle cx="145" cy="145" r="22" fill="none" stroke="#111" stroke-width="4"/>
+      <circle cx="202" cy="145" r="22" fill="none" stroke="#111" stroke-width="4"/>
+      <path d="M167 145 H180" stroke="#111" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="145" cy="148" r="4" fill="#111"/>
+      <circle cx="202" cy="148" r="4" fill="#111"/>
+      <path d="M171 152 C166 165 168 171 177 174" class="thinInk"/>
+      <path d="M147 190 C165 207 200 204 217 187" stroke="#25110e" stroke-width="4" stroke-linecap="round"/>
+      <rect x="222" y="206" width="50" height="72" rx="14" fill="#22d3ee" filter="url(#cyanGlow)"/>
+      <path d="M233 225 H261 M233 244 H253 M233 263 H261" stroke="#062027" stroke-width="3"/>
+    </g>
+    <text x="30" y="455" class="tag">ROUND FACE / CURLS / GLASSES / WARM CARTOON</text>
+  </g>
+
+  <!-- 3 Long face braided hair -->
+  <g transform="translate(1130 210)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#cardBg)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">3. Braided Street Steve</text>
+    <text x="30" y="78" class="desc">Long face, braids, sharp cheekbones, streetwear.</text>
+    <g transform="translate(88 104)">
+      <path d="M61 333 C83 255 124 215 174 215 C225 215 264 255 286 333 Z" fill="#10141a"/>
+      <path d="M94 338 L118 226 H148 L139 338 Z" fill="#0b0b0b"/>
+      <path d="M211 338 L202 226 H232 L257 338 Z" fill="#0b0b0b"/>
+      <path d="M119 127 C119 75 145 43 176 43 C211 43 238 75 238 127 C238 181 214 214 176 214 C142 214 119 181 119 127 Z" fill="#8a523c"/>
+      <path d="M104 96 C116 50 143 22 177 22 C216 22 244 53 254 98 C216 78 144 78 104 96 Z" fill="#070707"/>
+      <path d="M110 93 C101 154 100 214 90 278" stroke="#070707" stroke-width="13" stroke-linecap="round"/>
+      <path d="M248 93 C258 154 258 214 270 278" stroke="#070707" stroke-width="13" stroke-linecap="round"/>
+      <path d="M92 145 C72 188 66 239 60 312" stroke="#0b0b0b" stroke-width="9" stroke-linecap="round"/>
+      <path d="M266 145 C287 188 293 239 300 312" stroke="#0b0b0b" stroke-width="9" stroke-linecap="round"/>
+      <path d="M128 131 C142 122 155 122 166 133" class="inkRound"/>
+      <path d="M189 133 C202 122 217 122 230 131" class="inkRound"/>
+      <circle cx="156" cy="145" r="4" fill="#050505"/>
+      <circle cx="215" cy="145" r="4" fill="#050505"/>
+      <path d="M181 147 L171 172 L184 175" class="thinInk"/>
+      <path d="M149 193 C169 204 207 204 226 192" stroke="#160d0c" stroke-width="4" stroke-linecap="round"/>
+      <path d="M84 214 H285" stroke="#4ade80" stroke-width="3" opacity="0.55"/>
+      <path d="M101 238 H269" stroke="#22d3ee" stroke-width="3" opacity="0.35"/>
+    </g>
+    <text x="30" y="455" class="tag">LONG FACE / BRAIDS / STREETWEAR / SHARP LINES</text>
+  </g>
+
+  <!-- 4 Bald bearded mentor -->
+  <g transform="translate(1660 210)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#cardBg)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">4. Bald Bearded Steve</text>
+    <text x="30" y="78" class="desc">Older, bald, beard, heavy brow, blunt honesty.</text>
+    <g transform="translate(88 104)">
+      <ellipse cx="175" cy="340" rx="132" ry="18" fill="#000" opacity="0.3"/>
+      <path d="M67 340 C83 248 121 204 175 204 C229 204 268 248 284 340 Z" fill="#2a1d14"/>
+      <path d="M104 340 C114 270 136 230 175 230 C214 230 237 270 248 340 Z" fill="#111827"/>
+      <path d="M113 124 C113 74 141 42 175 42 C209 42 237 74 237 124 C237 182 211 218 175 218 C139 218 113 182 113 124 Z" fill="#b97855"/>
+      <path d="M115 103 C127 62 145 42 175 42 C206 42 225 62 235 103" stroke="#674331" stroke-width="10" stroke-linecap="round" opacity="0.35"/>
+      <path d="M114 168 C131 207 148 230 176 230 C204 230 222 207 236 168 C223 223 207 247 176 247 C145 247 126 223 114 168 Z" fill="#17100d"/>
+      <path d="M125 130 C140 120 154 120 166 130" class="inkSharp"/>
+      <path d="M190 130 C202 120 218 120 232 130" class="inkSharp"/>
+      <circle cx="153" cy="143" r="4" fill="#050505"/>
+      <circle cx="217" cy="143" r="4" fill="#050505"/>
+      <path d="M177 145 C170 164 171 174 184 178" class="thinInk"/>
+      <path d="M145 197 C163 207 206 207 226 196" stroke="#080606" stroke-width="5" stroke-linecap="round"/>
+      <path d="M91 214 C50 213 35 178 52 147" stroke="#2a1d14" stroke-width="24" stroke-linecap="round"/>
+      <path d="M259 214 C301 213 316 178 298 147" stroke="#2a1d14" stroke-width="24" stroke-linecap="round"/>
+      <circle cx="276" cy="91" r="13" fill="#4ade80" filter="url(#greenGlow)"/>
+    </g>
+    <text x="30" y="455" class="tag">BALD / BEARD / OLDER / GRAPHIC NOVEL</text>
+  </g>
+
+  <!-- 5 Anime idol -->
+  <g transform="translate(70 760)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#cardBg)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">5. Anime Chaos Steve</text>
+    <text x="30" y="78" class="desc">Spiky hair, huge expression, dramatic social energy.</text>
+    <g transform="translate(88 104)">
+      <path d="M70 342 C90 252 121 205 173 205 C225 205 260 252 280 342 Z" fill="#15151f"/>
+      <path d="M96 337 L117 240 H148 L139 337 Z" fill="#111"/>
+      <path d="M207 337 L199 240 H230 L254 337 Z" fill="#111"/>
+      <path d="M111 128 C111 77 139 48 174 48 C209 48 236 78 236 128 C236 179 212 212 174 212 C136 212 111 179 111 128 Z" fill="#ffd6aa"/>
+      <path d="M87 112 L123 51 L145 86 L174 27 L198 88 L236 47 L245 116 C211 89 131 91 87 112 Z" fill="#111"/>
+      <path d="M125 130 C142 118 159 118 173 132" stroke="#111" stroke-width="8" stroke-linecap="round"/>
+      <path d="M187 132 C201 118 220 118 235 130" stroke="#111" stroke-width="8" stroke-linecap="round"/>
+      <ellipse cx="154" cy="145" rx="8" ry="11" fill="#050505"/>
+      <ellipse cx="215" cy="145" rx="8" ry="11" fill="#050505"/>
+      <path d="M180 148 C174 162 174 173 184 176" stroke="#8e4d37" stroke-width="3" stroke-linecap="round"/>
+      <path d="M150 193 C170 214 216 210 236 186" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+      <path d="M72 184 L32 134" class="pink"/>
+      <path d="M262 183 L306 133" class="cyan"/>
+      <circle cx="310" cy="132" r="8" fill="#22d3ee" filter="url(#cyanGlow)"/>
+    </g>
+    <text x="30" y="455" class="tag">SPIKY HAIR / ANIME / HIGH-ENERGY</text>
+  </g>
+
+  <!-- 6 Pixel/blocky -->
+  <g transform="translate(600 760)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#cardBg)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">6. Pixel Steve</text>
+    <text x="30" y="78" class="desc">Blocky retro avatar, instantly unlike the others.</text>
+    <g transform="translate(88 104)">
+      <rect x="82" y="54" width="232" height="280" fill="#0e1511"/>
+      <rect x="126" y="246" width="60" height="92" fill="#111"/>
+      <rect x="218" y="246" width="60" height="92" fill="#111"/>
+      <rect x="82" y="214" width="232" height="84" fill="#17251d"/>
+      <rect x="110" y="92" width="176" height="164" fill="#c98f68"/>
+      <rect x="110" y="72" width="176" height="52" fill="#19110c"/>
+      <rect x="88" y="100" width="44" height="88" fill="#19110c"/>
+      <rect x="264" y="100" width="44" height="88" fill="#19110c"/>
+      <rect x="136" y="148" width="28" height="20" fill="#050505"/>
+      <rect x="228" y="148" width="28" height="20" fill="#050505"/>
+      <rect x="188" y="168" width="20" height="42" fill="#80533e"/>
+      <rect x="162" y="218" width="74" height="14" fill="#21100d"/>
+      <rect x="62" y="218" width="42" height="64" fill="#17251d"/>
+      <rect x="300" y="218" width="42" height="64" fill="#17251d"/>
+      <rect x="300" y="112" width="34" height="34" fill="#4ade80" filter="url(#greenGlow)"/>
+      <rect x="126" y="282" width="152" height="16" fill="#4ade80"/>
+      <rect x="154" y="304" width="96" height="12" fill="#22d3ee"/>
+    </g>
+    <text x="30" y="455" class="tag">PIXEL / BLOCK FACE / RETRO GAME</text>
+  </g>
+
+  <!-- 7 Clay/3D round -->
+  <g transform="translate(1130 760)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#cardBg)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">7. Claymation Steve</text>
+    <text x="30" y="78" class="desc">Big nose, molded hair, 3D mascot personality.</text>
+    <g transform="translate(88 104)">
+      <ellipse cx="174" cy="338" rx="130" ry="18" fill="#000" opacity="0.25"/>
+      <path d="M73 340 C94 262 125 218 174 218 C223 218 258 262 278 340 Z" fill="#222b25"/>
+      <path d="M118 340 L126 258 H155 L152 340 Z" fill="#191919"/>
+      <path d="M202 340 L199 258 H228 L238 340 Z" fill="#191919"/>
+      <ellipse cx="174" cy="134" rx="74" ry="86" fill="#e6a980"/>
+      <circle cx="142" cy="126" r="14" fill="#111"/>
+      <circle cx="210" cy="126" r="14" fill="#111"/>
+      <circle cx="145" cy="124" r="5" fill="#fff"/>
+      <circle cx="213" cy="124" r="5" fill="#fff"/>
+      <path d="M169 132 C153 157 155 179 178 183 C201 179 199 157 183 132 Z" fill="#c77f5a"/>
+      <path d="M145 197 C166 215 213 211 232 190" stroke="#5a2b20" stroke-width="6" stroke-linecap="round"/>
+      <path d="M89 95 C105 39 139 20 174 21 C222 23 252 62 253 107 C216 72 131 72 89 95 Z" fill="#2c2118"/>
+      <circle cx="118" cy="57" r="25" fill="#2c2118"/>
+      <circle cx="154" cy="38" r="28" fill="#2c2118"/>
+      <circle cx="201" cy="42" r="31" fill="#2c2118"/>
+      <circle cx="240" cy="70" r="25" fill="#2c2118"/>
+      <circle cx="265" cy="203" r="20" fill="#22d3ee" filter="url(#cyanGlow)"/>
+    </g>
+    <text x="30" y="455" class="tag">CLAY / ROUND 3D / BIG NOSE</text>
+  </g>
+
+  <!-- 8 Minimal line art -->
+  <g transform="translate(1660 760)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#cardBg)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">8. Minimal Line Steve</text>
+    <text x="30" y="78" class="desc">Thin line art, white-space face, very premium.</text>
+    <g transform="translate(88 104)">
+      <rect x="54" y="38" width="292" height="342" rx="40" fill="#f6f3ea"/>
+      <path d="M92 341 C107 254 143 209 200 209 C257 209 294 254 310 341" stroke="#111" stroke-width="7" stroke-linecap="round"/>
+      <path d="M143 341 L158 252" stroke="#111" stroke-width="7" stroke-linecap="round"/>
+      <path d="M257 341 L242 252" stroke="#111" stroke-width="7" stroke-linecap="round"/>
+      <path d="M143 125 C143 72 166 48 201 48 C238 48 262 73 262 125 C262 177 238 208 201 208 C166 208 143 177 143 125 Z" fill="#f6f3ea" stroke="#111" stroke-width="7"/>
+      <path d="M129 103 C142 53 168 30 201 30 C239 30 268 55 279 107 C235 83 176 82 129 103 Z" fill="#111"/>
+      <path d="M161 128 C172 120 183 120 192 129" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+      <path d="M218 129 C229 120 241 120 251 128" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+      <path d="M199 138 C191 161 193 174 209 177" stroke="#111" stroke-width="5" stroke-linecap="round"/>
+      <path d="M173 199 C190 211 226 209 243 196" stroke="#111" stroke-width="5" stroke-linecap="round"/>
+      <path d="M69 93 H116" stroke="#4ade80" stroke-width="7" stroke-linecap="round" filter="url(#greenGlow)"/>
+      <path d="M288 245 H336" stroke="#22d3ee" stroke-width="7" stroke-linecap="round" filter="url(#cyanGlow)"/>
+    </g>
+    <text x="30" y="455" class="tag">MINIMAL / LINE ART / GALLERY POSTER</text>
+  </g>
+</svg>

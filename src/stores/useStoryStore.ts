@@ -1,27 +1,93 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
   storyService,
   StoryDTO,
   CreateStoryDTO,
 } from "@/middleware/services/story.service";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  type Unsubscribe,
-} from "firebase/firestore";
-import { db } from "@/backend/lib/firebase";
-import { FriendshipRepository } from "@/backend/repositories/FriendshipRepository";
-import { userService } from "@/middleware/services/user.service";
-import { getDefaultAvatarUrl } from "@/utils/placeholderImages";
+import type { Unsubscribe } from "@/types/realtime";
+import { apiFetch } from "@/lib/apiClient";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { recordResourceMetric } from "@/lib/observability/resourceMetrics";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// Race-guard counter for subscribeToFriendsStories
+// Race-guard counter for story bootstrap/subscription replacement.
 let _friendsSubCounter = 0;
+const viewedStoryIdsThisSession = new Set<string>();
+
+const hasViewedStoryLocally = (storyId: string, userId: string) => {
+  const key = `${userId}:${storyId}`;
+  if (viewedStoryIdsThisSession.has(key)) return true;
+
+  if (typeof window === "undefined") return false;
+  return window.sessionStorage.getItem(`story_viewed:${key}`) === "1";
+};
+
+const rememberViewedStory = (storyId: string, userId: string) => {
+  const key = `${userId}:${storyId}`;
+  viewedStoryIdsThisSession.add(key);
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem(`story_viewed:${key}`, "1");
+  }
+};
+
+type StoryBootstrapRow = {
+  id: string;
+  userId: string;
+  mediaUrl: string | null;
+  mediaType: "image" | "video" | null;
+  storyType?: "personal" | "dedication";
+  storyText?: StoryDTO["storyText"];
+  storyFilter?: string | null;
+  storyMusic?: StoryDTO["storyMusic"];
+  storyDrawPaths?: StoryDTO["storyDrawPaths"];
+  visibility?: StoryDTO["visibility"];
+  caption?: string | null;
+  createdAt: string;
+  expiresAt: string;
+  viewCount?: number;
+  hasViewed?: boolean;
+  author: StoryDTO["author"];
+  dedicatedTo?: StoryDTO["dedicatedTo"];
+};
+
+const storyBootstrapRequests = new Map<string, Promise<StoryDTO[]>>();
+
+const fetchStoryBootstrap = (userId: string): Promise<StoryDTO[]> => {
+  const existing = storyBootstrapRequests.get(userId);
+  if (existing) {
+    recordResourceMetric("cache_hits");
+    return existing;
+  }
+  recordResourceMetric("cache_misses");
+  const request = apiFetch<{ ok: true; data: StoryBootstrapRow[] }>(
+    "/api/stories/friends",
+  )
+    .then(({ data }) =>
+      data.map((story) => ({
+        id: story.id,
+        author: story.author,
+        media: { type: story.mediaType || "image", url: story.mediaUrl || "" },
+        storyType: story.storyType || "personal",
+        dedicatedTo: story.dedicatedTo || null,
+        storyText: story.storyText || null,
+        storyFilter: story.storyFilter || "original",
+        storyMusic: story.storyMusic || null,
+        storyDrawPaths: story.storyDrawPaths || [],
+        visibility: story.visibility,
+        caption: story.caption ?? null,
+        createdAt: story.createdAt,
+        expiresAt: story.expiresAt,
+        viewCount: Number(story.viewCount) || 0,
+        hasViewed:
+          Boolean(story.hasViewed) || hasViewedStoryLocally(story.id, userId),
+      })),
+    )
+    .finally(() => storyBootstrapRequests.delete(userId));
+  storyBootstrapRequests.set(userId, request);
+  return request;
+};
 
 const isDataUrl = (url?: string) =>
   typeof url === "string" && url.startsWith("data:");
@@ -43,24 +109,12 @@ const sanitizeStoryForPersist = (story: StoryDTO): StoryDTO => ({
     : null,
 });
 
-const toStoryUser = (profile: any, fallbackId: string) => {
-  const id = profile?.user_id || profile?.id || fallbackId;
-  const username = profile?.username || `user_${id.slice(-6)}`;
-
-  return {
-    id,
-    username: username.startsWith("@") ? username : `@${username}`,
-    displayName: profile?.display_name || profile?.displayName || username,
-    avatar: profile?.avatar_url || getDefaultAvatarUrl(id),
-  };
-};
-
 // Legacy request-ID guards (used by one-shot loaders)
 let friendsStoriesRequestId = 0;
 let userStoriesRequestId = 0;
 let inFlightStoryLoads = 0;
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface StoryState {
   // Data
@@ -111,294 +165,75 @@ export const useStoryStore = create<StoryState>()(
       _friendsUnsub: null,
       _userUnsub: null,
 
-      // ── Real-time subscriptions ─────────────────────────────────────────────
+      // â”€â”€ Real-time subscriptions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
       subscribeToFriendsStories: async (userId: string) => {
-        // Cancel any existing subscription
-        const prevUnsub = get()._friendsUnsub;
-        if (prevUnsub) prevUnsub();
+        get()._friendsUnsub?.();
         set({ _friendsUnsub: null });
-
         if (!userId) {
-          set({ stories: [], isLoading: false });
+          set({ stories: [], userStories: [], isLoading: false });
           return;
         }
 
-        // Race guard: if a newer call supersedes this one while awaiting friend IDs, bail out
         const subId = ++_friendsSubCounter;
-        set({ isLoading: true });
-
-        try {
-          const friendshipRepo = new FriendshipRepository();
-          const friendships = await friendshipRepo.getAcceptedFriends(userId);
-
-          if (subId !== _friendsSubCounter) return; // superseded
-
-          const friendIds = friendships
-            .map((f) =>
-              f.requesterId === userId ? f.addresseeId : f.requesterId,
-            )
-            .filter(Boolean);
-
-          if (friendIds.length === 0) {
-            set({ stories: [], isLoading: false, _friendsUnsub: null });
-            return;
+        let disposed = false;
+        let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+        const client = getSupabaseBrowserClient();
+        let channel: ReturnType<typeof client.channel> | null = null;
+        const unsubscribe = () => {
+          if (disposed) return;
+          disposed = true;
+          if (refreshTimer) clearTimeout(refreshTimer);
+          if (channel) void client.removeChannel(channel);
+        };
+        set({ _friendsUnsub: unsubscribe });
+        const refresh = async () => {
+          try {
+            const allStories = await fetchStoryBootstrap(userId);
+            if (disposed || subId !== _friendsSubCounter) return;
+            set({
+              stories: allStories.filter((story) => story.author.id !== userId),
+              userStories: allStories.filter((story) => story.author.id === userId),
+              isLoading: false,
+              error: null,
+            });
+          } catch (error) {
+            if (!disposed && subId === _friendsSubCounter) {
+              set({
+                isLoading: false,
+                error: error instanceof Error ? error.message : "Failed to load stories",
+              });
+            }
           }
+        };
+        const scheduleRefresh = () => {
+          if (refreshTimer) clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(() => void refresh(), 100);
+        };
 
-          // Profile cache shared across all snapshot callbacks for this subscription
-          const profileCache: Record<string, any> = {};
+        set({ isLoading: true, error: null });
+        await refresh();
+        if (disposed || subId !== _friendsSubCounter) return;
 
-          // Firestore "in" supports max 30 values per query; cap at 30 friends
-          const queryIds = friendIds.slice(0, 30);
-
-          const q = query(
-            collection(db, "stories"),
-            where("userId", "in", queryIds),
-            orderBy("createdAt", "desc"),
-          );
-
-          const unsub = onSnapshot(
-            q,
-            async (snapshot) => {
-              const now = new Date();
-
-              // Collect author IDs not yet in cache
-              const uncachedIds = [
-                ...new Set(
-                  snapshot.docs
-                    .flatMap((d) => {
-                      const data = d.data();
-                      return [
-                        data.userId as string,
-                        data.dedicatedToUserId as string | undefined,
-                      ];
-                    })
-                    .filter(
-                      (id): id is string =>
-                        typeof id === "string" && !profileCache[id],
-                    ),
-                ),
-              ];
-
-              // Fetch missing profiles in parallel
-              await Promise.all(
-                uncachedIds.map(async (id) => {
-                  try {
-                    const profile = await userService.getProfile(id);
-                    if (profile) profileCache[id] = profile;
-                  } catch {
-                    // will use fallback avatar
-                  }
-                }),
-              );
-
-              const stories: StoryDTO[] = snapshot.docs
-                .filter((docSnap) => {
-                  const exp = docSnap.data().expiresAt?.toDate?.();
-                  return exp instanceof Date && exp > now;
-                })
-                .map((docSnap) => {
-                  const data = docSnap.data();
-                  const profile = profileCache[data.userId];
-                  const dedicatedProfile = data.dedicatedToUserId
-                    ? profileCache[data.dedicatedToUserId]
-                    : null;
-                  const hasViewed =
-                    Array.isArray(data.viewers) &&
-                    data.viewers.includes(userId);
-
-                  if (!profile) {
-                    return {
-                      id: docSnap.id,
-                      author: {
-                        id: data.userId,
-                        username: `@user_${data.userId.slice(-6)}`,
-                        displayName: "Unknown User",
-                        avatar: getDefaultAvatarUrl(data.userId),
-                      },
-                      media: { type: data.mediaType, url: data.mediaUrl },
-                      storyType: data.storyType || "personal",
-                      dedicatedTo:
-                        data.dedicatedToUserId && dedicatedProfile
-                          ? toStoryUser(
-                              dedicatedProfile,
-                              data.dedicatedToUserId,
-                            )
-                          : null,
-                      storyText: data.storyText || null,
-                      storyFilter: data.storyFilter || "original",
-                      storyMusic: data.storyMusic || null,
-                      caption: data.caption ?? null,
-                      createdAt:
-                        data.createdAt?.toDate()?.toISOString() ??
-                        new Date().toISOString(),
-                      expiresAt:
-                        data.expiresAt?.toDate()?.toISOString() ??
-                        new Date().toISOString(),
-                      viewCount: data.viewCount ?? 0,
-                      hasViewed,
-                    } as StoryDTO;
-                  }
-
-                  return {
-                    id: docSnap.id,
-                    author: {
-                      id: profile.user_id,
-                      username: profile.username.startsWith("@")
-                        ? profile.username
-                        : `@${profile.username}`,
-                      displayName: profile.display_name || profile.username,
-                      avatar:
-                        profile.avatar_url ||
-                        getDefaultAvatarUrl(profile.user_id),
-                    },
-                    media: { type: data.mediaType, url: data.mediaUrl },
-                    storyType: data.storyType || "personal",
-                    dedicatedTo:
-                      data.dedicatedToUserId && dedicatedProfile
-                        ? toStoryUser(dedicatedProfile, data.dedicatedToUserId)
-                        : null,
-                    storyText: data.storyText || null,
-                    storyFilter: data.storyFilter || "original",
-                    storyMusic: data.storyMusic || null,
-                    caption: data.caption ?? null,
-                    createdAt:
-                      data.createdAt?.toDate()?.toISOString() ??
-                      new Date().toISOString(),
-                    expiresAt:
-                      data.expiresAt?.toDate()?.toISOString() ??
-                      new Date().toISOString(),
-                    viewCount: data.viewCount ?? 0,
-                    hasViewed,
-                  } as StoryDTO;
-                });
-
-              set({ stories, isLoading: false });
-            },
-            (err) => {
-              console.error("Friends stories onSnapshot error:", err);
-              set({ isLoading: false });
-              // Fall back to one-shot load so circles still appear
-              get().loadFriendsStories(userId);
-            },
-          );
-
-          set({ _friendsUnsub: unsub });
-        } catch (error) {
-          console.error("Error subscribing to friends stories:", error);
-          // Fall back to one-shot load
-          await get().loadFriendsStories(userId);
-        }
+        channel = client
+          .channel(`story-feed:${userId}`, { config: { private: true } })
+          .on("broadcast", { event: "story_changed" }, () => {
+            recordResourceMetric("realtime_messages");
+            scheduleRefresh();
+          });
+        recordResourceMetric("realtime_joins");
+        void channel.subscribe((status) => {
+          if (status === "SUBSCRIBED" && !disposed) scheduleRefresh();
+        });
       },
 
+      // Own and friend stories now share one bootstrap and one Realtime channel.
       subscribeToUserStories: async (userId: string) => {
-        const prevUnsub = get()._userUnsub;
-        if (prevUnsub) prevUnsub();
-        set({ _userUnsub: null });
-
-        if (!userId) {
-          set({ userStories: [] });
-          return;
+        if (!userId) set({ userStories: [] });
+        if (!get()._friendsUnsub && userId) {
+          await get().subscribeToFriendsStories(userId);
         }
-
-        // Fetch user profile once for the subscription lifetime
-        let userProfile: any = null;
-        try {
-          userProfile = await userService.getProfile(userId);
-        } catch {
-          // will use fallback
-        }
-        const dedicatedProfileCache: Record<string, any> = {};
-
-        const q = query(
-          collection(db, "stories"),
-          where("userId", "==", userId),
-          orderBy("createdAt", "desc"),
-        );
-
-        const unsub = onSnapshot(
-          q,
-          async (snapshot) => {
-            const now = new Date();
-            const uncachedDedicatedIds = [
-              ...new Set(
-                snapshot.docs
-                  .map((docSnap) => docSnap.data().dedicatedToUserId as string)
-                  .filter(
-                    (id): id is string =>
-                      Boolean(id) && !dedicatedProfileCache[id],
-                  ),
-              ),
-            ];
-
-            await Promise.all(
-              uncachedDedicatedIds.map(async (id) => {
-                try {
-                  const profile = await userService.getProfile(id);
-                  if (profile) dedicatedProfileCache[id] = profile;
-                } catch {
-                  // will use fallback
-                }
-              }),
-            );
-
-            const userStories: StoryDTO[] = snapshot.docs
-              .filter((docSnap) => {
-                const exp = docSnap.data().expiresAt?.toDate?.();
-                return exp instanceof Date && exp > now;
-              })
-              .map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                  id: docSnap.id,
-                  author: {
-                    id: userId,
-                    username: userProfile
-                      ? userProfile.username.startsWith("@")
-                        ? userProfile.username
-                        : `@${userProfile.username}`
-                      : `@user_${userId.slice(-6)}`,
-                    displayName:
-                      userProfile?.display_name ||
-                      userProfile?.username ||
-                      "You",
-                    avatar:
-                      userProfile?.avatar_url || getDefaultAvatarUrl(userId),
-                  },
-                  media: { type: data.mediaType, url: data.mediaUrl },
-                  storyType: data.storyType || "personal",
-                  dedicatedTo:
-                    data.dedicatedToUserId &&
-                    dedicatedProfileCache[data.dedicatedToUserId]
-                      ? toStoryUser(
-                          dedicatedProfileCache[data.dedicatedToUserId],
-                          data.dedicatedToUserId,
-                        )
-                      : null,
-                  storyText: data.storyText || null,
-                  storyFilter: data.storyFilter || "original",
-                  storyMusic: data.storyMusic || null,
-                  caption: data.caption ?? null,
-                  createdAt:
-                    data.createdAt?.toDate()?.toISOString() ??
-                    new Date().toISOString(),
-                  expiresAt:
-                    data.expiresAt?.toDate()?.toISOString() ??
-                    new Date().toISOString(),
-                  viewCount: data.viewCount ?? 0,
-                  hasViewed: false,
-                } as StoryDTO;
-              });
-
-            set({ userStories });
-          },
-          (err) => {
-            console.error("User stories onSnapshot error:", err);
-            get().loadUserStories(userId);
-          },
-        );
-
-        set({ _userUnsub: unsub });
+        set({ _userUnsub: () => {} });
       },
 
       unsubscribeFromAllStories: () => {
@@ -408,7 +243,7 @@ export const useStoryStore = create<StoryState>()(
         set({ _friendsUnsub: null, _userUnsub: null });
       },
 
-      // ── Legacy one-shot loaders ───────────────────────────────────────────────
+      // â”€â”€ Legacy one-shot loaders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
       // Load friends' stories (no blob migration)
       loadFriendsStories: async (userId: string) => {
@@ -456,7 +291,7 @@ export const useStoryStore = create<StoryState>()(
         }
       },
 
-      // Create story — real Firebase Storage upload with live progress
+      // Create story â€” real Supabase Storage upload with live progress
       createStory: async (userId: string, request: CreateStoryDTO) => {
         set({ isUploading: true, uploadProgress: 0, error: null });
         try {
@@ -466,7 +301,7 @@ export const useStoryStore = create<StoryState>()(
 
           setTimeout(() => set({ uploadProgress: 0 }), 1000);
 
-          // onSnapshot subscriptions pick up the new doc automatically.
+          // The scoped realtime channel reconciles the new story.
           // Only fall back to manual reload if no subscription is active.
           const { _friendsUnsub, _userUnsub } = get();
           if (!_friendsUnsub) await get().loadFriendsStories(userId);
@@ -485,6 +320,7 @@ export const useStoryStore = create<StoryState>()(
       markStoryAsViewed: async (storyId: string, viewerId: string) => {
         try {
           await storyService.markStoryAsViewed(storyId, viewerId);
+          rememberViewedStory(storyId, viewerId);
           set((state) => ({
             stories: state.stories.map((story) =>
               story.id === storyId
@@ -506,7 +342,7 @@ export const useStoryStore = create<StoryState>()(
         }
       },
 
-      // Delete story — removes from both lists and refreshes
+      // Delete story â€” removes from both lists and refreshes
       deleteStory: async (storyId: string, userId: string) => {
         try {
           await storyService.deleteStory(storyId);
@@ -514,8 +350,11 @@ export const useStoryStore = create<StoryState>()(
             stories: state.stories.filter((s) => s.id !== storyId),
             userStories: state.userStories.filter((s) => s.id !== storyId),
           }));
-          // Refresh to stay in sync with server
-          await get().loadUserStories(userId);
+          // The active subscription receives the deletion. Only reconcile
+          // manually when this store is being used without a listener.
+          if (!get()._userUnsub) {
+            await get().loadUserStories(userId);
+          }
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : "Failed to delete story";
@@ -523,8 +362,8 @@ export const useStoryStore = create<StoryState>()(
         }
       },
 
-      // Cleanup expired story docs from Firestore.
-      // Active onSnapshot subscriptions pick up deletions automatically;
+      // Cleanup expired story docs from Postgres.
+      // The scoped realtime channel reconciles deletions automatically;
       // only falls back to a manual reload when no subscription is active.
       cleanupExpiredStories: async (userId: string) => {
         try {
@@ -572,8 +411,9 @@ export const useStoryStore = create<StoryState>()(
       },
     }),
 
-    // ── Persist config ─────────────────────────────────────────────────────────
+    // â”€â”€ Persist config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     {
+      skipHydration: true,
       name: "dare-stories",
       storage: createJSONStorage(() => sessionStorage),
       // Only persist the data arrays; functions / unsubscribers are never serialisable

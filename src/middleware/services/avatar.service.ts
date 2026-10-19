@@ -6,6 +6,7 @@ import {
 export interface AvatarUploadResponse {
   success: boolean;
   url?: string;
+  assetId?: string;
   error?: string;
 }
 
@@ -55,6 +56,7 @@ class AvatarService {
       return {
         success: true,
         url: uploadedAvatar.url,
+        assetId: uploadedAvatar.assetId,
       };
     } catch (error) {
       return {

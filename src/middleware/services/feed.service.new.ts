@@ -1,3 +1,4 @@
+import { guardCircleResult } from "./guardCircleResult";
 import { IFeedRepository } from "@/backend/domain/interfaces/IFeedRepository";
 import { FeedRepository } from "@/backend/repositories/FeedRepository";
 import { IFriendshipRepository } from "@/backend/domain/interfaces/IFriendshipRepository";
@@ -266,5 +267,5 @@ class FeedService {
   }
 }
 
-const feedService = new FeedService();
+const feedService = guardCircleResult(new FeedService());
 export default feedService;

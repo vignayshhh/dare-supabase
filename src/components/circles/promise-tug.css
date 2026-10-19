@@ -1,0 +1,60 @@
+/* Scoped to Promise cards. Same 48px head / 56px body as the chatlist, scaled. */
+.promise-tug-stage { position: relative; padding-top: 35px; }
+.promise-tug-rope { position: relative; }
+.promise-tug-figures { position: absolute; z-index: 1; inset: 0 7px auto; height: 40px; pointer-events: none; display: flex; justify-content: space-between; }
+.promise-tug-team { display: flex; gap: 10px; }
+.promise-tug-person { position: relative; width: 33px; height: 38px; }
+.promise-tug-scale { width: 56px; transform: scale(.58); transform-origin: top left; }
+.promise-tug-figures .chat-stickman-motion { animation: none !important; will-change: auto; }
+.promise-tug-figures .chat-stickman-body { height: 32px; }
+.promise-tug-figures .chat-presence-leg { display: none; }
+.promise-tug-team--break .chat-stickman-body { transform: scaleX(-1); }
+.promise-tug-figures .chat-presence-arm {
+  /* One continuous elbow stroke; no rectangular borders or stacked loops. */
+  left: 27px; right: auto; width: 25px; height: 20px;
+  border: 0; border-radius: 0; transform-origin: 24px 17px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='25' height='20' viewBox='0 0 25 20'%3E%3Cpath d='M1 3 Q6 17 24 17' fill='none' stroke='%23e8f1eb' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.promise-tug-figures .chat-presence-arm-left { top: 3px; transform: rotate(-12deg); }
+.promise-tug-figures .chat-presence-arm-right { top: 3px; opacity: .4; transform: rotate(-8deg); }
+/* One inherited clock drives figures and colour seam: they cannot drift apart. */
+@property --promise-pull {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+.promise-tug-stage:has([data-pulling="true"]) {
+  animation: promiseSharedPull 2.1s ease-in-out -.525s infinite;
+}
+@keyframes promiseSharedPull {
+  0%, 100% { --promise-pull: 1; }
+  50% { --promise-pull: -1; }
+}
+.promise-tug-team--keep { --effort: max(0, calc(-1 * var(--promise-pull))); --direction: -1; }
+.promise-tug-team--break { --effort: max(0, var(--promise-pull)); --direction: 1; }
+/* Head and spine remain one rigid connected figure throughout the lean. */
+.promise-tug-figures .chat-stickman-motion {
+  transform-origin: 50% 85%;
+  transform: translateX(calc(var(--direction) * var(--effort) * 14px))
+    rotate(calc(var(--direction) * var(--effort) * -12deg));
+}
+.promise-tug-figures .chat-stickman-head { animation: none; transform: none; }
+/* Pivot at the shoulder so arms stay attached as the entire figure pulls. */
+.promise-tug-figures .chat-presence-arm {
+  transform-origin: 1px 3px;
+  transform: rotate(calc(-8deg - var(--effort) * 18deg));
+}
+.promise-tug-figures .chat-presence-arm-right {
+  transform: rotate(calc(-5deg - var(--effort) * 14deg));
+}
+.promise-tug-stage:has([data-pulling="true"]) .promise-tug-rope > div {
+  flex-basis: calc(20px + var(--promise-pull) * 20px);
+}
+.promise-tug-stage:has([data-pulling="true"]) .promise-tug-rope > div + div {
+  flex-basis: calc(20px - var(--promise-pull) * 20px);
+}
+.prediction-reel-is-scrolling .promise-tug-stage { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) {
+  .promise-tug-stage { animation: none !important; }
+  .promise-tug-stage:has([data-pulling]) .promise-tug-rope > div { flex-basis: 0; }
+}

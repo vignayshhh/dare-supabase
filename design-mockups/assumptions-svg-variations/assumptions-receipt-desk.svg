@@ -1,0 +1,44 @@
+<svg width="420" height="620" viewBox="0 0 420 620" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#060806"/><stop offset="0.52" stop-color="#0A0F0A"/><stop offset="1" stop-color="#020403"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#0D1511"/><stop offset="1" stop-color="#040706"/>
+    </linearGradient>
+    <radialGradient id="glowBg" cx="50%" cy="8%" r="76%">
+      <stop stop-color="#4ADE80" stop-opacity="0.16"/><stop offset="0.48" stop-color="#22D3EE" stop-opacity="0.08"/><stop offset="1" stop-color="#030403" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="22" stdDeviation="20" flood-color="#000000" flood-opacity="0.42"/>
+    </filter>
+    <style>
+      .label{font-family:Inter,Arial,sans-serif;fill:#fff;font-weight:950}
+      .muted{font-family:Inter,Arial,sans-serif;fill:#94A3B8;font-weight:800}
+      .tiny{font-family:Inter,Arial,sans-serif;fill:#86EFAC;font-weight:950;letter-spacing:1.8px}
+      .body{font-family:Inter,Arial,sans-serif;fill:#D7FFE6;font-weight:900}
+    </style>
+  </defs>
+  <rect width="420" height="620" rx="42" fill="url(#bg)"/>
+  <rect width="420" height="620" rx="42" fill="url(#glowBg)"/>
+  <rect x="24" y="24" width="372" height="86" rx="32" fill="url(#panel)" stroke="rgba(255,255,255,0.08)" filter="url(#shadow)"/>
+  <line x1="70" y1="25" x2="350" y2="25" stroke="rgba(134,239,172,0.72)"/>
+  <text x="48" y="60" class="tiny" font-size="11">ASSUMPTIONS</text>
+  <text x="48" y="90" class="label" font-size="24">Receipt Desk</text>
+  <g transform="translate(24 138)">
+    <rect width="372" height="410" rx="40" fill="url(#panel)" stroke="rgba(255,255,255,0.08)" filter="url(#shadow)"/>
+    <rect x="50" y="52" width="214" height="282" rx="24" fill="#0F1711" stroke="rgba(255,255,255,0.09)" transform="rotate(-5 50 52)" filter="url(#shadow)"/>
+    <rect x="122" y="88" width="204" height="266" rx="24" fill="#0A110D" stroke="rgba(134,239,172,0.16)" transform="rotate(6 122 88)" filter="url(#shadow)"/>
+    <rect x="75" y="80" width="184" height="34" rx="17" fill="rgba(74,222,128,0.10)" stroke="rgba(74,222,128,0.22)" transform="rotate(-5 75 80)"/>
+    <rect x="148" y="120" width="146" height="12" rx="6" fill="rgba(255,255,255,0.12)" transform="rotate(6 148 120)"/>
+    <rect x="148" y="148" width="132" height="12" rx="6" fill="rgba(255,255,255,0.085)" transform="rotate(6 148 148)"/>
+    <rect x="148" y="176" width="158" height="12" rx="6" fill="rgba(255,255,255,0.085)" transform="rotate(6 148 176)"/>
+    <circle cx="256" cy="286" r="60" fill="rgba(74,222,128,0.10)" stroke="rgba(134,239,172,0.30)" stroke-width="3"/>
+    <text x="256" y="278" text-anchor="middle" class="tiny" font-size="11">READ</text>
+    <text x="256" y="301" text-anchor="middle" class="tiny" font-size="11">CONFIRMED</text>
+    <rect x="42" y="342" width="288" height="50" rx="25" fill="rgba(0,0,0,0.42)" stroke="rgba(255,255,255,0.08)"/>
+    <text x="66" y="362" class="muted" font-size="12">The claim</text>
+    <text x="66" y="385" class="body" font-size="18">He started the rumor first</text>
+  </g>
+  <text x="210" y="584" text-anchor="middle" class="muted" font-size="14">Evidence table. Big final stamp. Permanent receipt.</text>
+</svg>

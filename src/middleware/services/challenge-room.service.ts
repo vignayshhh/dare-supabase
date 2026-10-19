@@ -1,644 +1,87 @@
-import { db, storage } from "@/backend/lib/firebase";
-import {
-  collection,
-  doc,
-  setDoc,
-  deleteDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  limit,
-  onSnapshot,
-  Timestamp,
-  type FirestoreError,
-} from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createUuid } from "@/utils/uuid";
+import { scheduleRefresh } from "@/lib/realtime/scheduleRefresh";
+import { uploadOptimizedMedia } from "@/utils/mediaUpload";
+type DatabaseTimestamp = string | Date;
 
-export interface ChallengeProofVote {
-  id: string;
-  proofId: string;
-  challengeId?: string;
-  userId: string;
-  vote: "real" | "fake";
-  createdAt: Timestamp;
-}
-
-export interface ChallengeProofComment {
-  id: string;
-  proofId: string;
-  challengeId?: string;
-  userId: string;
-  username: string;
-  displayName: string;
-  avatarUrl: string;
-  content: string;
-  createdAt: Timestamp;
-  likes: number;
-  userLiked?: boolean;
-}
-
-export interface ChallengeCommentLikeSummary {
-  commentId: string;
-  count: number;
-  currentUserLiked: boolean;
-}
+export interface ChallengeProofVote { id: string; proofId: string; challengeId?: string; userId: string; vote: "real" | "fake"; createdAt: DatabaseTimestamp; }
+export interface ChallengeProofComment { id: string; proofId: string; challengeId?: string; userId: string; username: string; displayName: string; avatarUrl: string; content: string; createdAt: DatabaseTimestamp; likes: number; userLiked?: boolean; }
+export interface ChallengeCommentLikeSummary { commentId: string; count: number; currentUserLiked: boolean; }
+type Row = Record<string, unknown>;
+const client = () => getSupabaseBrowserClient();
+const mapVote = (r: Row): ChallengeProofVote => ({ id: String(r.id), proofId: String(r.proof_id), challengeId: r.challenge_id ? String(r.challenge_id) : undefined, userId: String(r.user_id), vote: r.vote === "fake" ? "fake" : "real", createdAt: r.created_at as DatabaseTimestamp });
+const mapComment = (r: Row): ChallengeProofComment => ({ id: String(r.id), proofId: String(r.proof_id), challengeId: r.challenge_id ? String(r.challenge_id) : undefined, userId: String(r.user_id), username: String(r.username || "dareuser").replace(/^@/, ""), displayName: String(r.display_name || r.username || "Dare User"), avatarUrl: String(r.avatar_url || ""), content: String(r.content || ""), createdAt: r.created_at as DatabaseTimestamp, likes: Number(r.likes || 0) });
+const uniq = (ids: string[]) => [...new Set(ids)].filter(Boolean);
+const emptyUnsub = () => () => {};
 
 export interface ChallengeRoomService {
-  // Voting functionality
-  voteOnProof(
-    proofId: string,
-    userId: string,
-    vote: "real" | "fake",
-    challengeId?: string,
-  ): Promise<{ success: boolean; error?: string }>;
-  removeProofVote(
-    proofId: string,
-    userId: string,
-    challengeId?: string,
-  ): Promise<{ success: boolean; error?: string }>;
+  voteOnProof(proofId: string, userId: string, vote: "real" | "fake", challengeId?: string): Promise<{ success: boolean; error?: string }>;
+  removeProofVote(proofId: string, userId: string, challengeId?: string): Promise<{ success: boolean; error?: string }>;
   getProofVotes(proofId: string): Promise<ChallengeProofVote[]>;
-  subscribeToProofVotes(
-    proofId: string,
-    callback: (votes: ChallengeProofVote[]) => void,
-  ): () => void;
-  subscribeToProofVotesByProofIds(
-    proofIds: string[],
-    callback: (votes: ChallengeProofVote[]) => void,
-  ): () => void;
-
-  // Comments functionality
-  addComment(
-    proofId: string,
-    userId: string,
-    username: string,
-    displayName: string,
-    avatarUrl: string,
-    content: string,
-    challengeId?: string,
-  ): Promise<{
-    success: boolean;
-    comment?: ChallengeProofComment;
-    error?: string;
-  }>;
+  subscribeToProofVotes(proofId: string, callback: (votes: ChallengeProofVote[]) => void): () => void;
+  subscribeToProofVotesByProofIds(proofIds: string[], callback: (votes: ChallengeProofVote[]) => void): () => void;
+  subscribeToCurrentUserProofVotesByProofIds(proofIds: string[], userId: string | undefined, callback: (votes: ChallengeProofVote[]) => void): () => void;
+  addComment(proofId: string, userId: string, username: string, displayName: string, avatarUrl: string, content: string, challengeId?: string): Promise<{ success: boolean; comment?: ChallengeProofComment; error?: string }>;
   getProofComments(proofId: string): Promise<ChallengeProofComment[]>;
-  subscribeToProofComments(
-    proofId: string,
-    callback: (comments: ChallengeProofComment[]) => void,
-  ): () => void;
-  subscribeToProofCommentsByProofIds(
-    proofIds: string[],
-    callback: (comments: ChallengeProofComment[]) => void,
-  ): () => void;
-  deleteComment(
-    commentId: string,
-    userId: string,
-  ): Promise<{ success: boolean; error?: string }>;
-  likeComment(
-    commentId: string,
-    userId: string,
-    challengeId?: string,
-  ): Promise<{ success: boolean; error?: string }>;
-  subscribeToCommentLikesByCommentIds(
-    commentIds: string[],
-    currentUserId: string | undefined,
-    callback: (summaries: ChallengeCommentLikeSummary[]) => void,
-  ): () => void;
-
-  // Media upload functionality
-  uploadProofMedia(
-    file: File,
-    userId: string,
-    challengeId: string,
-    proofDay: number,
-  ): Promise<{
-    success: boolean;
-    url?: string;
-    thumbnail?: string;
-    error?: string;
-  }>;
+  subscribeToProofComments(proofId: string, callback: (comments: ChallengeProofComment[]) => void): () => void;
+  subscribeToProofCommentsByProofIds(proofIds: string[], callback: (comments: ChallengeProofComment[]) => void): () => void;
+  deleteComment(commentId: string, userId: string): Promise<{ success: boolean; error?: string }>;
+  likeComment(commentId: string, userId: string, challengeId?: string): Promise<{ success: boolean; liked?: boolean; error?: string }>;
+  subscribeToCommentLikesByCommentIds(commentIds: string[], currentUserId: string | undefined, callback: (summaries: ChallengeCommentLikeSummary[]) => void): () => void;
+  subscribeToCurrentUserCommentLikesByCommentIds(commentIds: string[], currentUserId: string | undefined, callback: (likedCommentIds: Set<string>) => void): () => void;
+  uploadProofMedia(file: File, userId: string, challengeId: string, proofDay: number): Promise<{ success: boolean; url?: string; thumbnail?: string; assetId?: string; error?: string }>;
 }
 
-const toScopedDocId = (...parts: string[]) =>
-  parts.join("_").replace(/[^\w.-]/g, "_").slice(0, 1400);
-
-const toTimestampMs = (value: unknown) => {
-  if (!value) return 0;
-  if (value instanceof Timestamp) return value.toMillis();
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === "number") return value;
-  if (typeof value === "string") return new Date(value).getTime() || 0;
-  const maybeTimestamp = value as { toMillis?: () => number; toDate?: () => Date };
-  if (typeof maybeTimestamp.toMillis === "function") return maybeTimestamp.toMillis();
-  if (typeof maybeTimestamp.toDate === "function") return maybeTimestamp.toDate().getTime();
-  return 0;
+const subscribeNativeRows = <T>(table: string, fields: string, realtimeFilter: string, filter: (q: any) => any, channelName: string, map: (rows: Row[]) => T[], callback: (rows: T[]) => void) => {
+  let active = true;
+  const load = async () => { const base = client().from(table).select(fields); const { data, error } = await filter(base); if (!active || error) return; callback(map((data || []) as Row[])); };
+  const scheduled = scheduleRefresh(() => { void load(); });
+  void load();
+  const channel = client().channel(channelName).on("postgres_changes", { event: "*", schema: "public", table, filter: realtimeFilter }, () => { scheduled.schedule(); }).subscribe();
+  return () => { active = false; scheduled.cancel(); void client().removeChannel(channel); };
 };
-
-const toSafeStorageName = (fileName: string, fallbackExtension: string) => {
-  const baseName =
-    fileName
-      .replace(/\.[^.]+$/, "")
-      .replace(/[^a-zA-Z0-9-_]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 80) || "proof";
-
-  return `${baseName}.${fallbackExtension}`;
-};
-
-const chunk = <T,>(items: T[], size: number) => {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
-};
-
-const warnRealtimeFailure = (label: string, error: FirestoreError) => {
-  console.warn(`${label} unavailable: ${error.code}`);
-};
-
-const sortNewestFirst = <T extends { createdAt: unknown }>(items: T[]) =>
-  [...items].sort((a, b) => toTimestampMs(b.createdAt) - toTimestampMs(a.createdAt));
-
-const mapProofVote = (id: string, data: any): ChallengeProofVote => ({
-  id,
-  proofId: String(data.proofId || ""),
-  challengeId: data.challengeId ? String(data.challengeId) : undefined,
-  userId: String(data.userId || ""),
-  vote: data.vote === "fake" ? "fake" : "real",
-  createdAt: data.createdAt,
-});
-
-const mapProofComment = (
-  id: string,
-  data: any,
-): ChallengeProofComment => ({
-  id,
-  proofId: String(data.proofId || ""),
-  challengeId: data.challengeId ? String(data.challengeId) : undefined,
-  userId: String(data.userId || ""),
-  username: String(data.username || "dareuser").replace(/^@/, ""),
-  displayName: String(data.displayName || data.username || "Dare User"),
-  avatarUrl: String(data.avatarUrl || ""),
-  content: String(data.content || ""),
-  likes: Math.max(0, Number(data.likes || 0)),
-  createdAt: data.createdAt,
-});
 
 class ChallengeRoomServiceImpl implements ChallengeRoomService {
-  // Voting functionality
-  async voteOnProof(
-    proofId: string,
-    userId: string,
-    vote: "real" | "fake",
-    challengeId?: string,
-  ): Promise<{ success: boolean; error?: string }> {
+  async voteOnProof(proofId: string, userId: string, vote: "real" | "fake", challengeId?: string) {
+    const { error } = await client().from("challenge_proof_votes").upsert({ proof_id: proofId, user_id: userId, challenge_id: challengeId || null, vote }, { onConflict: "proof_id,user_id" });
+    return error ? { success: false, error: "Failed to vote on proof" } : { success: true };
+  }
+  async removeProofVote(proofId: string, userId: string) { const { error } = await client().from("challenge_proof_votes").delete().eq("proof_id", proofId).eq("user_id", userId); return error ? { success: false, error: "Failed to remove vote" } : { success: true }; }
+  async getProofVotes(proofId: string) { const { data } = await client().from("challenge_proof_votes").select("id,proof_id,challenge_id,user_id,vote,created_at").eq("proof_id", proofId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100); return (data || []).map(mapVote); }
+  subscribeToProofVotes(proofId: string, callback: (votes: ChallengeProofVote[]) => void) { return subscribeNativeRows("challenge_proof_votes", "id,proof_id,challenge_id,user_id,vote,created_at", `proof_id=eq.${proofId}`, (q) => q.eq("proof_id", proofId).order("created_at", { ascending: false }), "challenge-proof-votes:" + proofId, (rows) => rows.map(mapVote), callback); }
+  subscribeToProofVotesByProofIds(proofIds: string[], callback: (votes: ChallengeProofVote[]) => void) { const ids = uniq(proofIds); if (!ids.length) { callback([]); return emptyUnsub(); } return subscribeNativeRows("challenge_proof_votes", "id,proof_id,challenge_id,user_id,vote,created_at", `proof_id=in.(${ids.join(",")})`, (q) => q.in("proof_id", ids).order("created_at", { ascending: false }), "challenge-proof-votes:" + ids.sort().join(","), (rows) => rows.map(mapVote), callback); }
+  subscribeToCurrentUserProofVotesByProofIds(proofIds: string[], userId: string | undefined, callback: (votes: ChallengeProofVote[]) => void) { const ids = uniq(proofIds); if (!userId || !ids.length) { callback([]); return emptyUnsub(); } return subscribeNativeRows("challenge_proof_votes", "id,proof_id,challenge_id,user_id,vote,created_at", `user_id=eq.${userId}`, (q) => q.in("proof_id", ids).eq("user_id", userId).limit(ids.length), "challenge-proof-votes-user:" + userId, (rows) => rows.map(mapVote), callback); }
+  async addComment(proofId: string, userId: string, username: string, displayName: string, avatarUrl: string, content: string, challengeId?: string) {
+    const text = content.trim(); if (!text) return { success: false, error: "Comment cannot be empty" }; if (text.length > 500) return { success: false, error: "Comment too long" };
+    const { data, error } = await client().from("challenge_proof_comments").insert({ proof_id: proofId, challenge_id: challengeId || null, user_id: userId, username, display_name: displayName, avatar_url: avatarUrl, content: text }).select("id,proof_id,challenge_id,user_id,username,display_name,avatar_url,content,likes,created_at").single();
+    return error ? { success: false, error: "Failed to add comment" } : { success: true, comment: mapComment(data as Row) };
+  }
+  async getProofComments(proofId: string) { const { data } = await client().from("challenge_proof_comments").select("id,proof_id,challenge_id,user_id,username,display_name,avatar_url,content,likes,created_at").eq("proof_id", proofId).order("created_at", { ascending: false }).limit(50); return (data || []).map(mapComment); }
+  subscribeToProofComments(proofId: string, callback: (comments: ChallengeProofComment[]) => void) { return subscribeNativeRows("challenge_proof_comments", "id,proof_id,challenge_id,user_id,username,display_name,avatar_url,content,likes,created_at", `proof_id=eq.${proofId}`, (q) => q.eq("proof_id", proofId).order("created_at", { ascending: false }).limit(50), "challenge-proof-comments:" + proofId, (rows) => rows.map(mapComment), callback); }
+  subscribeToProofCommentsByProofIds(proofIds: string[], callback: (comments: ChallengeProofComment[]) => void) { const ids = uniq(proofIds); if (!ids.length) { callback([]); return emptyUnsub(); } return subscribeNativeRows("challenge_proof_comments", "id,proof_id,challenge_id,user_id,username,display_name,avatar_url,content,likes,created_at", `proof_id=in.(${ids.join(",")})`, (q) => q.in("proof_id", ids).order("created_at", { ascending: false }).limit(200), "challenge-proof-comments:" + ids.sort().join(","), (rows) => rows.map(mapComment), callback); }
+  async deleteComment(commentId: string, userId: string) { const { error } = await client().from("challenge_proof_comments").delete().eq("id", commentId).eq("user_id", userId); return error ? { success: false, error: "Failed to delete comment" } : { success: true }; }
+  async likeComment(commentId: string, userId: string, challengeId?: string) {
+    const { data, error } = await client().rpc("toggle_challenge_comment_like", { p_comment_id: commentId, p_user_id: userId, p_challenge_id: challengeId || null });
+    return error ? { success: false, error: "Failed to like comment" } : { success: true, liked: Boolean(data) };
+  }
+  subscribeToCommentLikesByCommentIds(commentIds: string[], currentUserId: string | undefined, callback: (summaries: ChallengeCommentLikeSummary[]) => void) {
+    const ids = uniq(commentIds); if (!ids.length) { callback([]); return emptyUnsub(); }
+    return subscribeNativeRows("challenge_comment_likes", "id,comment_id,user_id,created_at", `comment_id=in.(${ids.join(",")})`, (q) => q.in("comment_id", ids), "challenge-comment-likes:" + ids.sort().join(","), (rows) => ids.map((id) => ({ commentId: id, count: rows.filter((r) => r.comment_id === id).length, currentUserLiked: !!currentUserId && rows.some((r) => r.comment_id === id && r.user_id === currentUserId) })), callback);
+  }
+  subscribeToCurrentUserCommentLikesByCommentIds(commentIds: string[], currentUserId: string | undefined, callback: (likedCommentIds: Set<string>) => void) {
+    const ids = uniq(commentIds); if (!currentUserId || !ids.length) { callback(new Set()); return emptyUnsub(); }
+    let active = true; const load = async () => { const { data } = await client().from("challenge_comment_likes").select("comment_id").in("comment_id", ids).eq("user_id", currentUserId).limit(ids.length); if (active) callback(new Set((data || []).map((r) => String(r.comment_id)))); };
+    const scheduled = scheduleRefresh(() => { void load(); });
+    void load(); const channel = client().channel("challenge-comment-likes-user:" + currentUserId).on("postgres_changes", { event: "*", schema: "public", table: "challenge_comment_likes", filter: "user_id=eq." + currentUserId }, () => { scheduled.schedule(); }).subscribe();
+    return () => { active = false; scheduled.cancel(); void client().removeChannel(channel); };
+  }
+  async uploadProofMedia(file: File, userId: string, challengeId: string, proofDay: number) {
+    if (!file) return { success: false, error: "No file provided" }; if (file.size > 100 * 1024 * 1024) return { success: false, error: "File too large (max 100MB)" };
+    const allowed = ["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm", "video/quicktime"]; if (!allowed.includes(file.type)) return { success: false, error: "Invalid file type" };
     try {
-      await setDoc(
-        doc(db, "challenge_proof_votes", toScopedDocId(proofId, userId)),
-        {
-          proofId,
-          ...(challengeId ? { challengeId } : {}),
-          userId,
-          vote,
-          createdAt: Timestamp.now(),
-        },
-        { merge: true },
-      );
-
-      return { success: true };
-    } catch (error) {
-      console.warn("Error voting on proof:", error);
-      return { success: false, error: "Failed to vote on proof" };
-    }
-  }
-
-  async removeProofVote(
-    proofId: string,
-    userId: string,
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      await deleteDoc(doc(db, "challenge_proof_votes", toScopedDocId(proofId, userId)));
-      return { success: true };
-    } catch (error) {
-      console.warn("Error removing proof vote:", error);
-      return { success: false, error: "Failed to remove vote" };
-    }
-  }
-
-  async getProofVotes(proofId: string): Promise<ChallengeProofVote[]> {
-    try {
-      const votesQuery = query(
-        collection(db, "challenge_proof_votes"),
-        where("proofId", "==", proofId),
-      );
-      const votesSnapshot = await getDocs(votesQuery);
-
-      return sortNewestFirst(
-        votesSnapshot.docs.map((voteDoc) =>
-          mapProofVote(voteDoc.id, voteDoc.data()),
-        ),
-      );
-    } catch (error) {
-      console.warn("Error getting proof votes:", error);
-      return [];
-    }
-  }
-
-  subscribeToProofVotes(
-    proofId: string,
-    callback: (votes: ChallengeProofVote[]) => void,
-  ): () => void {
-    const votesQuery = query(
-      collection(db, "challenge_proof_votes"),
-      where("proofId", "==", proofId),
-    );
-
-    return onSnapshot(
-      votesQuery,
-      (snapshot) => {
-        callback(
-          sortNewestFirst(
-            snapshot.docs.map((voteDoc) =>
-              mapProofVote(voteDoc.id, voteDoc.data()),
-            ),
-          ),
-        );
-      },
-      (error) => {
-        warnRealtimeFailure("Proof votes", error);
-      },
-    );
-  }
-
-  subscribeToProofVotesByProofIds(
-    proofIds: string[],
-    callback: (votes: ChallengeProofVote[]) => void,
-  ): () => void {
-    const uniqueProofIds = Array.from(new Set(proofIds)).filter(Boolean);
-    if (uniqueProofIds.length === 0) {
-      callback([]);
-      return () => {};
-    }
-
-    const chunkVotes: ChallengeProofVote[][] = [];
-    const unsubscribes = chunk(uniqueProofIds, 30).map((proofIdChunk, index) => {
-      chunkVotes[index] = [];
-      const votesQuery = query(
-        collection(db, "challenge_proof_votes"),
-        where("proofId", "in", proofIdChunk),
-      );
-
-      return onSnapshot(
-        votesQuery,
-        (snapshot) => {
-          chunkVotes[index] = snapshot.docs.map((voteDoc) =>
-            mapProofVote(voteDoc.id, voteDoc.data()),
-          );
-          callback(chunkVotes.flat());
-        },
-        (error) => {
-          warnRealtimeFailure("Proof vote feed", error);
-        },
-      );
-    });
-
-    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }
-
-  // Comments functionality
-  async addComment(
-    proofId: string,
-    userId: string,
-    username: string,
-    displayName: string,
-    avatarUrl: string,
-    content: string,
-    challengeId?: string,
-  ): Promise<{
-    success: boolean;
-    comment?: ChallengeProofComment;
-    error?: string;
-  }> {
-    try {
-      if (!content.trim()) {
-        return { success: false, error: "Comment cannot be empty" };
-      }
-
-      if (content.length > 500) {
-        return { success: false, error: "Comment too long" };
-      }
-
-      const commentRef = doc(collection(db, "challenge_proof_comments"));
-      const createdAt = Timestamp.now();
-      const commentData = {
-        proofId,
-        ...(challengeId ? { challengeId } : {}),
-        userId,
-        username,
-        displayName,
-        avatarUrl,
-        content: content.trim(),
-        likes: 0,
-        createdAt,
-      };
-
-      await setDoc(commentRef, commentData);
-
-      return {
-        success: true,
-        comment: mapProofComment(commentRef.id, commentData),
-      };
-    } catch (error) {
-      console.warn("Error adding comment:", error);
-      return { success: false, error: "Failed to add comment" };
-    }
-  }
-
-  async getProofComments(proofId: string): Promise<ChallengeProofComment[]> {
-    try {
-      const commentsQuery = query(
-        collection(db, "challenge_proof_comments"),
-        where("proofId", "==", proofId),
-        limit(50),
-      );
-      const commentsSnapshot = await getDocs(commentsQuery);
-
-      return sortNewestFirst(
-        commentsSnapshot.docs.map((commentDoc) =>
-          mapProofComment(commentDoc.id, commentDoc.data()),
-        ),
-      );
-    } catch (error) {
-      console.warn("Error getting proof comments:", error);
-      return [];
-    }
-  }
-
-  subscribeToProofComments(
-    proofId: string,
-    callback: (comments: ChallengeProofComment[]) => void,
-  ): () => void {
-    const commentsQuery = query(
-      collection(db, "challenge_proof_comments"),
-      where("proofId", "==", proofId),
-      limit(50),
-    );
-
-    return onSnapshot(
-      commentsQuery,
-      (snapshot) => {
-        callback(
-          sortNewestFirst(
-            snapshot.docs.map((commentDoc) =>
-              mapProofComment(commentDoc.id, commentDoc.data()),
-            ),
-          ),
-        );
-      },
-      (error) => {
-        warnRealtimeFailure("Proof comments", error);
-      },
-    );
-  }
-
-  subscribeToProofCommentsByProofIds(
-    proofIds: string[],
-    callback: (comments: ChallengeProofComment[]) => void,
-  ): () => void {
-    const uniqueProofIds = Array.from(new Set(proofIds)).filter(Boolean);
-    if (uniqueProofIds.length === 0) {
-      callback([]);
-      return () => {};
-    }
-
-    const chunkComments: ChallengeProofComment[][] = [];
-    const unsubscribes = chunk(uniqueProofIds, 30).map((proofIdChunk, index) => {
-      chunkComments[index] = [];
-      const commentsQuery = query(
-        collection(db, "challenge_proof_comments"),
-        where("proofId", "in", proofIdChunk),
-      );
-
-      return onSnapshot(
-        commentsQuery,
-        (snapshot) => {
-          chunkComments[index] = snapshot.docs.map((commentDoc) =>
-            mapProofComment(commentDoc.id, commentDoc.data()),
-          );
-          callback(sortNewestFirst(chunkComments.flat()));
-        },
-        (error) => {
-          warnRealtimeFailure("Proof comment feed", error);
-        },
-      );
-    });
-
-    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }
-
-  async deleteComment(
-    commentId: string,
-    userId: string,
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const commentDoc = doc(db, "challenge_proof_comments", commentId);
-      const commentSnapshot = await getDoc(commentDoc);
-
-      if (!commentSnapshot.exists()) {
-        return { success: false, error: "Comment not found" };
-      }
-
-      const commentData = commentSnapshot.data();
-      if (commentData.userId !== userId) {
-        return {
-          success: false,
-          error: "Not authorized to delete this comment",
-        };
-      }
-
-      await deleteDoc(commentDoc);
-
-      return { success: true };
-    } catch (error) {
-      console.warn("Error deleting comment:", error);
-      return { success: false, error: "Failed to delete comment" };
-    }
-  }
-
-  async likeComment(
-    commentId: string,
-    userId: string,
-    challengeId?: string,
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const likeDocRef = doc(
-        db,
-        "challenge_comment_likes",
-        toScopedDocId(commentId, userId),
-      );
-      const existingLike = await getDoc(likeDocRef);
-
-      if (existingLike.exists()) {
-        await deleteDoc(likeDocRef);
-      } else {
-        await setDoc(likeDocRef, {
-          commentId,
-          ...(challengeId ? { challengeId } : {}),
-          userId,
-          createdAt: Timestamp.now(),
-        });
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.warn("Error liking comment:", error);
-      return { success: false, error: "Failed to like comment" };
-    }
-  }
-
-  subscribeToCommentLikesByCommentIds(
-    commentIds: string[],
-    currentUserId: string | undefined,
-    callback: (summaries: ChallengeCommentLikeSummary[]) => void,
-  ): () => void {
-    const uniqueCommentIds = Array.from(new Set(commentIds)).filter(Boolean);
-    if (uniqueCommentIds.length === 0) {
-      callback([]);
-      return () => {};
-    }
-
-    const chunkSummaries: ChallengeCommentLikeSummary[][] = [];
-    const unsubscribes = chunk(uniqueCommentIds, 30).map((commentIdChunk, index) => {
-      chunkSummaries[index] = [];
-      const likesQuery = query(
-        collection(db, "challenge_comment_likes"),
-        where("commentId", "in", commentIdChunk),
-      );
-
-      return onSnapshot(
-        likesQuery,
-        (snapshot) => {
-          const counts: Record<string, ChallengeCommentLikeSummary> = {};
-          commentIdChunk.forEach((commentId) => {
-            counts[commentId] = {
-              commentId,
-              count: 0,
-              currentUserLiked: false,
-            };
-          });
-
-          snapshot.docs.forEach((likeDoc) => {
-            const data = likeDoc.data();
-            const commentId = data.commentId;
-            if (!counts[commentId]) return;
-            counts[commentId].count += 1;
-            if (currentUserId && data.userId === currentUserId) {
-              counts[commentId].currentUserLiked = true;
-            }
-          });
-
-          chunkSummaries[index] = Object.values(counts);
-          callback(chunkSummaries.flat());
-        },
-        (error) => {
-          warnRealtimeFailure("Comment votes", error);
-          chunkSummaries[index] = commentIdChunk.map((commentId) => ({
-            commentId,
-            count: 0,
-            currentUserLiked: false,
-          }));
-          callback(chunkSummaries.flat());
-        },
-      );
-    });
-
-    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }
-
-  // Media upload functionality
-  async uploadProofMedia(
-    file: File,
-    userId: string,
-    challengeId: string,
-    proofDay: number,
-  ): Promise<{
-    success: boolean;
-    url?: string;
-    thumbnail?: string;
-    error?: string;
-  }> {
-    try {
-      // Validate file
-      if (!file) {
-        return { success: false, error: "No file provided" };
-      }
-
-      // Check file size (max 100MB, aligned with Storage rules)
-      if (file.size > 100 * 1024 * 1024) {
-        return { success: false, error: "File too large (max 100MB)" };
-      }
-
-      // Check file type
-      const allowedTypes = [
-        "image/jpeg",
-        "image/png",
-        "image/webp",
-        "video/mp4",
-        "video/webm",
-        "video/quicktime",
-      ];
-      if (!allowedTypes.includes(file.type)) {
-        return { success: false, error: "Invalid file type" };
-      }
-
-      const timestamp = Date.now();
-      const randomSuffix =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID().split("-")[0]
-          : Math.random().toString(36).slice(2, 10);
-      const extension =
-        file.type === "image/jpeg"
-          ? "jpg"
-          : file.type === "video/quicktime"
-            ? "mov"
-            : file.name.split(".").pop() || "bin";
-      const safeName = toSafeStorageName(
-        `${challengeId}-day-${proofDay}-${file.name}`,
-        extension,
-      );
-      const fileName = `challenge-room-proofs/${userId}/${timestamp}-${randomSuffix}-${safeName}`;
-
-      // Upload to Firebase Storage
-      const storageRef = ref(storage, fileName);
-      const uploadResult = await uploadBytes(storageRef, file, {
-        contentType: file.type,
-        cacheControl: "public,max-age=31536000,immutable",
-      });
-
-      // Get download URL
-      const downloadUrl = await getDownloadURL(uploadResult.ref);
-
-      let thumbnailUrl = downloadUrl;
-
-      // For videos, we'll use the same URL for now (thumbnail generation would need a cloud function)
-      if (file.type.startsWith("video/")) {
-        // In a real implementation, you'd generate a thumbnail here
-        thumbnailUrl = downloadUrl;
-      }
-
-      return {
-        success: true,
-        url: downloadUrl,
-        thumbnail: thumbnailUrl,
-      };
-    } catch (error) {
-      console.warn("Error uploading proof media:", error);
-      return { success: false, error: "Failed to upload media" };
-    }
+      const uploaded = await uploadOptimizedMedia({ source: file, userId, context: "challenge-room-proof", fileName: `${challengeId}-day-${proofDay}-${createUuid()}.${file.name.split(".").pop() || "bin"}`, mediaKind: file.type.startsWith("video/") ? "video" : "image" });
+      return { success: true, url: uploaded.url, thumbnail: uploaded.mediaKind === "image" ? uploaded.url : undefined, assetId: uploaded.assetId };
+    } catch { return { success: false, error: "Failed to upload media" }; }
   }
 }
-
-export const challengeRoomService: ChallengeRoomService =
-  new ChallengeRoomServiceImpl();
+export const challengeRoomService: ChallengeRoomService = new ChallengeRoomServiceImpl();

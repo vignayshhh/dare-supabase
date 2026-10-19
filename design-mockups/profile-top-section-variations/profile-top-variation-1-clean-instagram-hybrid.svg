@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1440" viewBox="0 0 1080 1440">
+  <defs>
+    <radialGradient id="pageBg" cx="50%" cy="-8%" r="88%">
+      <stop offset="0" stop-color="#17351f"/>
+      <stop offset="38%" stop-color="#0a0f0a"/>
+      <stop offset="100%" stop-color="#030403"/>
+    </radialGradient>
+    <linearGradient id="surface" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#111a14" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#060907" stop-opacity="0.99"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="0.58" stop-color="#d7ffe6"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#000000" flood-opacity="0.46"/>
+    </filter>
+    <style>
+      .title { fill:#ffffff; font:900 38px Inter, Arial, sans-serif; letter-spacing:-0.02em; }
+      .subtitle { fill:#94a3b8; font:700 22px Inter, Arial, sans-serif; }
+      .body { fill:#ffffff; font:750 25px Inter, Arial, sans-serif; }
+      .muted { fill:#94a3b8; font:700 20px Inter, Arial, sans-serif; }
+      .tiny { fill:#64748b; font:900 15px Inter, Arial, sans-serif; letter-spacing:2.5px; }
+      .greenText { fill:#86efac; font:900 15px Inter, Arial, sans-serif; letter-spacing:2.3px; }
+      .dark { fill:#061006; font:900 20px Inter, Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1080" height="1440" fill="url(#pageBg)"/>
+  <circle cx="540" cy="-60" r="390" fill="#4ade80" opacity="0.11"/>
+  <circle cx="960" cy="260" r="260" fill="#38bdf8" opacity="0.07"/>
+
+  <text x="72" y="96" class="title">Variation 1</text>
+  <text x="72" y="132" class="subtitle">Clean Instagram Hybrid</text>
+
+  <g transform="translate(90 190)" filter="url(#softShadow)">
+    <rect width="900" height="960" rx="56" fill="#020403" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+    <rect x="26" y="26" width="848" height="908" rx="42" fill="url(#surface)" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+
+    <g transform="translate(68 72)">
+      <text x="0" y="28" class="body">@aarav.dares</text>
+      <g transform="translate(706 0)">
+        <rect width="48" height="48" rx="18" fill="rgba(255,255,255,0.055)" stroke="rgba(255,255,255,0.09)"/>
+        <circle cx="24" cy="24" r="10" fill="none" stroke="#94a3b8" stroke-width="3"/>
+        <path d="M24 9 L24 4 M24 44 L24 39 M9 24 L4 24 M44 24 L39 24" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <g transform="translate(68 170)">
+      <circle cx="96" cy="96" r="82" fill="url(#ring)"/>
+      <circle cx="96" cy="96" r="72" fill="#07100b"/>
+      <circle cx="96" cy="78" r="34" fill="#d7ffe6"/>
+      <path d="M43 146 C56 110 136 110 149 146" fill="#d7ffe6"/>
+      <circle cx="164" cy="160" r="22" fill="url(#green)" stroke="#060806" stroke-width="7"/>
+      <path d="M154 160 L162 168 L176 150" fill="none" stroke="#061006" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <g transform="translate(270 34)">
+        <g transform="translate(0 0)">
+          <text x="0" y="34" class="title">48</text>
+          <text x="-2" y="72" class="tiny">POSTS</text>
+        </g>
+        <g transform="translate(154 0)">
+          <text x="0" y="34" class="title">31</text>
+          <text x="-4" y="72" class="tiny">DARES</text>
+        </g>
+        <g transform="translate(308 0)">
+          <text x="0" y="34" class="title">126</text>
+          <text x="-2" y="72" class="tiny">FRIENDS</text>
+        </g>
+      </g>
+
+      <text x="0" y="250" class="body">Aarav Sharma</text>
+      <text x="0" y="288" class="muted">Dare streaks, proof wins, close-friend stories.</text>
+    </g>
+
+    <g transform="translate(68 520)">
+      <rect width="356" height="58" rx="18" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.16)"/>
+      <text x="178" y="37" text-anchor="middle" class="body" font-size="21">Edit profile</text>
+      <rect x="376" width="306" height="58" rx="18" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.16)"/>
+      <text x="529" y="37" text-anchor="middle" class="body" font-size="21">Activity</text>
+      <rect x="704" width="74" height="58" rx="18" fill="rgba(74,222,128,0.14)" stroke="rgba(74,222,128,0.36)"/>
+      <path d="M741 17 C759 24 765 24 783 17 L783 31 C783 48 770 58 762 62 C754 58 741 48 741 31 Z" fill="none" stroke="#4ade80" stroke-width="4" stroke-linejoin="round"/>
+    </g>
+
+    <g transform="translate(68 626)">
+      <rect width="778" height="76" rx="38" fill="#07100b" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+      <rect x="8" y="8" width="250" height="60" rx="30" fill="url(#green)"/>
+      <text x="133" y="47" text-anchor="middle" class="dark">Posts</text>
+      <text x="389" y="47" text-anchor="middle" class="muted">Truths</text>
+      <text x="648" y="47" text-anchor="middle" class="muted">Dares</text>
+    </g>
+
+    <g transform="translate(68 760)">
+      <rect width="246" height="246" rx="28" fill="#14221a"/>
+      <rect x="266" width="246" height="246" rx="28" fill="#0d2024"/>
+      <rect x="532" width="246" height="246" rx="28" fill="#111813"/>
+      <text x="24" y="214" class="greenText">312 LIKES</text>
+      <text x="290" y="214" class="greenText">1.2K VIEWS</text>
+      <text x="556" y="214" class="greenText">REAL</text>
+    </g>
+  </g>
+</svg>

@@ -27,7 +27,6 @@ export interface UpdateProfileRequest {
   bio?: string;
   avatarUrl?: string;
   visibility?: "PUBLIC" | "PRIVATE";
-  ghostModeActive?: boolean;
 }
 
 export interface SearchProfilesResponse {
@@ -72,10 +71,6 @@ class UserService {
       }
 
       const profileEntity = UserProfileEntity.create(profileData);
-
-      if (viewerId && viewerId !== profileId) {
-        await this.userRepository.recordProfileView(profileId, viewerId);
-      }
 
       return { success: true, profile: profileEntity };
     } catch (error) {
@@ -135,7 +130,6 @@ class UserService {
           updates.bio !== undefined ? validateOptionalBio(updates.bio) : undefined,
         avatarUrl: updates.avatarUrl,
         visibility: updates.visibility,
-        ghostModeActive: updates.ghostModeActive,
       };
 
       const updatedProfileData = await this.userRepository.updateProfile(
@@ -182,103 +176,10 @@ class UserService {
     }
   }
 
-  async setCurrentProfileViewing(
-    userId: string,
-    profileId: string,
-  ): Promise<void> {
-    try {
-      requireAuthenticatedUser(userId);
-      await this.presenceRepository.ensurePresenceExists(userId);
-      await this.presenceRepository.setCurrentProfileViewing(userId, profileId);
-    } catch (error) {
-      secureLogError("setCurrentProfileViewing failed", error);
-      throw error;
-    }
-  }
-
-  async clearCurrentProfileViewing(userId: string): Promise<void> {
-    try {
-      requireAuthenticatedUser(userId);
-      await this.presenceRepository.ensurePresenceExists(userId);
-      await this.presenceRepository.setCurrentProfileViewing(userId, "");
-    } catch (error) {
-      secureLogError("clearCurrentProfileViewing failed", error);
-      throw error;
-    }
-  }
-
-  async setGhostMode(
-    userId: string,
-    ghostModeActive: boolean,
-    expiresAt?: string,
-  ): Promise<UserProfileResponse> {
-    try {
-      requireAuthenticatedUser(userId);
-      await this.presenceRepository.ensurePresenceExists(userId);
-      await this.presenceRepository.setGhostMode(userId, ghostModeActive);
-
-      const currentProfile =
-        await this.userRepository.getProfileByUserId(userId);
-
-      if (!currentProfile) {
-        return { success: false, error: "Profile not found" };
-      }
-
-      const repositoryUpdates = {
-        ghostModeActive,
-        ghostModeExpiresAt: ghostModeActive && expiresAt ? expiresAt : null,
-      };
-
-      const updatedProfileData = await this.userRepository.updateProfile(
-        userId,
-        repositoryUpdates,
-      );
-      const updatedProfileEntity = UserProfileEntity.create(updatedProfileData);
-
-      return { success: true, profile: updatedProfileEntity };
-    } catch (error) {
-      secureLogError("setGhostMode failed", error);
-      return { success: false, error: "Unable to update ghost mode." };
-    }
-  }
-
   async getOnlineUsers(): Promise<UserProfileListResponse> {
     try {
       const onlinePresence = await this.presenceRepository.getOnlineUsers();
       const userIds = onlinePresence.map((p) => p.userId);
-
-      if (userIds.length === 0) {
-        return { success: true, profiles: [] };
-      }
-
-      const profilePromises = userIds.map((userId) =>
-        this.userRepository.getProfileByUserId(userId),
-      );
-
-      const profileResults = await Promise.allSettled(profilePromises);
-      const profiles: UserProfileEntity[] = [];
-
-      profileResults.forEach((result) => {
-        if (result.status === "fulfilled" && result.value) {
-          profiles.push(UserProfileEntity.create(result.value));
-        }
-      });
-
-      return { success: true, profiles };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      return { success: false, error: errorMessage };
-    }
-  }
-
-  async getUsersViewingProfile(
-    profileId: string,
-  ): Promise<UserProfileListResponse> {
-    try {
-      const viewersPresence =
-        await this.presenceRepository.getUsersViewingProfile(profileId);
-      const userIds = viewersPresence.map((p) => p.userId);
 
       if (userIds.length === 0) {
         return { success: true, profiles: [] };

@@ -172,6 +172,34 @@ export class AlertService {
     }
   }
 
+  async trackPostLike(params: {
+    postId: string;
+    postAuthorId: string;
+    likerId: string;
+    likerUsername: string;
+    likerDisplayName: string;
+    likerAvatar: string;
+    postThumbnail?: string;
+    postContent?: string;
+  }): Promise<void> {
+    if (params.likerId === params.postAuthorId) return;
+    await this.createAlert({
+      userId: params.postAuthorId,
+      type: "POST_LIKED",
+      entityId: params.postId,
+      actorId: params.likerId,
+      actorName: params.likerDisplayName,
+      actorUsername: params.likerUsername.replace(/^@/, ""),
+      actorAvatar: params.likerAvatar,
+      message: `@${params.likerUsername.replace(/^@/, "")} liked your post`,
+      metadata: {
+        postId: params.postId,
+        postThumbnail: params.postThumbnail || "",
+        postContent: params.postContent || "",
+      },
+    });
+  }
+
   private getAggregationTarget(input: {
     type: AlertType;
     entityId: string;
@@ -506,6 +534,8 @@ export class AlertService {
       DARE_RECEIVED: "gave you a dare",
       DARE_ACCEPTED: "accepted your dare",
       DARE_COMPLETED: "completed your dare",
+      DARE_PROOF_SUBMITTED: "submitted proof for your dare",
+      DARE_POSTED: "posted dare proof to the feed",
       DARE_REFUSED: "refused your dare",
       DARE_APPROVED: "approved your dare submission",
       DARE_REJECTED: "rejected your dare submission",
@@ -517,19 +547,16 @@ export class AlertService {
       TRUTH_FRIEND_ACTIVITY: "asked your friend a truth",
       FRIEND_REQUEST: "sent you a friend request",
       FRIEND_ACCEPTED: "accepted your friend request",
+      FRIENDSHIP_ESTABLISHED: "you are now friends",
       MESSAGE_RECEIVED: "sent you a message",
       POST_LIKED: "liked your post",
-      PROFILE_VIEW: "viewed your profile",
       SYSTEM_NOTIFICATION: "System notification",
-      SUS_REPEATED_LIKES: "liked your post multiple times",
-      SUS_PROFILE_VIEWING: "is viewing your profile right now",
-      SUS_PHOTO_VIEWS: "viewed your photo multiple times",
-      SUS_MENTION_TALKING: "were talking about you",
-      SUS_CLOSE_FRIEND_ACTIVITY: "has suspicious close friend activity",
       COMMENT_RECEIVED: "commented on your post",
       COMMENT_REPLY: "replied to your comment",
       STORY_REACTION: "liked your story",
       STORY_REPLY: "replied to your story",
+      IMPERSONATION_REQUEST: "sent you an impersonation request",
+      IMPERSONATION_ENDED: "ended the impersonation session",
     };
 
     return messageMap[type] || "System notification";

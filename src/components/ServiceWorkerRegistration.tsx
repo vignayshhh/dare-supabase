@@ -8,15 +8,33 @@ export default function ServiceWorkerRegistration() {
       return;
     }
 
+    if (process.env.NODE_ENV !== "production") {
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => {
+          void registration.unregister();
+        });
+      });
+      if ("caches" in window) {
+        void caches.keys().then((cacheNames) => {
+          cacheNames
+            .filter((cacheName) => cacheName.startsWith("dare-pwa-"))
+            .forEach((cacheName) => {
+              void caches.delete(cacheName);
+            });
+        });
+      }
+      return;
+    }
+
     const register = () => {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })
         .then((registration) => {
-          console.log("SW registered: ", registration);
+          console.info("SW registered: ", registration);
           void registration.update();
         })
         .catch((registrationError) => {
-          console.log("SW registration failed: ", registrationError);
+          console.info("SW registration failed: ", registrationError);
         });
     };
 

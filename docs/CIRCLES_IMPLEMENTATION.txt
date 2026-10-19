@@ -1,0 +1,47 @@
+Circles implementation and rollout
+
+Local implementation
+- Account-scoped Circle selection, three owner slots, unlimited joined Circles.
+- Atomic creation, avatar/name, shared membership, invite permissions, ownership transfer,
+  leave/remove/archive, expiring and usage-limited links/codes, explicit acceptance.
+- Mobile onboarding/switcher/member screens use existing UI palette/type and the actual
+  ChatList stickman component/CSS. Circle settings replace the seeded Friends Circle view.
+- Circle headers propagate through browser Supabase requests and authenticated APIs.
+  Social API database reads use the caller's JWT under RLS, rather than service-role reads.
+- Restrictive Circle policies cover content and descendant records. Write triggers also
+  check privileged RPC mutations. Legacy content is not automatically assigned an audience.
+- Switching clears content stores/subscriptions and rejects stale network responses.
+- Circle-only chronological feed, peer selection, conversations, Stories, Dares, Truths,
+  Drama, Verdicts, Aura balances/events, and Circle-labelled notification navigation.
+- Events support posts, Dare/prediction creation entrypoints, a shared Event conversation,
+  completion, and Circle-specific Memories grouped by year.
+
+Database rollout is required
+Apply migrations 20261123000000 through 20261129000000 AFTER existing migrations,
+first on staging. These have NOT been applied to the connected production database.
+Do not deploy the new frontend/API separately from these migrations.
+Old content with no circle_id is retained in the database but excluded from Circle feeds.
+Assigning existing private content to a group requires an explicit audience migration;
+this implementation intentionally does not guess that audience.
+
+Verification
+- npm test -- --runInBand (52 tests across 18 suites at implementation time).
+- npm run type-check.
+- npm run build (network required for the project's Google Fonts).
+- Isolated PostgreSQL harness applies the entire migration history, then checks real RLS,
+  invitation lifecycle, creation limit, overlapping memberships, direct-RPC bypass rejection,
+  non-friend member feeds, Event context/chat, independent Aura, expiry and removal.
+  Install its pinned test-only runtime without changing project dependencies:
+    npm install --prefix .tmp/circle-db --no-audit --no-fund --package-lock=false @electric-sql/pglite@0.5.10
+    node scripts/circles/test-database.mjs
+- Mobile smoke test exercised real React screens with mocked service responses at
+  390x844 and 320x700. Screenshots are in .tmp/circles-*.png. The temporary preview route
+  was removed. Durable component tests cover optional slots and explicit invite acceptance.
+
+Release verification limits
+PGlite uses Supabase Auth/Storage/Realtime shims. It does not validate hosted Supabase
+Realtime delivery, signed media expiry, OAuth/native deep-link handoff, native share
+sheets, or live multi-device operation. Run these against migrated staging accounts,
+including an overlapping member, an outsider, and a removed member, before production.
+Legacy experimental rooms and their realtime channels need a separate production audit;
+the primary Circle, feed, direct conversation and Event flows are the tested paths.

@@ -14,6 +14,7 @@ interface FeedStore {
   error: string | null;
   hasMore: boolean;
   offset: number;
+  lastCursor: { id: string; data: { created_at: unknown } } | null;
 
   // Actions
   loadFeed: (userId: string, refresh?: boolean) => Promise<void>;
@@ -47,6 +48,7 @@ export const useFeedStore = create<FeedStore>((set, get) => ({
   error: null,
   hasMore: true,
   offset: 0,
+  lastCursor: null,
 
   // Computed values
   get unreadCount() {
@@ -56,20 +58,24 @@ export const useFeedStore = create<FeedStore>((set, get) => ({
   // Actions
   loadFeed: async (userId: string, refresh = false) => {
     if (refresh) {
-      set({ posts: [], offset: 0, hasMore: true });
+      set({ posts: [], offset: 0, hasMore: true, lastCursor: null });
     }
 
     set({ loading: true, error: null });
 
     try {
-      const { offset } = get();
-      const posts = await feedService.getFeed(userId, 20, offset);
+      const { lastCursor } = get();
+      const posts = await feedService.getFeed(userId, 20, lastCursor);
+      const lastPost = posts[posts.length - 1];
 
       set((state) => ({
         posts: refresh ? posts : [...state.posts, ...posts],
         loading: false,
         hasMore: posts.length === 20,
         offset: refresh ? 20 : state.offset + 20,
+        lastCursor: lastPost
+          ? { id: lastPost.id, data: { created_at: lastPost.created_at } }
+          : state.lastCursor,
       }));
     } catch (error) {
       const errorMessage =

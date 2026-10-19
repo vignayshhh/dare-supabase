@@ -99,13 +99,6 @@ export type GuestAlert = {
   userId: string;
 };
 
-export type GuestActivity = {
-  id: string;
-  title: string;
-  detail: string;
-  createdAt: string;
-};
-
 export const guestUser: AuthUser = {
   id: "guest-demo-user",
   email: "guest@demo.local",
@@ -712,47 +705,3 @@ export const guestSusAlerts: GuestSusAlert[] = [
   },
 ];
 
-export const guestActivity: GuestActivity[] = [
-  {
-    id: "activity-1",
-    title: "Truth answered",
-    detail: "You answered Zoe's weekend build question.",
-    createdAt: "2026-05-04T08:42:00.000Z",
-  },
-  {
-    id: "activity-2",
-    title: "Proof submitted",
-    detail: "Kian uploaded scavenger hunt footage for review.",
-    createdAt: "2026-05-02T23:50:00.000Z",
-  },
-  {
-    id: "activity-3",
-    title: "Feed post shared",
-    detail: "Rhea's rooftop post was shared into chat.",
-    createdAt: "2026-05-01T09:10:00.000Z",
-  },
-  {
-    id: "activity-4",
-    title: "Dare completed",
-    detail: "You completed Maya's workout dare with style.",
-    createdAt: "2026-05-04T11:30:00.000Z",
-  },
-  {
-    id: "activity-5",
-    title: "New follower",
-    detail: "Alex started following your profile.",
-    createdAt: "2026-05-03T14:20:00.000Z",
-  },
-  {
-    id: "activity-6",
-    title: "Story viewed",
-    detail: "Sarah viewed your guest tour story.",
-    createdAt: "2026-05-04T07:15:00.000Z",
-  },
-  {
-    id: "activity-7",
-    title: "Vote received",
-    detail: "Dev voted your truth answer as TRUE.",
-    createdAt: "2026-05-04T09:45:00.000Z",
-  },
-];

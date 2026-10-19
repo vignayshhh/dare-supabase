@@ -56,6 +56,7 @@ export function ReviewScreen({
 }: ReviewScreenProps) {
   const [decision, setDecision] = useState<"accept" | "reject" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [fullscreenProof, setFullscreenProof] = useState<{
     type: "image" | "video" | "audio";
     url: string;
@@ -75,12 +76,19 @@ export function ReviewScreen({
     if (!decision) return;
 
     setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    if (decision === "accept") {
-      await onAccept(challenge.id);
-    } else {
-      await onReject(challenge.id);
+    setSubmissionError(null);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (decision === "accept") {
+        await onAccept(challenge.id);
+      } else {
+        await onReject(challenge.id);
+      }
+    } catch (error) {
+      setSubmissionError(
+        error instanceof Error ? error.message : "The review could not be saved.",
+      );
+      setIsSubmitting(false);
     }
   };
 
@@ -371,7 +379,7 @@ export function ReviewScreen({
                 />
                 <p className="mt-4 text-base font-bold text-white">Reject</p>
                 <p className="mt-1 text-sm text-[#98a698]">
-                  Send it to validation instead of publishing.
+                  Mark the dare rejected and keep its proof off the feed.
                 </p>
               </button>
             </div>
@@ -406,8 +414,8 @@ export function ReviewScreen({
                       Rejecting means
                     </h4>
                     <p className="text-sm text-[#d7c3c3]">
-                      It moves to friends validation, avoids main feed
-                      publishing, and can be overridden by community review.
+                      This proof will not be published to the feed and the dare
+                      will be marked rejected.
                     </p>
                   </div>
                 </div>
@@ -430,6 +438,11 @@ export function ReviewScreen({
               ? "Processing..."
               : `Confirm ${decision?.toUpperCase() || "Decision"}`}
           </button>
+          {submissionError && (
+            <p className="text-center text-sm font-medium text-[#ff9b9b]" role="alert">
+              {submissionError}
+            </p>
+          )}
         </div>
       </div>
 

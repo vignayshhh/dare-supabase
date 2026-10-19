@@ -1,42 +1,54 @@
-/**
+import { guardCircleResult } from "./guardCircleResult";
+import { getActiveCircleId } from "@/lib/circleContext";
+import { CircleRepository } from "@/backend/repositories/CircleRepository";
+﻿/**
  * Optimized Feed Service with Intelligent Caching
  *
  * This wraps the existing feed.service.ts with caching and batching layers
- * to dramatically reduce Firebase reads while maintaining real-time updates.
+ * to dramatically reduce Supabase reads while maintaining real-time updates.
  */
 
-import { feedService, PostWithAuthor } from "./feed.service";
+import {
+  feedService,
+  POST_SELECT_FIELDS,
+  PostWithAuthor,
+} from "./feed.service";
 import { feedCache, userPostsCache } from "../cache/FeedCacheManager";
 import { batchQueryOptimizer } from "../cache/BatchQueryOptimizer";
-import { redisCache } from "@/services/redisCache.server";
+import { redisCache } from "@/services/clientSocialCache";
 import { visibilitySubscriptionManager } from "@/utils/visibilitySubscriptionManager";
-import { aggregatedCounters } from "@/services/aggregatedCounters";
-import {
-  Unsubscribe,
-  collection,
-  query,
-  where,
-  getDocs,
-  getDocsFromServer,
-  limit as firestoreLimit,
-  documentId,
-} from "firebase/firestore";
-import { db } from "@/backend/lib/firebase";
+import type { Unsubscribe } from "@/types/realtime";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { scheduleRefresh } from "@/lib/realtime/scheduleRefresh";
+
+interface EngagementData {
+  likesCount: number;
+  commentsCount: number;
+  isLikedByUser: boolean;
+}
+
+export const buildScopedFeedCacheKey = (
+  scope: "feed" | "user-posts",
+  userId: string,
+  limit: number,
+) => `${scope}:${userId}:${limit}`;
 
 class OptimizedFeedService {
+  private get client() {
+    return getSupabaseBrowserClient();
+  }
   private readonly fallbackTimestamp = "1970-01-01T00:00:00.000Z";
   private readonly friendIdsTtlMs = 5 * 60 * 1000;
   private readonly authorDetailsTtlMs = 15 * 60 * 1000;
   private readonly engagementTtlMs = 5 * 60 * 1000;
   private readonly localUserLikesTtlMs = 30 * 24 * 60 * 60 * 1000;
-  // Enable visibility-based subscription unloading to reduce Firebase reads for inactive tabs
+  // Enable visibility-based subscription unloading to reduce Supabase reads for inactive tabs
   private readonly enableVisibilityUnloading = true; // Set to true to enable
   private userLikedPostIds = new Map<
     string,
     { ids: Set<string>; expiresAt: number }
   >();
-  private userLikesRefreshInFlight = new Map<string, Promise<Set<string>>>();
-  private readonly userLikesTtlMs = 5 * 60 * 1000;
+  private readonly userLikesTtlMs = 15 * 60 * 1000;
   private friendIdsCache = new Map<
     string,
     { ids: string[]; expiresAt: number; inFlight?: Promise<string[]> }
@@ -59,16 +71,16 @@ class OptimizedFeedService {
   private authReadyPromise: Promise<boolean> | null = null;
 
   /**
-   * Wait until Firebase Auth has restored the current user on the client.
+   * Wait until Supabase Auth has restored the current user on the client.
    *
    * After a page refresh our Zustand auth store rehydrates `user` synchronously
    * from localStorage, so `currentUser.userId` flips to a real uid almost
    * immediately and `subscribeToFeed(uid)` is dispatched right away. The
-   * Firebase Auth SDK, however, only restores `auth.currentUser` async via
-   * `onAuthStateChanged`. Any Firestore read whose security rule requires
+   * Supabase Auth SDK, however, only restores `auth.currentUser` async via
+   * `onAuthStateChanged`. Any Postgres read whose security rule requires
    * `isSignedIn()` (e.g. `post_likes`) that runs in this window fails with
-   * PERMISSION_DENIED. `getDocsFromServer` surfaces that as a thrown error,
-   * `onSnapshot` silently retries. This helper bridges the gap so one-shot
+   * Permission failures surface as thrown Supabase query errors,
+   * The realtime bridge retries. This helper bridges the gap so one-shot
    * reads can wait for auth instead of racing it.
    */
   private waitForAuthReady(timeoutMs = 5000): Promise<boolean> {
@@ -76,8 +88,9 @@ class OptimizedFeedService {
 
     this.authReadyPromise = (async () => {
       try {
-        const { auth } = await import("@/backend/lib/firebase");
-        if (auth?.currentUser) return true;
+        const supabase = getSupabaseBrowserClient();
+        const session = await supabase.auth.getSession();
+        if (session.data.session?.user) return true;
         return await new Promise<boolean>((resolve) => {
           let settled = false;
           const finish = (ok: boolean) => {
@@ -93,12 +106,13 @@ class OptimizedFeedService {
             resolve(ok);
           };
           const timer = setTimeout(() => finish(false), timeoutMs);
-          const unsub = auth.onAuthStateChanged((u: any) => {
-            if (u) finish(true);
+          const { data: authState } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user) finish(true);
           });
+          const unsub = () => authState.subscription.unsubscribe();
         });
       } catch (error) {
-        console.error("❌ [waitForAuthReady] failed:", error);
+        console.error("âŒ [waitForAuthReady] failed:", error);
         this.authReadyPromise = null;
         return false;
       }
@@ -111,11 +125,54 @@ class OptimizedFeedService {
     return `dare:user-liked-posts:${userId}`;
   }
 
+  private async fetchFeedFromApi(
+    userId: string,
+    limitCount: number,
+    forceRefresh = false,
+    cursor?: string | null,
+  ): Promise<{ posts: PostWithAuthor[]; nextCursor: string | null; hasMore: boolean } | null> {
+    if (typeof window === "undefined") return null;
+
+    try {
+      const { data: currentUser } = await getSupabaseBrowserClient().auth.getUser();
+      if (currentUser.user?.id && currentUser.user.id !== userId) {
+        return null;
+      }
+
+      const { apiFetch } = await import("@/lib/apiClient");
+      const params = new URLSearchParams({ limit: String(limitCount) });
+      if (forceRefresh) params.set("refresh", "1");
+      if (cursor) params.set("cursor", cursor);
+
+      const response = await apiFetch<{
+        ok: boolean;
+        items?: PostWithAuthor[];
+        nextCursor?: string | null;
+        hasMore?: boolean;
+      }>(`/api/posts/feed?${params.toString()}`);
+
+      if (!Array.isArray(response.items)) return null;
+      return {
+        posts: response.items,
+        nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
+        hasMore: response.hasMore === true,
+      };
+    } catch (error) {
+      console.warn(
+        "[Optimized] Redis-backed feed API unavailable, falling back to Postgres:",
+        error,
+      );
+      return null;
+    }
+  }
+
   private readLocalUserLikes(userId: string): Set<string> | null {
     if (typeof window === "undefined") return null;
 
     try {
-      const raw = window.localStorage.getItem(this.getLocalUserLikesKey(userId));
+      const raw = window.localStorage.getItem(
+        this.getLocalUserLikesKey(userId),
+      );
       if (!raw) return null;
 
       const parsed = JSON.parse(raw) as {
@@ -166,58 +223,6 @@ class OptimizedFeedService {
     this.writeLocalUserLikes(userId, ids);
   }
 
-  private refreshUserLikesFromServer(userId: string): Promise<Set<string>> {
-    const inFlight = this.userLikesRefreshInFlight.get(userId);
-    if (inFlight) return inFlight;
-
-    const refresh = (async () => {
-      const authReady = await this.waitForAuthReady();
-      if (!authReady) {
-        console.warn(
-          `⚠️ [preloadUserLikes] auth not ready within timeout for ${userId}; using local cache`,
-        );
-        return this.readLocalUserLikes(userId) ?? new Set<string>();
-      }
-
-      try {
-        const cacheKey = `likes:${userId}`;
-        const cached = await redisCache.get<string[]>(cacheKey);
-        if (cached) {
-          const ids = new Set(cached);
-          this.cacheUserLikes(userId, ids);
-          return ids;
-        }
-
-        const q = query(
-          collection(db, "post_likes"),
-          where("user_id", "==", userId),
-          firestoreLimit(200),
-        );
-        const snap = await getDocsFromServer(q);
-        const ids = new Set<string>();
-        snap.forEach((d) => ids.add(d.data().post_id));
-        console.log(
-          `🔄 [preloadUserLikes] server fetch -> ${ids.size} liked post(s) for user ${userId}`,
-          Array.from(ids),
-        );
-        this.cacheUserLikes(userId, ids);
-        redisCache.set(cacheKey, Array.from(ids), 300).catch(() => {});
-        return ids;
-      } catch (error) {
-        console.error(
-          `❌ [preloadUserLikes] query failed for user ${userId}:`,
-          error,
-        );
-        return this.readLocalUserLikes(userId) ?? new Set<string>();
-      }
-    })().finally(() => {
-      this.userLikesRefreshInFlight.delete(userId);
-    });
-
-    this.userLikesRefreshInFlight.set(userId, refresh);
-    return refresh;
-  }
-
   getCachedLikedPostIds(userId: string): Set<string> {
     const cached = this.userLikedPostIds.get(userId);
     if (cached && cached.expiresAt > Date.now()) {
@@ -237,65 +242,20 @@ class OptimizedFeedService {
     const localLikes = this.readLocalUserLikes(userId);
     if (localLikes) {
       this.cacheUserLikes(userId, localLikes);
-      this.refreshUserLikesFromServer(userId).catch(() => {});
       return localLikes;
     }
 
-    // CRITICAL: wait for Firebase Auth to restore on the client before
-    // issuing the query. Otherwise a page refresh races the SDK's auth
-    // restoration and Firestore returns PERMISSION_DENIED for post_likes
-    // (rules require isSignedIn). That error used to be swallowed silently
-    // and the heart would appear empty even though the like was persisted.
-    const authReady = await this.waitForAuthReady();
-    if (!authReady) {
-      console.warn(
-        `⚠️ [preloadUserLikes] auth not ready within timeout for ${userId}; returning empty set`,
-      );
-      return new Set<string>();
-    }
-
-    try {
-      // Check Redis cache first
-      const cacheKey = `likes:${userId}`;
-      const cached = await redisCache.get<string[]>(cacheKey);
-      if (cached) {
-        const ids = new Set(cached);
-        this.cacheUserLikes(userId, ids);
-        return ids;
-      }
-
-      // Fetch from Firestore server directly — bypass the IndexedDB
-      // persistent cache. Firestore's local cache is only invalidated when
-      // an active onSnapshot listener is on the collection. Since we have
-      // no listener on `post_likes`, getDocs() can return stale pre-like
-      // results after a page refresh, making hearts appear empty even
-      // though the like was successfully written. getDocsFromServer
-      // guarantees a fresh read every time the in-memory TTL expires.
-      const q = query(
-        collection(db, "post_likes"),
-        where("user_id", "==", userId),
-        firestoreLimit(200),
-      );
-      const snap = await getDocsFromServer(q);
-      const ids = new Set<string>();
-      snap.forEach((d) => ids.add(d.data().post_id));
-      console.log(
-        `🔄 [preloadUserLikes] server fetch \u2192 ${ids.size} liked post(s) for user ${userId}`,
-        Array.from(ids),
-      );
+    const cacheKey = `likes:${userId}`;
+    const cachedLikes = await redisCache
+      .get<string[]>(cacheKey)
+      .catch(() => null);
+    if (cachedLikes) {
+      const ids = new Set(cachedLikes);
       this.cacheUserLikes(userId, ids);
-
-      // Cache in Redis with 5min TTL
-      redisCache.set(cacheKey, Array.from(ids), 300).catch(() => {});
-
       return ids;
-    } catch (error) {
-      console.error(
-        `❌ [preloadUserLikes] query failed for user ${userId}:`,
-        error,
-      );
-      return new Set<string>();
     }
+
+    return new Set<string>();
   }
 
   // Called by optimistic like/unlike to keep preloaded cache in sync
@@ -322,54 +282,19 @@ class OptimizedFeedService {
   >(posts: T[], userId: string): Promise<T[]> {
     if (posts.length === 0) return posts;
 
+    if (posts.every((post) => typeof post.is_liked_by_user === "boolean")) {
+      return posts;
+    }
     const likedPostIds = await this.preloadUserLikes(userId);
-    const zeroLikesPostIds = posts
-      .filter((post) => post.likes_count === 0)
-      .map((post) => post.id);
-    const zeroCommentsPostIds = posts
-      .filter((post) => post.comments_count === 0)
-      .map((post) => post.id);
-
-    const [zeroLikeCounts, zeroCommentCounts] = await Promise.all([
-      Promise.all(
-        zeroLikesPostIds.map((postId) =>
-          aggregatedCounters.getCounter(postId, "likes"),
-        ),
-      ),
-      Promise.all(
-        zeroCommentsPostIds.map((postId) =>
-          aggregatedCounters.getCounter(postId, "comments"),
-        ),
-      ),
-    ]);
-    const zeroLikeCountMap = new Map<string, number>(
-      zeroLikesPostIds.map((postId, index) => [
-        postId,
-        zeroLikeCounts[index] ?? 0,
-      ]),
-    );
-    const zeroCommentCountMap = new Map<string, number>(
-      zeroCommentsPostIds.map((postId, index) => [
-        postId,
-        zeroCommentCounts[index] ?? 0,
-      ]),
-    );
-
     return posts.map((post) => ({
       ...post,
-      is_liked_by_user: likedPostIds.has(post.id),
-      likes_count:
-        post.likes_count === 0
-          ? (zeroLikeCountMap.get(post.id) ?? 0)
-          : typeof post.likes_count === "number"
-            ? post.likes_count
-            : 0,
+      is_liked_by_user:
+        typeof post.is_liked_by_user === "boolean"
+          ? post.is_liked_by_user
+          : likedPostIds.has(post.id),
+      likes_count: typeof post.likes_count === "number" ? post.likes_count : 0,
       comments_count:
-        post.comments_count === 0
-          ? (zeroCommentCountMap.get(post.id) ?? 0)
-          : typeof post.comments_count === "number"
-            ? post.comments_count
-            : 0,
+        typeof post.comments_count === "number" ? post.comments_count : 0,
     }));
   }
 
@@ -392,6 +317,8 @@ class OptimizedFeedService {
   }
 
   private async getFeedAuthorIds(userId: string): Promise<string[]> {
+    const circleId=getActiveCircleId();
+    if(circleId) return new CircleRepository().memberIds(circleId);
     const now = Date.now();
     const cached = this.friendIdsCache.get(userId);
 
@@ -410,7 +337,7 @@ class OptimizedFeedService {
         .map((f: any) => f.user_id || f.userId || f.id)
         .filter(Boolean);
 
-      const ids = [...new Set([userId, ...friendIds])].slice(0, 30);
+      const ids = [...new Set([userId, ...friendIds])];
       this.friendIdsCache.set(userId, {
         ids,
         expiresAt: Date.now() + this.friendIdsTtlMs,
@@ -445,11 +372,7 @@ class OptimizedFeedService {
   private getEngagementCache(
     postId: string,
     userId: string,
-  ): {
-    likesCount: number;
-    commentsCount: number;
-    isLikedByUser: boolean;
-  } | null {
+  ): EngagementData | null {
     const cached = this.engagementCache.get(`${postId}:${userId}`);
     if (!cached) return null;
     if (cached.expiresAt <= Date.now()) {
@@ -457,6 +380,45 @@ class OptimizedFeedService {
       return null;
     }
     return cached;
+  }
+
+  private isEngagementData(value: unknown): value is EngagementData {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as Partial<EngagementData>;
+    return (
+      typeof candidate.likesCount === "number" &&
+      typeof candidate.commentsCount === "number" &&
+      typeof candidate.isLikedByUser === "boolean"
+    );
+  }
+
+  private setEngagementCache(
+    postId: string,
+    userId: string,
+    data: EngagementData,
+    ttlMs = this.engagementTtlMs,
+  ): void {
+    this.engagementCache.set(`${postId}:${userId}`, {
+      ...data,
+      expiresAt: Date.now() + ttlMs,
+    });
+  }
+
+  private async hydrateEngagementFromRedis(
+    postIds: string[],
+    userId: string,
+  ): Promise<void> {
+    await Promise.all(
+      postIds.map(async (postId) => {
+        if (this.getEngagementCache(postId, userId)) return;
+        const cached = await redisCache.get<EngagementData>(
+          `engagement:${postId}:${userId}`,
+        );
+        if (this.isEngagementData(cached)) {
+          this.setEngagementCache(postId, userId, cached);
+        }
+      }),
+    );
   }
 
   private async enrichRawPosts(
@@ -490,6 +452,8 @@ class OptimizedFeedService {
       }
     }
 
+    await this.hydrateEngagementFromRedis(postIds, userId);
+
     const missingAuthorIds = authorIds.filter((id) => !this.getAuthorCache(id));
     const missingEngagementPostIds = postIds
       .filter((id) => !this.getEngagementCache(id, userId))
@@ -497,20 +461,20 @@ class OptimizedFeedService {
 
     const rawPostsMap = new Map<string, any>(rawPosts.map((p) => [p.id, p]));
 
-    // Preload user's liked post IDs (1 query, cached 5min)
+    // Preload user's liked post IDs (1 buildQuery, cached 5min)
     // + fetch missing authors in parallel
     // + check Redis for cached authors
     // Always preload the user's liked-post set so realtime snapshot updates
     // can correctly compute `is_liked_by_user` for posts that are already in
     // the engagement TTL cache (otherwise the heart would not refill after a
-    // like flows through the Firestore listener). The result is itself
+    // like flows through the Postgres listener). The result is itself
     // cached for 5min, so this stays cheap.
     const [freshAuthorsMap, userLikedIds] = await Promise.all([
       this.fetchAuthorsWithRedis(missingAuthorIds),
       this.preloadUserLikes(userId),
     ]);
 
-    // For posts WITHOUT denormalized counts → fall back to batch queries
+    // For posts WITHOUT denormalized counts â†’ fall back to batch queries
     const legacyPostIds = missingEngagementPostIds.filter((id) => {
       const raw = rawPostsMap.get(id);
       return (
@@ -557,52 +521,10 @@ class OptimizedFeedService {
     });
 
     // Modern posts carry live denormalized counters on the post document.
-    // shows correctly after opening the likes modal" — the modal path
+    // shows correctly after opening the likes modal" â€” the modal path
     // Trust those fields here so a feed snapshot does not fan out into
     // per-post counter reads. Only legacy posts without counter fields use
     // the batched fallback queries above.
-    const zeroLikesPostIds = missingEngagementPostIds.filter((id) => {
-      const raw = rawPostsMap.get(id);
-      return (
-        typeof raw?.likes_count === "number" &&
-        typeof raw?.comments_count === "number" &&
-        raw.likes_count === 0
-      );
-    });
-    const zeroCommentsPostIds = missingEngagementPostIds.filter((id) => {
-      const raw = rawPostsMap.get(id);
-      return (
-        typeof raw?.likes_count === "number" &&
-        typeof raw?.comments_count === "number" &&
-        raw.comments_count === 0
-      );
-    });
-
-    const [zeroLikeCounts, zeroCommentCounts] = await Promise.all([
-      Promise.all(
-        zeroLikesPostIds.map((postId) =>
-          aggregatedCounters.getCounter(postId, "likes"),
-        ),
-      ),
-      Promise.all(
-        zeroCommentsPostIds.map((postId) =>
-          aggregatedCounters.getCounter(postId, "comments"),
-        ),
-      ),
-    ]);
-    const zeroLikeCountMap = new Map<string, number>(
-      zeroLikesPostIds.map((postId, index) => [
-        postId,
-        zeroLikeCounts[index] ?? 0,
-      ]),
-    );
-    const zeroCommentCountMap = new Map<string, number>(
-      zeroCommentsPostIds.map((postId, index) => [
-        postId,
-        zeroCommentCounts[index] ?? 0,
-      ]),
-    );
-
     missingEngagementPostIds.forEach((postId) => {
       const raw = rawPostsMap.get(postId);
       const hasDenormalized =
@@ -611,14 +533,8 @@ class OptimizedFeedService {
 
       if (hasDenormalized) {
         const engagementData = {
-          likesCount:
-            raw.likes_count === 0
-              ? (zeroLikeCountMap.get(postId) ?? 0)
-              : raw.likes_count,
-          commentsCount:
-            raw.comments_count === 0
-              ? (zeroCommentCountMap.get(postId) ?? 0)
-              : raw.comments_count,
+          likesCount: raw.likes_count,
+          commentsCount: raw.comments_count,
           isLikedByUser: userLikedIds.has(postId),
         };
         this.engagementCache.set(`${postId}:${userId}`, {
@@ -657,22 +573,22 @@ class OptimizedFeedService {
 
       // Compute the best likes count from two authoritative sources:
       //
-      // 1. `raw.likes_count` — written by the `onPostLikeCreated` /
+      // 1. `raw.likes_count` â€” written by the `onPostLikeCreated` /
       //    `onPostLikeDeleted` Cloud Function triggers and delivered live
-      //    via the Firestore onSnapshot listener. This is the realtime
+      //    via the scoped Postgres listener. This is the realtime
       //    source and fixes the stale-cache/no-update problem.
       //
-      // 2. `engagement?.likesCount` — populated by `batchGetPostLikes`
+      // 2. `engagement?.likesCount` â€” populated by `batchGetPostLikes`
       //    which counts actual `post_likes` documents. This is the
-      //    accurate fallback for legacy posts where `likes_count` on
+      //    accurate fallback for legacy posts filterWhere `likes_count` on
       //    the post doc is 0 or missing because the Cloud Function was
       //    not yet deployed when those likes were added.
       //
       // Taking Math.max handles all cases:
-      //   - New like arrives:  raw=6, cache=5  → 6  (realtime ✓)
-      //   - Legacy post:       raw=0, cache=5  → 5  (actual count ✓)
-      //   - Post past limit:   raw=5, cache=0  → 5  (was 0 before ✓)
-      //   - Genuine zero:      raw=0, cache=0  → 0  (correct ✓)
+      //   - New like arrives:  raw=6, cache=5  â†’ 6  (realtime âœ“)
+      //   - Legacy post:       raw=0, cache=5  â†’ 5  (actual count âœ“)
+      //   - Post past take:   raw=5, cache=0  â†’ 5  (was 0 before âœ“)
+      //   - Genuine zero:      raw=0, cache=0  â†’ 0  (correct âœ“)
       const rawLikes =
         typeof post.likes_count === "number" ? post.likes_count : 0;
       const rawComments =
@@ -705,6 +621,7 @@ class OptimizedFeedService {
         author,
         content: post.content || "",
         media_url: post.media_url || null,
+        media_urls: Array.isArray(post.media_urls) ? post.media_urls : null,
         media_type: post.media_type || null,
         view_count: post.view_count || 0,
         likes_count: likesCount,
@@ -733,35 +650,21 @@ class OptimizedFeedService {
     limitCount: number = 20,
     options: { forceRefresh?: boolean } = {},
   ): Promise<PostWithAuthor[]> {
-    const cacheKey = `feed:${userId}:${limitCount}`;
+    const cacheKey = buildScopedFeedCacheKey("feed", userId, limitCount);
 
     return feedCache.get(
       cacheKey,
       async () => {
-        console.log("🔄 [Optimized] Fetching feed from Firebase...");
-
-        const queryAuthorIds = await this.getFeedAuthorIds(userId);
-
-        const { collection, query, where, orderBy, limit, getDocs } =
-          await import("firebase/firestore");
-        const { db } = await import("@/backend/lib/firebase");
-
-        const q = query(
-          collection(db, "posts"),
-          where("author_id", "in", queryAuthorIds),
-          orderBy("created_at", "desc"),
-          limit(limitCount),
+        const apiFeed = await this.fetchFeedFromApi(
+          userId,
+          limitCount,
+          !!options.forceRefresh,
         );
-
-        const snapshot = await getDocs(q);
-
-        // Step 1: Extract raw posts
-        const rawPosts = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as any[];
-
-        return this.enrichRawPosts(rawPosts, userId);
+        if (apiFeed) {
+          this.feedApiCursors.set(userId, apiFeed.hasMore ? apiFeed.nextCursor : null);
+          return apiFeed.posts;
+        }
+        throw new Error("Feed API returned an invalid page");
       },
       { forceRefresh: options.forceRefresh },
     );
@@ -775,34 +678,34 @@ class OptimizedFeedService {
     limitCount: number = 20,
     options: { forceRefresh?: boolean } = {},
   ): Promise<PostWithAuthor[]> {
-    const cacheKey = `user-posts:${userId}:${limitCount}`;
+    const cacheKey = buildScopedFeedCacheKey("user-posts", userId, limitCount);
 
     return userPostsCache.get(
       cacheKey,
       async () => {
         console.log(
-          "🔄 [Optimized] Fetching user posts from Firebase for user:",
+          "ðŸ”„ [Optimized] Fetching user posts from Supabase for user:",
           userId,
         );
         // Use the direct user posts method for efficiency
         const userPosts = await feedService.getUserPosts(userId, limitCount);
         console.log(
-          "📊 [Optimized] Got user posts:",
+          "ðŸ“Š [Optimized] Got user posts:",
           userPosts.length,
           "for user:",
           userId,
         );
         return userPosts;
       },
-      { forceRefresh: options.forceRefresh || true }, // Always force refresh for user posts to avoid cross-user contamination
+      { forceRefresh: options.forceRefresh },
     );
   }
 
-  private lastPostCreatedAt: any = null;
+  private readonly feedApiCursors = new Map<string, string | null>();
 
   /**
    * Fetch authors with Redis caching
-   * Checks Redis first, falls back to Firestore, then caches result
+   * Checks Redis first, falls back to Postgres, then caches result
    */
   private async fetchAuthorsWithRedis(
     authorIds: string[],
@@ -825,12 +728,12 @@ class OptimizedFeedService {
           missingIds.push(authorId);
         }
       } catch {
-        // Redis error, fall back to Firestore
+        // Redis error, fall back to Postgres
         missingIds.push(authorId);
       }
     }
 
-    // Fetch missing authors from Firestore
+    // Fetch missing authors from Postgres
     if (missingIds.length > 0) {
       const freshAuthors = await feedService.batchGetAuthors(missingIds);
       freshAuthors.forEach((author, authorId) => {
@@ -848,122 +751,76 @@ class OptimizedFeedService {
 
   /**
    * Subscribe to real-time feed updates.
-   * First delivery is BLOCKED until complete data is ready — no partial renders.
+   * First delivery is BLOCKED until complete data is ready â€” no partial renders.
    * After the first delivery, subsequent real-time updates flow with light throttle.
-   * Checks Redis cache FIRST to prevent Firestore reads on reload.
+   * Checks Redis cache FIRST to prevent Postgres reads on reload.
    */
   subscribeToFeedOptimized(
     userId: string,
     onUpdate: (posts: any[]) => void,
     initialLimit: number = 10,
   ): () => void {
-    let unsubscribe: (() => void) | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+    let feedChannel: any = null;
+    let refreshScheduler: ReturnType<typeof scheduleRefresh> | null = null;
+    this.feedApiCursors.delete(userId);
+
+    const loadFeed = async (forceRefresh: boolean) => {
+      const page = await this.fetchFeedFromApi(userId, initialLimit, forceRefresh);
+      if (!page || !active) return;
+      this.feedApiCursors.set(userId, page.hasMore ? page.nextCursor : null);
+      const posts = await this.rehydrateCachedFeedLikes(page.posts, userId);
+      if (active) onUpdate(posts);
+    };
 
     const setup = async () => {
       try {
-        // Wait for Firebase Auth to restore before any Firestore read.
-        // Without this, post_likes/legacy batch reads inside enrichRawPosts
-        // race the SDK's auth restoration on refresh and silently come back
-        // empty due to PERMISSION_DENIED, leaving hearts empty even though
-        // the likes were persisted server-side.
         const authReady = await this.waitForAuthReady();
+        if (!active) return;
         if (!authReady) {
-          console.warn(
-            "⚠️ [subscribeToFeedOptimized] auth not ready; delivering empty feed",
-          );
-          onUpdate([]);
+          retryTimer = setTimeout(setup, 700);
           return;
         }
 
-        const queryAuthorIds = await this.getFeedAuthorIds(userId);
+        await loadFeed(false);
+        if (!active) return;
 
-        console.log("🔄 Feed query for authors:", queryAuthorIds);
-
-        // Check Redis cache FIRST to prevent Firestore reads on reload
-        const cacheKey = `feed:${userId}`;
-        const cachedFeed = await redisCache.get<any[]>(cacheKey);
-        if (cachedFeed && cachedFeed.length > 0) {
-          const hydratedCachedFeed = await this.rehydrateCachedFeedLikes(
-            cachedFeed,
-            userId,
+        const client = getSupabaseBrowserClient();
+        refreshScheduler = scheduleRefresh(() => {
+          void loadFeed(true).catch((error) => {
+            console.warn("[Optimized] Realtime feed refresh failed:", error);
+          });
+        });
+        feedChannel = client
+          .channel(`feed-posts:${userId}`)
+          .on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "posts" },
+            refreshScheduler.schedule,
+          )
+          .on(
+            "postgres_changes",
+            { event: "DELETE", schema: "public", table: "posts" },
+            refreshScheduler.schedule,
           );
-          console.log(
-            "✅ Using cached feed from Redis:",
-            hydratedCachedFeed.length,
-            "posts",
-          );
-          onUpdate(hydratedCachedFeed);
-
-          // Track last post's created_at for pagination
-          if (hydratedCachedFeed.length > 0) {
-            this.lastPostCreatedAt =
-              hydratedCachedFeed[hydratedCachedFeed.length - 1].created_at;
+        void feedChannel.subscribe((status: string) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.warn("[Optimized] Realtime feed channel unavailable:", status);
           }
-        }
-
-        // Set up real-time listener for updates (even if we used cache)
-        const {
-          collection,
-          query,
-          where,
-          orderBy,
-          limit,
-          onSnapshot,
-        } = await import("firebase/firestore");
-        const { db } = await import("@/backend/lib/firebase");
-
-        const q = query(
-          collection(db, "posts"),
-          where("author_id", "in", queryAuthorIds),
-          orderBy("created_at", "desc"),
-          limit(initialLimit),
-        );
-
-        unsubscribe = onSnapshot(q, async (snapshot) => {
-          // Step 1: Extract raw posts immediately
-          const rawPosts = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as any[];
-
-          // Track last post's created_at for pagination
-          if (rawPosts.length > 0) {
-            this.lastPostCreatedAt = rawPosts[rawPosts.length - 1].created_at;
-          }
-
-          const enrichedPosts = await this.enrichRawPosts(
-            rawPosts,
-            userId,
-            initialLimit,
-          );
-
-          // Update Redis cache with latest data
-          redisCache.set(cacheKey, enrichedPosts, 300).catch(() => {});
-
-          onUpdate(enrichedPosts);
         });
       } catch (error) {
         console.error("Error setting up feed subscription:", error);
-        onUpdate([]);
+        if (active) retryTimer = setTimeout(setup, 1200);
       }
     };
 
-    setup();
-
-    // Use visibility manager to automatically unsubscribe when tab is hidden
-    if (this.enableVisibilityUnloading) {
-      const subscriptionKey = `feed:${userId}`;
-      return visibilitySubscriptionManager.register(subscriptionKey, () => {
-        // Return the actual unsubscribe function
-        return () => {
-          if (unsubscribe) unsubscribe();
-        };
-      });
-    }
-
-    // Default behavior without visibility management
+    void setup();
     return () => {
-      if (unsubscribe) unsubscribe();
+      active = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      refreshScheduler?.cancel();
+      if (feedChannel) void getSupabaseBrowserClient().removeChannel(feedChannel);
     };
   }
 
@@ -971,47 +828,14 @@ class OptimizedFeedService {
    * Load more posts (pagination)
    * Returns additional posts beyond the initial batch
    */
-  async loadMorePosts(userId: string, limit: number = 10): Promise<any[]> {
-    if (!this.lastPostCreatedAt) return [];
-
-    try {
-      const queryAuthorIds = await this.getFeedAuthorIds(userId);
-
-      const {
-        collection,
-        query,
-        where,
-        orderBy,
-        limit: firestoreLimit,
-        getDocs,
-        startAfter,
-      } = await import("firebase/firestore");
-      const { db } = await import("@/backend/lib/firebase");
-
-      const q = query(
-        collection(db, "posts"),
-        where("author_id", "in", queryAuthorIds),
-        orderBy("created_at", "desc"),
-        startAfter(this.lastPostCreatedAt),
-        firestoreLimit(limit),
-      );
-
-      const snapshot = await getDocs(q);
-      const rawPosts = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as any[];
-
-      // Update cursor for next loadMore
-      if (rawPosts.length > 0) {
-        this.lastPostCreatedAt = rawPosts[rawPosts.length - 1].created_at;
-      }
-
-      return await this.enrichRawPosts(rawPosts, userId, limit);
-    } catch (error) {
-      console.error("Error loading more posts:", error);
-      return [];
-    }
+  async loadMorePosts(userId: string, take: number = 10): Promise<any[]> {
+    const apiCursor = this.feedApiCursors.get(userId);
+    if (apiCursor === undefined) throw new Error("Feed must be loaded before pagination");
+    if (apiCursor === null) return [];
+    const page = await this.fetchFeedFromApi(userId, take, false, apiCursor);
+    if (!page) throw new Error("Feed pagination API unavailable");
+    this.feedApiCursors.set(userId, page.hasMore ? page.nextCursor : null);
+    return page.posts;
   }
 
   /**
@@ -1028,41 +852,31 @@ class OptimizedFeedService {
     const THROTTLE_MS = 1000;
 
     let unsubscribe: Unsubscribe = () => {};
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const setup = async () => {
-      // Wait for Firebase Auth before any Firestore read inside enrichRawPosts.
+      // Wait for Supabase Auth before any Postgres read inside enrichRawPosts.
       // See subscribeToFeedOptimized for the rationale.
       const authReady = await this.waitForAuthReady();
       if (!authReady) {
         console.warn(
-          "⚠️ [subscribeToUserPostsOptimized] auth not ready; delivering empty user posts",
+          "âš ï¸ [subscribeToUserPostsOptimized] auth not ready; delivering empty user posts",
         );
-        callback([]);
+        retryTimer = setTimeout(setup, 700);
         return;
       }
 
-      const { collection, query, where, orderBy, limit, onSnapshot } =
-        await import("firebase/firestore");
-      const { db } = await import("@/backend/lib/firebase");
-
-      const userPostsQuery = query(
-        collection(db, "posts"),
-        where("author_id", "==", userId),
-        orderBy("created_at", "desc"),
-        limit(limitCount),
-      );
-
-      unsubscribe = onSnapshot(userPostsQuery, async (snapshot) => {
-        const rawPosts = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as any[];
+      const client = getSupabaseBrowserClient();
+      const load = async () => {
+        const { data, error } = await client.from("posts").select(POST_SELECT_FIELDS).eq("author_id", userId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(limitCount);
+        if (error) throw error;
+        const rawPosts = (data ?? []) as any[];
         const posts = await this.enrichRawPosts(rawPosts, userId);
 
         if (!firstDeliveryDone) {
           firstDeliveryDone = true;
           console.log(
-            "📡 [Optimized] First complete user posts delivery:",
+            "ðŸ“¡ [Optimized] First complete user posts delivery:",
             posts.length,
           );
 
@@ -1086,24 +900,45 @@ class OptimizedFeedService {
         userPostsCache.get(cacheKey, async () => posts, { forceRefresh: true });
 
         callback(posts);
-      });
+      };
+      const loadSafely = () => {
+        void load().catch((error) => {
+          // Keep last good snapshot. Never leak raw Supabase objects as an
+          // unhandled rejection into the Next.js development overlay.
+          console.warn("[Optimized] User posts refresh failed:", error);
+        });
+      };
+      const refresh = scheduleRefresh(loadSafely);
+      loadSafely();
+      const channel = client
+        .channel(`user-posts:${userId}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts", filter: `author_id=eq.${userId}` }, refresh.schedule)
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "posts", filter: `author_id=eq.${userId}` }, refresh.schedule)
+        .subscribe();
+      unsubscribe = () => { refresh.cancel(); void client.removeChannel(channel); };
     };
 
     setup().catch((error) => {
       console.error("Error setting up user posts subscription:", error);
-      callback([]);
+      retryTimer = setTimeout(setup, 1200);
     });
 
     // Use visibility manager to automatically unsubscribe when tab is hidden
     if (this.enableVisibilityUnloading) {
       const subscriptionKey = `user-posts:${userId}`;
       return visibilitySubscriptionManager.register(subscriptionKey, () => {
-        return () => unsubscribe();
+        return () => {
+          if (retryTimer) clearTimeout(retryTimer);
+          unsubscribe();
+        };
       });
     }
 
     // Default behavior without visibility management
-    return () => unsubscribe();
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      unsubscribe();
+    };
   }
 
   /**
@@ -1114,6 +949,8 @@ class OptimizedFeedService {
     postIds: string[],
     userId: string,
   ): Promise<void> {
+    await this.hydrateEngagementFromRedis(postIds, userId);
+
     const now = Date.now();
     const missingPostIds = postIds.filter(
       (id) => !this.getEngagementCache(id, userId),
@@ -1122,7 +959,6 @@ class OptimizedFeedService {
     if (missingPostIds.length === 0) return;
 
     // Fetch posts to check for denormalized counts
-    const postsRef = collection(db, "posts");
     const chunks: string[][] = [];
     for (let i = 0; i < missingPostIds.length; i += 10) {
       chunks.push(missingPostIds.slice(i, i + 10));
@@ -1131,9 +967,10 @@ class OptimizedFeedService {
     const rawPostsMap = new Map<string, any>();
     await Promise.all(
       chunks.map(async (chunk) => {
-        const q = query(postsRef, where(documentId(), "in", chunk));
-        const snap = await getDocs(q);
-        snap.forEach((d) => rawPostsMap.set(d.id, d.data()));
+        const { data: rows, error } = await this.client.from("posts")
+          .select("id,likes_count:reaction_count,comments_count:comment_count").in("id", chunk);
+        if (error) throw error;
+        (rows ?? []).forEach((row) => rawPostsMap.set(row.id, row));
       }),
     );
 
@@ -1146,20 +983,16 @@ class OptimizedFeedService {
     });
 
     if (legacyPostIds.length === 0) {
-      // All have denorm counts, use aggregated counters for comments
       const userLikedIds = await this.preloadUserLikes(userId);
-      const commentsCounts = await Promise.all(
-        missingPostIds.map((postId) =>
-          aggregatedCounters.getCounter(postId, "comments"),
-        ),
-      );
 
-      missingPostIds.forEach((postId, index) => {
+      missingPostIds.forEach((postId) => {
         const raw = rawPostsMap.get(postId);
         if (raw) {
           this.engagementCache.set(`${postId}:${userId}`, {
-            likesCount: raw.likes_count || 0,
-            commentsCount: commentsCounts[index],
+            likesCount:
+              typeof raw.likes_count === "number" ? raw.likes_count : 0,
+            commentsCount:
+              typeof raw.comments_count === "number" ? raw.comments_count : 0,
             isLikedByUser: userLikedIds.has(postId),
             expiresAt: now + this.engagementTtlMs,
           });
@@ -1176,13 +1009,6 @@ class OptimizedFeedService {
       }),
     );
 
-    // Use aggregated counters for comments instead of batch queries
-    const commentsCounts = await Promise.all(
-      missingPostIds.map((postId) =>
-        aggregatedCounters.getCounter(postId, "comments"),
-      ),
-    );
-
     const legacyLikesMap = await feedService.batchGetPostLikes(
       legacyPostIds,
       userId,
@@ -1191,14 +1017,15 @@ class OptimizedFeedService {
 
     const userLikedIds = await this.preloadUserLikes(userId);
 
-    missingPostIds.forEach((postId, index) => {
+    missingPostIds.forEach((postId) => {
       const raw = rawPostsMap.get(postId);
       if (!raw) return;
 
       this.engagementCache.set(`${postId}:${userId}`, {
         likesCount:
           legacyLikesMap.get(postId)?.likesCount ?? raw.likes_count ?? 0,
-        commentsCount: commentsCounts[index],
+        commentsCount:
+          typeof raw.comments_count === "number" ? raw.comments_count : 0,
         isLikedByUser:
           legacyLikesMap.get(postId)?.isLikedByUser ??
           userLikedIds.has(postId) ??
@@ -1216,7 +1043,7 @@ class OptimizedFeedService {
     if (postId && userId) {
       // Clear specific post engagement
       this.engagementCache.delete(`${postId}:${userId}`);
-      console.log(`🧹 Cleared engagement cache for post ${postId}`);
+      console.log(`ðŸ§¹ Cleared engagement cache for post ${postId}`);
     } else if (userId) {
       // Clear all engagement for a user
       for (const key of this.engagementCache.keys()) {
@@ -1224,17 +1051,17 @@ class OptimizedFeedService {
           this.engagementCache.delete(key);
         }
       }
-      console.log(`🧹 Cleared all engagement cache for user ${userId}`);
+      console.log(`ðŸ§¹ Cleared all engagement cache for user ${userId}`);
     } else {
       // Clear all engagement cache
       this.engagementCache.clear();
-      console.log(`🧹 Cleared all engagement cache`);
+      console.log(`ðŸ§¹ Cleared all engagement cache`);
     }
   }
 
   /**
    * Enrich posts with batched author and likes data
-   * This reduces Firebase reads by 80%+ by batching queries
+   * This reduces Supabase reads by 80%+ by batching queries
    */
   private async enrichPostsWithBatchData(
     posts: PostWithAuthor[],
@@ -1243,7 +1070,7 @@ class OptimizedFeedService {
     if (posts.length === 0) return;
 
     console.log(
-      `🔄 [Optimized] Enriching ${posts.length} posts with batch data`,
+      `ðŸ”„ [Optimized] Enriching ${posts.length} posts with batch data`,
     );
 
     // Extract unique author IDs
@@ -1273,7 +1100,7 @@ class OptimizedFeedService {
     }
 
     console.log(
-      `✅ [Optimized] Enriched ${posts.length} posts with batch data`,
+      `âœ… [Optimized] Enriched ${posts.length} posts with batch data`,
     );
   }
 
@@ -1284,8 +1111,9 @@ class OptimizedFeedService {
     const post = await feedService.createPost(request);
 
     if (post) {
-      // Invalidate feed caches
-      feedCache.invalidatePattern(/^feed:feed:/);
+      // Server APIs handle Redis invalidation. This clears only the local
+      // browser/session feed snapshots so the next read pulls the API cache.
+      feedCache.invalidatePattern(/^feed:posts-feed:/);
       userPostsCache.invalidatePattern(
         new RegExp(`^feed:user-posts:${request.author_id}`),
       );
@@ -1302,15 +1130,15 @@ class OptimizedFeedService {
    */
   async likePostOptimized(postId: string, userId: string): Promise<void> {
     // Await the API write FIRST. If it throws, we must not update any local
-    // cache — otherwise the optimistic UI will keep showing a filled heart
+    // cache â€” otherwise the optimistic UI will keep showing a filled heart
     // for a like that was never persisted, and it will vanish on the next
     // refresh.
     try {
       await feedService.likePost(postId, userId);
-      console.log("✅ [LIKE] persisted to Firestore:", postId);
+      console.log("âœ… [LIKE] persisted to Postgres:", postId);
     } catch (error) {
       console.error(
-        "❌ [LIKE] not persisted — rolling back local caches:",
+        "âŒ [LIKE] not persisted â€” rolling back local caches:",
         postId,
         error,
       );
@@ -1324,15 +1152,11 @@ class OptimizedFeedService {
     // the next feed enrichment pass does not briefly regress is_liked_by_user.
     this.updateLikeCache(userId, postId, true);
 
-    // Invalidate relevant caches including the per-post engagement TTL cache
+    // Invalidate local browser/session caches. Server Redis invalidation is
+    // handled by the `/api/posts/:id/like` route used by feedService.likePost.
     this.engagementCache.delete(`${postId}:${userId}`);
-    feedCache.invalidatePattern(/^feed:feed:/);
+    feedCache.invalidatePattern(/^feed:posts-feed:/);
     userPostsCache.invalidatePattern(/^feed:user-posts:/);
-
-    // Invalidate Redis engagement cache, feed cache, and user likes cache
-    redisCache.delete(`feed:${userId}`).catch(() => {});
-    redisCache.invalidatePattern(`engagement:${postId}:*`).catch(() => {});
-    redisCache.delete(`likes:${userId}`).catch(() => {});
   }
 
   /**
@@ -1341,10 +1165,10 @@ class OptimizedFeedService {
   async unlikePostOptimized(postId: string, userId: string): Promise<void> {
     try {
       await feedService.unlikePost(postId, userId);
-      console.log("✅ [UNLIKE] persisted to Firestore:", postId);
+      console.log("âœ… [UNLIKE] persisted to Postgres:", postId);
     } catch (error) {
       console.error(
-        "❌ [UNLIKE] not persisted — leaving local caches as-is:",
+        "âŒ [UNLIKE] not persisted â€” leaving local caches as-is:",
         postId,
         error,
       );
@@ -1354,15 +1178,11 @@ class OptimizedFeedService {
     // Mirror the unlike locally so cached feed enrichment stays consistent.
     this.updateLikeCache(userId, postId, false);
 
-    // Invalidate relevant caches including the per-post engagement TTL cache
+    // Invalidate local browser/session caches. Server Redis invalidation is
+    // handled by the `/api/posts/:id/like` route used by feedService.unlikePost.
     this.engagementCache.delete(`${postId}:${userId}`);
-    feedCache.invalidatePattern(/^feed:feed:/);
+    feedCache.invalidatePattern(/^feed:posts-feed:/);
     userPostsCache.invalidatePattern(/^feed:user-posts:/);
-
-    // Invalidate Redis engagement cache, feed cache, and user likes cache
-    redisCache.delete(`feed:${userId}`).catch(() => {});
-    redisCache.invalidatePattern(`engagement:${postId}:*`).catch(() => {});
-    redisCache.delete(`likes:${userId}`).catch(() => {});
   }
 
   /**
@@ -1372,9 +1192,9 @@ class OptimizedFeedService {
     const result = await feedService.deletePost(postId, userId);
 
     if (result) {
-      // Invalidate all feed caches
-      feedCache.invalidatePattern(/^feed:/);
-      userPostsCache.invalidatePattern(/^feed:/);
+      // Clear local browser/session snapshots after deletion.
+      feedCache.invalidatePattern(/^feed:posts-feed:/);
+      userPostsCache.invalidatePattern(/^feed:user-posts:/);
     }
 
     return result;
@@ -1387,7 +1207,7 @@ class OptimizedFeedService {
     userId: string,
     limitCount: number = 20,
   ): Promise<PostWithAuthor[]> {
-    console.log("🔄 [Optimized] Force refreshing feed...");
+    console.log("ðŸ”„ [Optimized] Force refreshing feed...");
     return this.getFeedCached(userId, limitCount, { forceRefresh: true });
   }
 
@@ -1411,8 +1231,8 @@ class OptimizedFeedService {
     this.authorDetailsCache.clear();
     this.engagementCache.clear();
     batchQueryOptimizer.clear();
-    console.log("🗑️ [Optimized] Cleared all caches");
+    console.log("ðŸ—‘ï¸ [Optimized] Cleared all caches");
   }
 }
 
-export const optimizedFeedService = new OptimizedFeedService();
+export const optimizedFeedService = guardCircleResult(new OptimizedFeedService());

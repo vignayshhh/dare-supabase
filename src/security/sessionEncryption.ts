@@ -15,7 +15,7 @@
  * - Use only for short-lived UI state (drafts, UI preferences, etc.)
  *
  * For sensitive session data, use:
- * - Firebase Auth session (HttpOnly cookies managed by Firebase)
+ * - Supabase Auth session (HttpOnly cookies managed by Supabase)
  * - Server-side session storage via Cloud Functions
  * - Short-lived tokens with server validation
  */

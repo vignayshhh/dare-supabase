@@ -20,7 +20,6 @@ export interface UpdatePresenceRequest {
   isOnline?: boolean;
   currentProfileViewing?: string;
   typingInChatWith?: string;
-  ghostMode?: boolean;
 }
 
 export interface SetOnlineStatusRequest {
@@ -35,6 +34,3 @@ export interface SetTypingInChatRequest {
   chatUserId: string;
 }
 
-export interface SetGhostModeRequest {
-  ghostMode: boolean;
-}

@@ -1,4 +1,6 @@
 "use client";
+import { useCirclesStore } from "@/stores/useCirclesStore";
+import { circlesService } from "@/middleware/services/circles.service";
 
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -10,11 +12,11 @@ import {
   X,
   Grid3X3,
   Play,
+  Target,
   MessageSquare,
   Eye,
   Heart,
   Star,
-  Activity,
   ChevronRight,
 } from "lucide-react";
 import { useUserProfileStore } from "../../stores/useUserProfileStore";
@@ -33,6 +35,12 @@ import { commentLikePersistence } from "../../utils/commentLikePersistence";
 import { PostsScreen } from "./PostsScreen";
 import { TruthsListScreen } from "./TruthsListScreen";
 import { DaresListScreen } from "./DaresListScreen";
+import { RelationshipsScreen } from "./RelationshipsScreen";
+import {
+  SocialProfileView,
+  socialProfileActionClass,
+  socialProfilePrimaryActionClass,
+} from "../profile/SocialProfileView";
 import {
   truthService,
   dareService,
@@ -40,6 +48,7 @@ import {
   closeFriendsService,
 } from "../../middleware/services/service-factory";
 import { resolveUserProfile } from "../../utils/profileResolver";
+import { getStickmanCustomization } from "../../services/stickmanCustomizationService";
 import type {
   TruthPost as FeedTruthPost,
   DarePost as FeedDarePost,
@@ -50,7 +59,6 @@ interface UserProfileScreenProps {
   userId: string;
   onMessage?: (targetUserId: string, targetUsername: string) => void;
   onNavigateToProfile?: (userId: string) => void;
-  onNavigateToActivity?: (userId: string) => void;
   onNavigateToTruthPost?: (truth: FeedTruthPost) => void;
   onNavigateToDarePost?: (dare: FeedDarePost) => void;
   initialPostId?: string;
@@ -225,15 +233,18 @@ function TruthReplicaCard({
         </span>
         <span
           style={{
-            color: "#4ade80",
-            fontWeight: 700,
-            fontSize: "18px",
+            color: "#86efac",
+            fontWeight: 950,
+            fontSize: "13px",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            textShadow: "0 0 14px rgba(74,222,128,0.34)",
             whiteSpace: "nowrap",
             flexShrink: 0,
             animation: "truthFade 3s ease-in-out infinite",
           }}
         >
-          asked
+          Asked
         </span>
         <PostAvatar
           src={truth.receiver.avatar}
@@ -753,7 +764,6 @@ export function UserProfileScreen({
   userId,
   onMessage,
   onNavigateToProfile,
-  onNavigateToActivity,
   onNavigateToTruthPost,
   onNavigateToDarePost,
   initialPostId,
@@ -761,6 +771,9 @@ export function UserProfileScreen({
   initialTruthId,
   initialDareId,
 }: UserProfileScreenProps) {
+  const circleId=useCirclesStore(s=>s.activeId);
+  const [circleAura,setCircleAura]=useState(100);
+  useEffect(()=>{let alive=true;setCircleAura(100);if(circleId)circlesService.aura(circleId,userId).then(value=>{if(alive)setCircleAura(value);}).catch(()=>{});return()=>{alive=false;};},[circleId,userId]);
   const [friendRequestSent, setFriendRequestSent] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -773,6 +786,7 @@ export function UserProfileScreen({
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [showTruthsListScreen, setShowTruthsListScreen] = useState(false);
   const [showDaresListScreen, setShowDaresListScreen] = useState(false);
+  const [showRelationshipsScreen, setShowRelationshipsScreen] = useState(false);
   const [selectedTruthId, setSelectedTruthId] = useState<string | undefined>(
     undefined,
   );
@@ -793,11 +807,14 @@ export function UserProfileScreen({
   const consumedInitialPostsLinkRef = useRef<string | null>(null);
   const consumedInitialTruthLinkRef = useRef<string | null>(null);
   const consumedInitialDareLinkRef = useRef<string | null>(null);
+  const friendsCapsuleLongPressTimerRef = useRef<number | null>(null);
+  const friendsCapsuleLongPressTriggeredRef = useRef(false);
   const stripAtSymbol = (username?: string) =>
     (username || "unknown").replace(/^@/, "");
 
   const {
     profile,
+    friends,
     isFriend,
     friendshipStatus,
     friendsCount,
@@ -912,7 +929,7 @@ export function UserProfileScreen({
           truthEntities
             .filter(
               (truth: any) =>
-                ["ANSWERED", "APPROVED", "REJECTED"].includes(truth.state) &&
+                truth.state === "APPROVED" &&
                 (truth.answer || truth.state !== "SENT"),
             )
             .map(async (truth: any) => {
@@ -1029,7 +1046,7 @@ export function UserProfileScreen({
   }, [userId]);
 
   useEffect(() => {
-    if (activeTab !== "truths") {
+    if (activeTab === "posts") {
       return;
     }
 
@@ -1059,7 +1076,7 @@ export function UserProfileScreen({
   ]);
 
   useEffect(() => {
-    if (activeTab !== "dares") {
+    if (activeTab === "posts") {
       return;
     }
 
@@ -1171,6 +1188,8 @@ export function UserProfileScreen({
     try {
       const success = await cancelFriendRequest(userId);
       if (success) {
+        setFriendRequestSent(false);
+        await checkFriendshipStatus(userId);
         console.log("Friend request cancelled successfully");
       }
     } catch (error) {
@@ -1197,6 +1216,40 @@ export function UserProfileScreen({
     } finally {
       setCloseFriendBusy(false);
     }
+  };
+
+  const clearFriendsCapsuleLongPress = () => {
+    if (friendsCapsuleLongPressTimerRef.current !== null) {
+      window.clearTimeout(friendsCapsuleLongPressTimerRef.current);
+      friendsCapsuleLongPressTimerRef.current = null;
+    }
+  };
+
+  const handleFriendsCapsulePressStart = () => {
+    if (!showFriendsButton) return;
+    friendsCapsuleLongPressTriggeredRef.current = false;
+    clearFriendsCapsuleLongPress();
+    friendsCapsuleLongPressTimerRef.current = window.setTimeout(() => {
+      friendsCapsuleLongPressTriggeredRef.current = true;
+      setShowUnfriendModal(true);
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate?.(12);
+      }
+    }, 650);
+  };
+
+  const handleFriendsCapsulePressEnd = () => {
+    clearFriendsCapsuleLongPress();
+  };
+
+  const handleFriendsCapsuleClick = () => {
+    if (friendsCapsuleLongPressTriggeredRef.current) {
+      friendsCapsuleLongPressTriggeredRef.current = false;
+      return;
+    }
+    setShowFriendsModal(true);
+    setLoadingFriends(true);
+    handleFriendsClick();
   };
 
   // Filter posts by the current user
@@ -1236,8 +1289,18 @@ export function UserProfileScreen({
   const userAllTruths = [...sentTruths, ...receivedTruths].filter(
     (truth) => truth.challengerId === userId || truth.receiverId === userId,
   );
-  const completedTruths = userAllTruths.filter((truth: any) =>
-    ["ANSWERED", "APPROVED", "REJECTED"].includes(truth.state),
+  // Keep both sides of the user's truth history available to the shared profile
+  // view so received questions can lead the Drama tab while posted verdicts stay
+  // available at the end.
+  const profileTruths = Array.from(
+    new Map(
+      [...publishedTruths, ...userAllTruths]
+        .filter((truth: any) => !truth.state || truth.state === "APPROVED")
+        .map((truth: any) => [truth.id, truth]),
+    ).values(),
+  );
+  const completedTruths = userAllTruths.filter(
+    (truth: any) => truth.state === "APPROVED",
   );
   const completedDares = userAllDares.filter(
     (dare: any) => dare.state === "ACCEPTED_REAL",
@@ -1332,38 +1395,230 @@ export function UserProfileScreen({
     <div
       className="screen-container"
       style={{
+        height: "100%",
+        minHeight: "100dvh",
+        overflowX: "hidden",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
+        overscrollBehaviorY: "contain",
         background:
-          "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.18), transparent 34%), radial-gradient(circle at 12% 18%, rgba(14,165,233,0.12), transparent 28%), linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%)",
+          "linear-gradient(180deg, #141414 0%, #0e0e0e 52%, #0a0a0a 100%)",
         fontFamily:
-          "'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
+          "var(--font-ui)",
       }}
     >
+      <style>{`
+        .profile-hero-card {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .profile-proof-stat-row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 0;
+          min-width: 0;
+        }
+        .profile-proof-stat {
+          position: relative;
+          min-width: 0;
+          border: 0;
+          background: transparent;
+          padding: 6px 7px;
+          text-align: center;
+          color: #fff;
+          border-radius: 18px;
+          transition: background 180ms ease, transform 180ms ease;
+        }
+        .profile-proof-stat:not(:first-child)::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 18%;
+          bottom: 18%;
+          width: 1px;
+          background: rgba(255,255,255,0.08);
+        }
+        .profile-proof-stat:hover {
+          background: rgba(255,255,255,0.04);
+        }
+        .profile-proof-stat-value {
+          display: block;
+          font-size: 21px;
+          font-weight: 950;
+          line-height: 1;
+          letter-spacing: 0;
+          color: #fff;
+        }
+        .profile-proof-stat-label {
+          display: block;
+          margin-top: 5px;
+          font-size: 10px;
+          font-weight: 900;
+          line-height: 1;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: #64748b;
+        }
+        @media (max-width: 380px) {
+          .profile-hero-card {
+            padding: 6px 4px 12px !important;
+          }
+          .profile-proof-stat {
+            padding-left: 4px;
+            padding-right: 4px;
+          }
+          .profile-proof-stat-value {
+            font-size: 18px;
+          }
+          .profile-proof-stat-label {
+            font-size: 9px;
+          }
+        }
+        @keyframes activityRadarSweep {
+          0% { transform: translateX(-135%) skewX(-18deg); opacity: 0; }
+          12% { opacity: 1; }
+          44% { transform: translateX(260%) skewX(-18deg); opacity: 1; }
+          100% { transform: translateX(260%) skewX(-18deg); opacity: 0; }
+        }
+        @keyframes activityRadarPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.22), 0 0 20px rgba(74,222,128,0.18); }
+          50% { box-shadow: 0 0 0 7px rgba(74,222,128,0), 0 0 30px rgba(56,189,248,0.24); }
+        }
+        .activity-radar-cta {
+          position: relative;
+          min-height: 58px;
+          width: 100%;
+          overflow: hidden;
+          border: 1px solid rgba(74,222,128,0.42);
+          border-radius: 22px;
+          background:
+            radial-gradient(circle at 18% 0%, rgba(255,255,255,0.18), transparent 34%),
+            radial-gradient(circle at 82% 120%, rgba(56,189,248,0.22), transparent 40%),
+            linear-gradient(135deg, rgba(8,15,10,0.98), rgba(12,28,18,0.98) 48%, rgba(4,14,18,0.98));
+          color: #dfffea;
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 12px;
+          padding: 10px 16px 10px 12px;
+          cursor: pointer;
+          box-shadow:
+            0 18px 42px rgba(0,0,0,0.38),
+            0 0 34px rgba(74,222,128,0.16),
+            inset 0 1px 0 rgba(255,255,255,0.08);
+          transition:
+            transform 180ms ease,
+            border-color 180ms ease,
+            box-shadow 180ms ease,
+            filter 180ms ease;
+        }
+        .activity-radar-cta::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+          animation: activityRadarSweep 4.2s ease-in-out infinite;
+          pointer-events: none;
+        }
+        .activity-radar-cta::after {
+          content: "";
+          position: absolute;
+          inset: 1px;
+          border-radius: 21px;
+          background: radial-gradient(circle at 16% 50%, rgba(74,222,128,0.18), transparent 34%);
+          pointer-events: none;
+        }
+        .activity-radar-cta:hover {
+          transform: translateY(-2px);
+          border-color: rgba(134,239,172,0.68);
+          filter: brightness(1.08);
+          box-shadow:
+            0 22px 52px rgba(0,0,0,0.42),
+            0 0 46px rgba(74,222,128,0.24),
+            inset 0 1px 0 rgba(255,255,255,0.12);
+        }
+        .activity-radar-orb {
+          position: relative;
+          z-index: 1;
+          display: inline-flex;
+          width: 38px;
+          height: 38px;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: linear-gradient(180deg, rgba(18,24,18,0.98), rgba(7,10,8,0.98));
+          color: #86efac;
+          box-shadow:
+            0 10px 24px rgba(74,222,128,0.16),
+            inset 0 1px 0 rgba(255,255,255,0.08),
+            inset 0 -14px 28px rgba(74,222,128,0.06);
+          animation: activityRadarPulse 2.8s ease-in-out infinite;
+        }
+        .activity-radar-copy {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          min-width: 0;
+          flex-direction: column;
+          align-items: flex-start;
+          line-height: 1.02;
+        }
+        .activity-radar-title {
+          font-size: 15px;
+          font-weight: 950;
+          letter-spacing: 0;
+          color: #f0fff5;
+        }
+        .activity-radar-subtitle {
+          margin-top: 4px;
+          font-size: 11px;
+          font-weight: 850;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: rgba(187,247,208,0.72);
+        }
+        .profile-posts-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 18px;
+        }
+        @media (max-width: 380px) {
+          .profile-posts-grid {
+            gap: 14px;
+          }
+        }
+      `}</style>
       {/* Header */}
       <div
-        className="px-4"
-        style={{ paddingTop: "calc(var(--safe-area-top) + 12px)" }}
+        className="animate-fade-in-up"
+        style={{
+          padding: "calc(var(--safe-area-top) + 12px) 14px 12px",
+          maxWidth: "430px",
+          margin: "0 auto",
+          position: "relative",
+          zIndex: 1,
+        }}
       >
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={onBack}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] border border-white/8 bg-white/[0.04] text-[#94a3b8] shadow-[0_18px_44px_rgba(0,0,0,0.32)] transition-all duration-200 hover:border-[#4ade80]/35 hover:bg-[#4ade80]/8 hover:text-white"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[17px] border border-white/8 bg-white/[0.045] text-[#94a3b8] shadow-[0_14px_34px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:border-[#4ade80]/35 hover:bg-[#4ade80]/8 hover:text-white"
               aria-label="Back"
             >
-              <ArrowLeft size={21} />
+              <ArrowLeft size={19} />
             </button>
             <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#4ade80]/20 bg-[#4ade80]/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-[#86efac]">
-                <Users size={13} />
-                Dare Profile
-              </div>
-              <h1 className="truncate text-[32px] font-black leading-none text-white">
-                {profile.display_name || profile.username || "Profile"}
+              <h1 className="truncate text-[18px] font-[850] leading-tight tracking-[0] text-white">
+                @{stripAtSymbol(profile.username)}
               </h1>
             </div>
           </div>
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border border-white/8 bg-white/[0.04] text-[#4ade80] shadow-[0_18px_44px_rgba(0,0,0,0.32)]">
-            <Users size={24} />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[17px] border border-[#4ade80]/14 bg-[#4ade80]/[0.045] text-[#86efac] shadow-[0_14px_34px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <Users size={18} />
           </div>
         </div>
       </div>
@@ -1395,6 +1650,7 @@ export function UserProfileScreen({
             truthPosts={publishedTruths}
             loading={loadingPublishedTruths}
             initialTruthId={selectedTruthId || initialTruthId}
+            titleName={profile.display_name || profile.username}
             onSelectTruth={(truth) => {
               setShowTruthsListScreen(false);
               setSelectedTruthId(undefined);
@@ -1416,6 +1672,7 @@ export function UserProfileScreen({
             darePosts={publishedDares}
             loading={loadingPublishedDares}
             initialDareId={selectedDareId || initialDareId}
+            titleName={profile.display_name || profile.username}
             onSelectDare={(dare) => {
               setShowDaresListScreen(false);
               setSelectedDareId(undefined);
@@ -1425,116 +1682,172 @@ export function UserProfileScreen({
         </div>
       )}
 
-      {/* Profile Content */}
-      <div className="custom-scrollbar flex-1 overflow-y-auto pb-[calc(var(--bottom-nav-total-height)+24px)]">
-        {/* Avatar and Basic Info */}
-        <div className="mx-auto w-full max-w-4xl px-4 pb-4 sm:px-5">
-          <div className="relative mb-5 overflow-hidden rounded-[34px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,20,17,0.96),rgba(7,9,8,0.98))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)]">
-            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.82),rgba(74,222,128,0))]" />
-            <div className="pointer-events-none absolute right-[-40px] top-[-58px] h-44 w-44 rounded-full bg-[#4ade80]/10 blur-3xl" />
+      <SocialProfileView
+        username={profile.username}
+        name={profile.display_name || profile.username}
+        bio={profile.bio}
+        avatarUrl={profile.avatar_url}
+        profileUserId={userId}
+        stickmanCustomization={getStickmanCustomization(profile)}
+        aura={circleAura}
+        friendsCount={friendsCount}
+        posts={userFeedPosts.map((post) => ({
+          id: post.id,
+          content: post.content,
+          media: post.media,
+          likes: Number(post.likes_count || 0),
+        }))}
+        truths={profileTruths}
+        dares={publishedDares}
+        backedOutCount={userAllDares.filter((dare: any) => dare.state === "CHICKEN_OUT").length}
+        activeTab={activeTab === "posts" ? "posts" : "drama"}
+        onTabChange={(tab) => setActiveTab(tab === "posts" ? "posts" : "truths")}
+        onOpenPost={() => setShowPostsScreen(true)}
+        onOpenTruth={(truthId) => {
+          setSelectedTruthId(truthId);
+          setShowTruthsListScreen(true);
+        }}
+        onOpenDare={(dareId) => {
+          setSelectedDareId(dareId);
+          setShowDaresListScreen(true);
+        }}
+        onOpenFriends={isFriend ? handleFriendsCapsuleClick : undefined}
+        onOpenRelationships={
+          currentUser?.id && currentUser.id !== userId
+            ? () => setShowRelationshipsScreen(true)
+            : undefined
+        }
+        onOpenAvatar={() => setShowAvatarPreview(true)}
+        showTopbar={false}
+        canSeeContent={isFriend || currentUser?.id === userId}
+        friendFaces={(friends || []).map((friend: any) => ({
+          id: friend.userId || friend.id,
+          name: friend.displayName || friend.display_name || friend.username,
+          avatar: friend.avatarUrl || friend.avatar_url || friend.avatar,
+        }))}
+        actions={
+          <>
+            {showFriendButton && (
+              <button
+                type="button"
+                onClick={handleSendFriendRequest}
+                disabled={isAnimating}
+                className={socialProfilePrimaryActionClass}
+              >
+                <UserPlus size={16} />
+                {isAnimating ? "Sending…" : "Add friend"}
+              </button>
+            )}
+            {showPendingButton && (
+              <button
+                type="button"
+                onClick={handleResendFriendRequest}
+                disabled={isCancelling}
+                className={socialProfileActionClass}
+              >
+                <Check size={16} />
+                {isCancelling ? "Cancelling…" : "Request sent"}
+              </button>
+            )}
+          </>
+        }
+      />
 
-            <div className="relative z-10 mb-5 flex items-start gap-4">
-              <div className="relative shrink-0">
+      <div style={{ display: "none" }} aria-hidden="true">
+      {/* Legacy profile markup retained temporarily while the new profile settles. */}
+      {/* Profile Content */}
+      <div className="custom-scrollbar flex-1 overflow-y-auto pb-[var(--bottom-nav-total-height)]">
+        {/* Avatar and Basic Info */}
+        <div className="mx-auto w-full max-w-[430px] px-3 pb-2">
+          <div className="profile-hero-card relative mb-2 overflow-visible rounded-none border-0 bg-transparent px-1 pb-2 pt-1 shadow-none">
+            <div className="relative z-10 flex w-full items-center gap-[18px]">
+              <div className="relative shrink-0 overflow-visible">
                 <button
                   type="button"
                   onClick={() => setShowAvatarPreview(true)}
-                  className="block rounded-full bg-[linear-gradient(135deg,rgba(74,222,128,0.9),rgba(255,255,255,0.18)_42%,rgba(96,165,250,0.38))] p-[3px] shadow-[0_12px_38px_rgba(0,0,0,0.45),0_0_28px_rgba(74,222,128,0.14)] transition-transform duration-200 hover:scale-[1.02]"
+                  className="flex h-[82px] w-[82px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#4ade80_0%,#38bdf8_100%)] p-0 shadow-[0_16px_34px_rgba(0,0,0,0.36),0_0_0_1px_rgba(255,255,255,0.06)] transition-transform duration-200 hover:scale-[1.02]"
                 >
-                  <Avatar
-                    src={profile.avatar_url || ""}
-                    alt={profile.display_name || profile.username}
-                    size="lg"
-                    className="border-2 border-[#111411] shadow-[0_0_22px_rgba(74,222,128,0.16)]"
-                  />
+                  <span className="block h-[78px] w-[78px] overflow-hidden rounded-full border-2 border-[#07100b]">
+                    <Avatar
+                      src={profile.avatar_url || ""}
+                      alt={profile.display_name || profile.username}
+                      size={82}
+                      userId={userId}
+                    />
+                  </span>
                 </button>
-                {onNavigateToActivity && (
-                  <button
-                    onClick={() => onNavigateToActivity(userId)}
-                    className="absolute -bottom-1 -left-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#0b100b] bg-[#4ade80] shadow-[0_10px_24px_rgba(74,222,128,0.28)]"
-                    style={{ color: "#000" }}
-                  >
-                    <Activity size={12} />
-                  </button>
-                )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-full border border-[#4ade80]/20 bg-[#4ade80]/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#86efac]">
-                    Profile
-                  </div>
-                  {profile.created_at && (
-                    <div className="inline-flex rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#94a3b8]">
-                      {formatJoinDate(profile.created_at)}
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col items-start gap-y-1 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-3">
-                  <h2 className="text-[26px] font-black leading-none text-white sm:text-[30px]">
-                    {profile.display_name || profile.username}
-                  </h2>
+                <div className="profile-proof-stat-row">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (onNavigateToProfile && userId) {
-                        onNavigateToProfile(userId);
-                      }
-                    }}
-                    className={`text-[15px] font-bold text-[#6ee7b7] sm:text-sm ${
-                      onNavigateToProfile
-                        ? "cursor-pointer hover:text-[#86efac]"
-                        : "cursor-default"
-                    }`}
+                    onClick={() => setActiveTab("posts")}
+                    className="profile-proof-stat"
                   >
-                    @{stripAtSymbol(profile.username)}
+                    <span className="profile-proof-stat-value">
+                      {userFeedPosts.length}
+                    </span>
+                    <span className="profile-proof-stat-label">Posts</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("truths")}
+                    className="profile-proof-stat"
+                  >
+                    <span className="profile-proof-stat-value">
+                      {publishedTruths.length}
+                    </span>
+                    <span className="profile-proof-stat-label">Truths</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("dares")}
+                    className="profile-proof-stat"
+                  >
+                    <span className="profile-proof-stat-value">
+                      {publishedDares.length}
+                    </span>
+                    <span className="profile-proof-stat-label">Dares</span>
                   </button>
                 </div>
-                <p className="mt-3 max-w-2xl text-[14px] font-semibold leading-relaxed text-[#94a3b8]">
-                  {profile.bio || "No bio yet"}
-                </p>
               </div>
             </div>
 
-            <div className="relative z-10 grid grid-cols-3 gap-2">
-              <div className="rounded-[22px] border border-white/8 bg-white/[0.035] px-3 py-4 text-center shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
-                <div className="mb-1 text-[22px] font-black leading-none text-white">
-                  {userFeedPosts.length}
-                </div>
-                <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[#64748b]">
-                  Posts
-                </div>
-              </div>
-              <div className="rounded-[22px] border border-white/8 bg-white/[0.035] px-3 py-4 text-center shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
-                <div className="mb-1 text-[22px] font-black leading-none text-white">
-                  {userAllDares.length}
-                </div>
-                <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[#64748b]">
-                  Dares
-                </div>
-              </div>
-              <button
-                type="button"
-                className="rounded-[22px] border border-[#4ade80]/20 bg-[#4ade80]/10 px-3 py-4 text-center shadow-[0_18px_44px_rgba(0,0,0,0.18)] transition-colors hover:border-[#4ade80]/35 hover:bg-[#4ade80]/14"
-                onClick={() => {
-                  setShowFriendsModal(true);
-                  setLoadingFriends(true);
-                  handleFriendsClick();
-                }}
-              >
-                <div className="mb-1 text-[22px] font-black leading-none text-white">
-                  {friendsCount}
-                </div>
-                <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[#86efac]">
-                  Friends
-                </div>
-              </button>
+            <div className="relative z-10">
+              <h2 className="m-0 mb-[5px] text-[22px] font-black leading-[1.1] tracking-[0] text-white">
+                {profile.display_name || profile.username}
+              </h2>
+              <p className="m-0 mb-3 text-[13px] font-bold leading-none text-[#94a3b8]">
+                @{stripAtSymbol(profile.username)}
+              </p>
+              <p className="m-0 line-clamp-2 max-w-full text-[14px] font-semibold leading-[1.42] tracking-[0] text-white/80">
+                {profile.bio || "Proof-first posts, real dares, close-friend stories."}
+              </p>
             </div>
 
-            <div className="relative z-10 mt-4 grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
+            <div className="relative z-10 -mt-0.5 flex flex-col gap-2">
+              {currentUser?.id && currentUser.id !== userId && (
+                <button
+                  type="button"
+                  onClick={() => setShowRelationshipsScreen(true)}
+                  className="activity-radar-cta"
+                >
+                  <span className="activity-radar-orb">
+                    <Heart size={18} strokeWidth={2.8} />
+                  </span>
+                  <span className="activity-radar-copy">
+                    <span className="activity-radar-title">Relationships</span>
+                    <span className="activity-radar-subtitle">
+                      Declare the dynamic
+                    </span>
+                  </span>
+                </button>
+              )}
               {showFriendButton && (
                 <button
                   onClick={handleSendFriendRequest}
                   disabled={isAnimating}
-                  className={`col-span-2 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-bold transition-all duration-200 sm:col-span-1 sm:px-5 sm:py-2.5 ${
+                  className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-bold transition-all duration-200 sm:px-5 sm:py-2.5 ${
                     isAnimating
                       ? "cursor-not-allowed bg-[#2a2a2a] text-[#64748b]"
                       : "bg-[#4ade80] text-black shadow-[0_12px_30px_rgba(74,222,128,0.22)] hover:bg-[#34d399]"
@@ -1549,7 +1862,7 @@ export function UserProfileScreen({
                 <>
                 <button
                   disabled
-                  className="col-span-2 inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-full bg-[#2a2a2a] px-4 py-3 text-sm font-bold text-[#64748b] sm:col-span-1 sm:py-2.5"
+                  className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-full bg-[#2a2a2a] px-4 py-3 text-sm font-bold text-[#64748b] sm:py-2.5"
                 >
                   <Check size={18} />
                   Request Sent
@@ -1557,7 +1870,7 @@ export function UserProfileScreen({
                   <button
                     onClick={handleResendFriendRequest}
                     disabled={isCancelling}
-                    className={`col-span-2 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-bold transition-colors sm:col-span-1 sm:py-2.5 ${
+                    className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-bold transition-colors sm:py-2.5 ${
                       isCancelling
                         ? "cursor-not-allowed bg-[#2a2a2a] text-[#64748b]"
                         : "bg-[#ef4444] text-white hover:bg-[#dc2626]"
@@ -1570,7 +1883,7 @@ export function UserProfileScreen({
               )}
 
               {showFriendsButton && (
-                <>
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => {
                       if (onMessage && profile) {
@@ -1580,30 +1893,28 @@ export function UserProfileScreen({
                         );
                       }
                     }}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#4ade80] px-4 py-3 text-sm font-bold text-black shadow-[0_12px_30px_rgba(74,222,128,0.22)] transition-colors hover:bg-[#34d399] sm:py-2.5"
+                    className="inline-flex min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-[18px] bg-[#4ade80] px-3 py-2.5 text-[13px] font-extrabold text-black shadow-[0_12px_30px_rgba(74,222,128,0.22)] transition-colors hover:bg-[#34d399]"
                   >
-                    <MessageCircle size={18} />
+                    <MessageCircle size={16} />
                     Message
                   </button>
                   <button
-                    onClick={() => {
-                      setShowFriendsModal(true);
-                      setLoadingFriends(true);
-                      handleFriendsClick();
+                    onClick={handleFriendsCapsuleClick}
+                    onPointerDown={handleFriendsCapsulePressStart}
+                    onPointerUp={handleFriendsCapsulePressEnd}
+                    onPointerCancel={handleFriendsCapsulePressEnd}
+                    onPointerLeave={handleFriendsCapsulePressEnd}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setShowUnfriendModal(true);
                     }}
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-4 py-3 text-sm font-bold text-white transition-colors hover:border-[#4ade80]/30 hover:text-[#86efac] sm:py-2.5"
+                    className="inline-flex min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-[18px] border border-white/8 bg-white/[0.03] px-3 py-2.5 text-[13px] font-extrabold text-white transition-colors hover:border-[#4ade80]/30 hover:text-[#86efac]"
+                    title="Long press to unfriend"
                   >
-                    <Users size={18} />
-                    {isCloseFriend ? "Close Friend" : "Friends"}
+                    <Users size={16} />
+                    Friends
                   </button>
-                  <button
-                    onClick={() => setShowUnfriendModal(true)}
-                    className="col-span-2 inline-flex items-center justify-center gap-2 rounded-full bg-[#ef4444] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#dc2626] sm:col-span-1 sm:py-2.5"
-                  >
-                    <X size={18} />
-                    Unfriend
-                  </button>
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -1613,7 +1924,7 @@ export function UserProfileScreen({
         {(isFriend || currentUser?.id === userId) && (
           <>
             {/* Tab Navigation */}
-            <div className="mx-auto w-full max-w-4xl px-5">
+            <div className="mx-auto -mt-1 w-full max-w-[430px] px-3">
               <div className="flex rounded-full border border-white/8 bg-[linear-gradient(180deg,rgba(21,27,21,0.92),rgba(10,14,10,0.96))] p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.36),inset_0_1px_0_rgba(255,255,255,0.05)]">
                 <button
                   onClick={() => setActiveTab("posts")}
@@ -1662,7 +1973,7 @@ export function UserProfileScreen({
             </div>
 
             {/* Tab Content */}
-            <div className="mx-auto w-full max-w-4xl px-5 py-5">
+            <div className="mx-auto w-full max-w-[430px] px-3 py-5">
               {activeTab === "posts" && (
                 <div className="rounded-[34px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,20,17,0.96),rgba(7,9,8,0.98))] p-4 shadow-[0_30px_80px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)]">
                   {userFeedPosts.length === 0 ? (
@@ -1676,7 +1987,7 @@ export function UserProfileScreen({
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="profile-posts-grid">
                       {userFeedPosts.map((post) => (
                         <div
                           key={post.id}
@@ -1704,13 +2015,11 @@ export function UserProfileScreen({
               {activeTab === "truths" && (
                 <div
                   style={{
-                    padding: "20px",
-                    borderRadius: "34px",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background:
-                      "linear-gradient(180deg, rgba(16,20,17,0.96), rgba(7,9,8,0.98))",
-                    boxShadow:
-                      "0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+                    padding: 0,
+                    borderRadius: 0,
+                    border: "none",
+                    background: "transparent",
+                    boxShadow: "none",
                   }}
                 >
                   {loadingPublishedTruths ? (
@@ -1776,7 +2085,7 @@ export function UserProfileScreen({
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: "22px",
+                        gap: "14px",
                       }}
                     >
                       {publishedTruths.map((truth, index) => {
@@ -1804,67 +2113,89 @@ export function UserProfileScreen({
                               animationDelay: `${index * 0.04}s`,
                               width: "100%",
                               background:
-                                "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
-                              border: "1px solid rgba(255,255,255,0.08)",
-                              borderLeft: `3px solid ${badge.color}`,
-                              borderRadius: "24px",
-                              padding: "22px 24px",
+                                "radial-gradient(circle at 10% 0%, rgba(74,222,128,0.13), transparent 34%), radial-gradient(circle at 96% 0%, rgba(56,189,248,0.08), transparent 34%), linear-gradient(180deg, rgba(19,28,22,0.98), rgba(6,10,8,0.99))",
+                              border: `1px solid ${badge.color}36`,
+                              borderRadius: "25px",
+                              padding: "14px",
                               color: "#fff",
                               cursor: "pointer",
                               display: "flex",
                               alignItems: "flex-start",
-                              gap: "18px",
+                              gap: "12px",
+                              position: "relative",
+                              overflow: "hidden",
                               boxShadow:
-                                "0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 24px rgba(0,0,0,0.28)",
+                                "0 18px 44px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.07)",
                               transition:
-                                "border-color 0.2s ease, transform 0.15s ease",
+                                "border-color 0.2s ease, transform 0.15s ease, filter 0.15s ease",
+                              WebkitTapHighlightColor: "transparent",
                             }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.transform =
                                 "translateY(-1px)";
+                              e.currentTarget.style.filter = "brightness(1.04)";
                             }}
                             onMouseLeave={(e) => {
                               e.currentTarget.style.transform = "translateY(0)";
+                              e.currentTarget.style.filter = "brightness(1)";
                             }}
                           >
                             <div
                               style={{
-                                width: "10px",
-                                height: "10px",
-                                borderRadius: "50%",
-                                background: badge.color,
-                                boxShadow: `0 0 14px ${badge.color}90`,
+                                width: "38px",
+                                height: "38px",
+                                borderRadius: "16px",
+                                background:
+                                  "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025))",
+                                border: `1px solid ${badge.color}36`,
+                                color: badge.color,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                boxShadow: `0 12px 28px rgba(0,0,0,0.28), 0 0 20px ${badge.color}24`,
                                 flexShrink: 0,
-                                marginTop: "7px",
                               }}
-                            />
+                            >
+                              <MessageSquare size={18} strokeWidth={2.7} />
+                            </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <p
                                 style={{
                                   margin: 0,
-                                  fontSize: "14px",
-                                  fontWeight: 600,
+                                  fontSize: "13px",
+                                  fontWeight: 800,
                                   lineHeight: 1.3,
-                                  color: "rgba(255,255,255,0.55)",
-                                  letterSpacing: "-0.005em",
+                                  color: "rgba(255,255,255,0.58)",
+                                  letterSpacing: 0,
                                 }}
                               >
                                 <span
-                                  style={{ color: "rgba(255,255,255,0.9)" }}
+                                  style={{
+                                    color: "rgba(255,255,255,0.92)",
+                                    fontWeight: 850,
+                                  }}
                                 >
                                   {truth.challenger.nickname}
                                 </span>
                                 <span
                                   style={{
                                     margin: "0 6px",
-                                    color: "rgba(255,255,255,0.35)",
-                                    fontWeight: 500,
+                                    color: "#86efac",
+                                    fontSize: "10.5px",
+                                    fontWeight: 950,
+                                    letterSpacing: "0.08em",
+                                    textTransform: "uppercase",
+                                    textShadow:
+                                      "0 0 14px rgba(74,222,128,0.34)",
                                   }}
                                 >
-                                  asked
+                                  Asked
                                 </span>
                                 <span
-                                  style={{ color: "rgba(255,255,255,0.9)" }}
+                                  style={{
+                                    color: "rgba(255,255,255,0.92)",
+                                    fontWeight: 850,
+                                  }}
                                 >
                                   {truth.receiver.nickname}
                                 </span>
@@ -1872,11 +2203,11 @@ export function UserProfileScreen({
                               {truth.question && (
                                 <p
                                   style={{
-                                    margin: "8px 0 0",
-                                    fontSize: "19px",
-                                    fontWeight: 700,
+                                    margin: "10px 0 0",
+                                    fontSize: "16px",
+                                    fontWeight: 900,
                                     lineHeight: 1.35,
-                                    letterSpacing: "-0.02em",
+                                    letterSpacing: 0,
                                     color: "#fff",
                                     overflow: "hidden",
                                     display: "-webkit-box",
@@ -1891,30 +2222,17 @@ export function UserProfileScreen({
                                 style={{
                                   display: "flex",
                                   alignItems: "center",
-                                  gap: "10px",
-                                  marginTop: "13px",
+                                  justifyContent: "space-between",
+                                  gap: "8px",
+                                  marginTop: "14px",
+                                  flexWrap: "wrap",
                                 }}
                               >
                                 <span
                                   style={{
-                                    fontSize: "11px",
-                                    fontWeight: 700,
-                                    color: badge.color,
-                                    letterSpacing: "0.1em",
-                                    textTransform: "uppercase",
-                                    padding: "5px 12px",
-                                    borderRadius: "99px",
-                                    background: `${badge.color}18`,
-                                    border: `1px solid ${badge.color}40`,
-                                  }}
-                                >
-                                  {badge.label}
-                                </span>
-                                <span
-                                  style={{
                                     color: "rgba(255,255,255,0.4)",
-                                    fontSize: "13px",
-                                    fontWeight: 500,
+                                    fontSize: "12px",
+                                    fontWeight: 750,
                                   }}
                                 >
                                   {formatTimeAgo(truth.createdAt)}
@@ -1932,13 +2250,11 @@ export function UserProfileScreen({
               {activeTab === "dares" && (
                 <div
                   style={{
-                    padding: "20px",
-                    borderRadius: "34px",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background:
-                      "linear-gradient(180deg, rgba(16,20,17,0.96), rgba(7,9,8,0.98))",
-                    boxShadow:
-                      "0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+                    padding: 0,
+                    borderRadius: 0,
+                    border: "none",
+                    background: "transparent",
+                    boxShadow: "none",
                   }}
                 >
                   {loadingPublishedDares ? (
@@ -2004,7 +2320,7 @@ export function UserProfileScreen({
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: "22px",
+                        gap: "14px",
                       }}
                     >
                       {publishedDares.map((dare, index) => {
@@ -2036,67 +2352,89 @@ export function UserProfileScreen({
                               animationDelay: `${index * 0.04}s`,
                               width: "100%",
                               background:
-                                "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
-                              border: "1px solid rgba(255,255,255,0.08)",
-                              borderLeft: `3px solid ${badge.color}`,
-                              borderRadius: "24px",
-                              padding: "22px 24px",
+                                "radial-gradient(circle at 10% 0%, rgba(74,222,128,0.13), transparent 34%), radial-gradient(circle at 96% 0%, rgba(56,189,248,0.08), transparent 34%), linear-gradient(180deg, rgba(19,28,22,0.98), rgba(6,10,8,0.99))",
+                              border: `1px solid ${badge.color}36`,
+                              borderRadius: "25px",
+                              padding: "14px",
                               color: "#fff",
                               cursor: "pointer",
                               display: "flex",
                               alignItems: "flex-start",
-                              gap: "18px",
+                              gap: "12px",
+                              position: "relative",
+                              overflow: "hidden",
                               boxShadow:
-                                "0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 24px rgba(0,0,0,0.28)",
+                                "0 18px 44px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.07)",
                               transition:
-                                "border-color 0.2s ease, transform 0.15s ease",
+                                "border-color 0.2s ease, transform 0.15s ease, filter 0.15s ease",
+                              WebkitTapHighlightColor: "transparent",
                             }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.transform =
                                 "translateY(-1px)";
+                              e.currentTarget.style.filter = "brightness(1.04)";
                             }}
                             onMouseLeave={(e) => {
                               e.currentTarget.style.transform = "translateY(0)";
+                              e.currentTarget.style.filter = "brightness(1)";
                             }}
                           >
                             <div
                               style={{
-                                width: "10px",
-                                height: "10px",
-                                borderRadius: "50%",
-                                background: badge.color,
-                                boxShadow: `0 0 14px ${badge.color}90`,
+                                width: "38px",
+                                height: "38px",
+                                borderRadius: "16px",
+                                background:
+                                  "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025))",
+                                border: `1px solid ${badge.color}36`,
+                                color: badge.color,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                boxShadow: `0 12px 28px rgba(0,0,0,0.28), 0 0 20px ${badge.color}24`,
                                 flexShrink: 0,
-                                marginTop: "7px",
                               }}
-                            />
+                            >
+                              <Target size={18} strokeWidth={2.7} />
+                            </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <p
                                 style={{
                                   margin: 0,
-                                  fontSize: "14px",
-                                  fontWeight: 600,
+                                  fontSize: "13px",
+                                  fontWeight: 800,
                                   lineHeight: 1.3,
-                                  color: "rgba(255,255,255,0.55)",
-                                  letterSpacing: "-0.005em",
+                                  color: "rgba(255,255,255,0.58)",
+                                  letterSpacing: 0,
                                 }}
                               >
                                 <span
-                                  style={{ color: "rgba(255,255,255,0.9)" }}
+                                  style={{
+                                    color: "rgba(255,255,255,0.92)",
+                                    fontWeight: 850,
+                                  }}
                                 >
                                   {dare.challenger.nickname}
                                 </span>
                                 <span
                                   style={{
                                     margin: "0 6px",
-                                    color: "rgba(255,255,255,0.35)",
-                                    fontWeight: 500,
+                                    color: "#86efac",
+                                    fontSize: "10.5px",
+                                    fontWeight: 950,
+                                    letterSpacing: "0.08em",
+                                    textTransform: "uppercase",
+                                    textShadow:
+                                      "0 0 14px rgba(74,222,128,0.34)",
                                   }}
                                 >
-                                  dared
+                                  Dared
                                 </span>
                                 <span
-                                  style={{ color: "rgba(255,255,255,0.9)" }}
+                                  style={{
+                                    color: "rgba(255,255,255,0.92)",
+                                    fontWeight: 850,
+                                  }}
                                 >
                                   {dare.receiver.nickname}
                                 </span>
@@ -2104,11 +2442,11 @@ export function UserProfileScreen({
                               {dare.description && (
                                 <p
                                   style={{
-                                    margin: "8px 0 0",
-                                    fontSize: "19px",
-                                    fontWeight: 700,
+                                    margin: "10px 0 0",
+                                    fontSize: "16px",
+                                    fontWeight: 900,
                                     lineHeight: 1.35,
-                                    letterSpacing: "-0.02em",
+                                    letterSpacing: 0,
                                     color: "#fff",
                                     overflow: "hidden",
                                     display: "-webkit-box",
@@ -2123,30 +2461,17 @@ export function UserProfileScreen({
                                 style={{
                                   display: "flex",
                                   alignItems: "center",
-                                  gap: "10px",
-                                  marginTop: "13px",
+                                  justifyContent: "space-between",
+                                  gap: "8px",
+                                  marginTop: "14px",
+                                  flexWrap: "wrap",
                                 }}
                               >
                                 <span
                                   style={{
-                                    fontSize: "11px",
-                                    fontWeight: 700,
-                                    color: badge.color,
-                                    letterSpacing: "0.1em",
-                                    textTransform: "uppercase",
-                                    padding: "5px 12px",
-                                    borderRadius: "99px",
-                                    background: `${badge.color}18`,
-                                    border: `1px solid ${badge.color}40`,
-                                  }}
-                                >
-                                  {badge.label}
-                                </span>
-                                <span
-                                  style={{
                                     color: "rgba(255,255,255,0.4)",
-                                    fontSize: "13px",
-                                    fontWeight: 500,
+                                    fontSize: "12px",
+                                    fontWeight: 750,
                                   }}
                                 >
                                   {formatTimeAgo(dare.createdAt)}
@@ -2193,6 +2518,37 @@ export function UserProfileScreen({
           </div>
         )}
 
+      </div>
+      </div>
+
+      {showRelationshipsScreen && currentUser?.id && profile && (
+          <div className="app-story-shell fixed inset-0 z-[70] bg-[#050806]">
+            <RelationshipsScreen
+              onBack={() => setShowRelationshipsScreen(false)}
+              currentUser={{
+                id: currentUser.id,
+                display_name:
+                  currentUser.displayName || currentUser.username || "User",
+                username: (currentUser.username || "user").replace(/^@/, ""),
+                avatar_url: currentUser.avatar || "",
+              }}
+              profileUser={{
+                id: currentUser.id,
+                display_name:
+                  currentUser.displayName || currentUser.username || "User",
+                username: (currentUser.username || "user").replace(/^@/, ""),
+                avatar_url: currentUser.avatar || "",
+              }}
+              initialTarget={{
+                id: userId,
+                display_name: profile.display_name || profile.username || "User",
+                username: stripAtSymbol(profile.username || "user"),
+                avatar_url: profile.avatar_url || "",
+              }}
+            />
+          </div>
+        )}
+
         {/* Friends Modal */}
         {showAvatarPreview && (
           <div
@@ -2200,7 +2556,7 @@ export function UserProfileScreen({
             onClick={() => setShowAvatarPreview(false)}
           >
             <div
-              className="app-modal-dialog relative flex h-[min(72vw,320px)] w-[min(72vw,320px)] items-center justify-center rounded-full border border-white/10 bg-[radial-gradient(circle_at_top,rgba(74,222,128,0.14),rgba(18,20,18,0.98)_58%,rgba(8,10,8,1)_100%)] p-2 shadow-[0_30px_100px_rgba(0,0,0,0.55),0_0_40px_rgba(74,222,128,0.12)]"
+              className="app-modal-dialog relative flex h-[min(72vw,320px)] w-[min(72vw,320px)] items-center justify-center rounded-full border border-white/10 bg-[linear-gradient(180deg,#141414_0%,#0e0e0e_52%,#0a0a0a_100%)] p-2 shadow-[0_30px_100px_rgba(0,0,0,0.55)]"
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -2211,10 +2567,14 @@ export function UserProfileScreen({
                 <X size={18} />
               </button>
               <div className="h-full w-full overflow-hidden rounded-full border border-white/8 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                <img
+                <Avatar
                   src={profile.avatar_url || ""}
                   alt={profile.display_name || profile.username || "Profile"}
-                  className="h-full w-full object-cover"
+                  size={400}
+                  userId={userId}
+                  disableRealtime
+                  className="h-full w-full"
+                  style={{ width: "100%", height: "100%" }}
                 />
               </div>
             </div>
@@ -2223,20 +2583,20 @@ export function UserProfileScreen({
 
         {showFriendsModal && (
           <div
-            className="app-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black bg-opacity-70"
+            className="app-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm"
             onClick={() => setShowFriendsModal(false)}
           >
             <div
-              className="app-modal-sheet w-full max-w-md rounded-t-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,23,20,0.98),rgba(12,14,12,0.98))] p-6 shadow-[0_28px_80px_rgba(0,0,0,0.42)]"
+              className="app-modal-sheet w-full max-w-md rounded-t-[30px] border border-white/8 bg-[linear-gradient(180deg,#141414_0%,#0e0e0e_52%,#0a0a0a_100%)] p-5 shadow-[0_28px_80px_rgba(0,0,0,0.52)]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-bold text-lg">
+                <h3 className="text-[22px] font-[850] tracking-[-0.04em] text-white">
                   Friends ({friendsList.length})
                 </h3>
                 <button
                   onClick={() => setShowFriendsModal(false)}
-                  className="text-[#64748b] hover:text-white"
+                  className="flex h-9 w-9 items-center justify-center rounded-[13px] border border-white/8 bg-white/[0.04] text-[#94a3b8] transition-colors hover:text-white"
                 >
                   <X size={20} />
                 </button>
@@ -2250,7 +2610,7 @@ export function UserProfileScreen({
                   className={`mb-4 flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition-colors ${
                     isCloseFriend
                       ? "border-[#facc15]/30 bg-[#facc15]/10 text-[#facc15]"
-                      : "border-[#2a2a2a] bg-[#1a1a1a] text-white hover:border-[#4ade80]/40 hover:text-[#4ade80]"
+                      : "border-white/10 bg-white/[0.045] text-white hover:border-[#fb7185]/40 hover:text-[#fb7185]"
                   } ${closeFriendBusy ? "cursor-not-allowed opacity-70" : ""}`}
                 >
                   <Star size={16} />
@@ -2271,11 +2631,11 @@ export function UserProfileScreen({
                   <p className="text-[#64748b]">No friends yet</p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-64 overflow-y-auto">
+                <div className="max-h-72 space-y-2.5 overflow-y-auto">
                   {friendsList.map((friend: any) => (
                     <div
                       key={friend.userId}
-                      className="flex items-center space-x-3 rounded-2xl border border-white/6 bg-white/[0.03] p-3"
+                      className="flex items-center space-x-3 rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,20,20,0.98),rgba(10,10,10,0.99))] p-3.5 shadow-[0_14px_28px_rgba(0,0,0,0.2)]"
                     >
                       <Avatar
                         src={friend.avatarUrl || ""}
@@ -2293,7 +2653,7 @@ export function UserProfileScreen({
                           }}
                           className={`text-left font-medium text-white ${
                             onNavigateToProfile && friend.userId
-                              ? "cursor-pointer hover:text-[#4ade80]"
+                              ? "cursor-pointer hover:text-[#fb7185]"
                               : "cursor-default"
                           }`}
                         >
@@ -2306,9 +2666,9 @@ export function UserProfileScreen({
                               onNavigateToProfile(friend.userId);
                             }
                           }}
-                          className={`block text-sm text-[#64748b] ${
-                            onNavigateToProfile && friend.userId
-                              ? "cursor-pointer hover:text-[#4ade80]"
+                            className={`block text-[10px] font-semibold uppercase tracking-[0.08em] text-[#94a3b8] ${
+                              onNavigateToProfile && friend.userId
+                              ? "cursor-pointer hover:text-[#fb7185]"
                               : "cursor-default"
                           }`}
                         >
@@ -2330,7 +2690,7 @@ export function UserProfileScreen({
             onClick={() => setShowUnfriendModal(false)}
           >
             <div
-              className="app-modal-dialog mx-4 w-full max-w-sm rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,23,20,0.98),rgba(12,14,12,0.98))] p-6 shadow-[0_28px_80px_rgba(0,0,0,0.42)]"
+              className="app-modal-dialog mx-4 w-full max-w-sm rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,#141414_0%,#0e0e0e_52%,#0a0a0a_100%)] p-6 shadow-[0_28px_80px_rgba(0,0,0,0.42)]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="text-center mb-6">
@@ -2369,7 +2729,6 @@ export function UserProfileScreen({
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 }

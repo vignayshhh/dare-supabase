@@ -2,7 +2,7 @@
  * VisibilitySubscriptionManager - Smart subscription unloading with Visibility API
  * 
  * Automatically unsubscribes from real-time listeners when tab is hidden
- * and resubscribes when tab becomes visible, reducing Firebase reads
+ * and resubscribes when tab becomes visible, reducing Supabase reads
  * for inactive tabs.
  */
 
@@ -18,8 +18,7 @@ interface SubscriptionEntry {
 export class VisibilitySubscriptionManager {
   private subscriptions = new Map<string, SubscriptionEntry>();
   private isTabVisible = true;
-  private visibilityCheckInterval: NodeJS.Timeout | null = null;
-  private readonly VISIBLE_CHECK_INTERVAL = 1000; // Check every second
+  private readonly onVisibilityChange = () => this.handleVisibilityChange();
 
   constructor() {
     this.initializeVisibilityTracking();
@@ -31,15 +30,9 @@ export class VisibilitySubscriptionManager {
   private initializeVisibilityTracking(): void {
     // Handle visibility change
     if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+      this.isTabVisible = document.visibilityState === 'visible';
+      document.addEventListener('visibilitychange', this.onVisibilityChange);
     }
-
-    // Periodic check for tabs that become visible without visibilitychange event
-    this.visibilityCheckInterval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !this.isTabVisible) {
-        this.handleVisibilityChange();
-      }
-    }, this.VISIBLE_CHECK_INTERVAL);
   }
 
   /**
@@ -179,13 +172,8 @@ export class VisibilitySubscriptionManager {
     this.unsubscribeAll();
     this.subscriptions.clear();
     
-    if (this.visibilityCheckInterval) {
-      clearInterval(this.visibilityCheckInterval);
-      this.visibilityCheckInterval = null;
-    }
-    
     if (typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', () => this.handleVisibilityChange());
+      document.removeEventListener('visibilitychange', this.onVisibilityChange);
     }
   }
 }

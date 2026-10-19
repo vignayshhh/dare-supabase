@@ -1,0 +1,294 @@
+SUPABASE USAGE PLAN — LINE/REQUIREMENT AUDIT
+=============================================
+
+Source audited
+--------------
+User-pasted plan: Pasted text.txt, 1,509 lines. Every executable requirement was mapped below.
+Pure headings, rationale, non-goals, and repeated prose are marked N/A where they do not create
+an implementation obligation. Statuses:
+
+IMPLEMENTED   Source code/migration exists and matches requirement.
+PARTIAL       Some behavior exists; one or more required details are absent.
+MISSING       No matching implementation found.
+UNVERIFIABLE   Requires deployed database/runtime/usage evidence unavailable in source tree.
+
+1. Boundaries and decisions
+---------------------------
+IMPLEMENTED: Supabase cache remains; no external Redis replacement found. Upload limits remain;
+historical media cleanup is report-only; no materialized tables were dropped; fresh Auth remains.
+IMPLEMENTED: New migrations are after highest existing filename (20261204/05...).
+PARTIAL: Reviewable subsystem commits were not created; working tree remains pre-existing and dirty.
+PARTIAL: No billing-savings percentage is claimed, but runtime before/after measurements are absent.
+
+2.1 Instrumentation and measurements
+------------------------------------
+IMPLEMENTED: REST/RPC/Auth/Storage upload/sign/operation/failure/response-byte counters exist in
+src/lib/observability/resourceMetrics.ts. String, URL, Request inputs are handled. Existing names
+remain. Circle, admin, server, proxy, and middleware clients are instrumented.
+PARTIAL: Method is classified, but status, duration, sanitized endpoint category, browser/server/
+middleware source, request-scoped aggregation, and structured sampled diagnostic records are not
+implemented as specified.
+PARTIAL: Response bytes use content-length only; upload Blob sizes, unknown-byte state, resource
+timing for browser image/video downloads, and documented cross-origin limitations are absent.
+IMPLEMENTED: JWT/API key/signed-token/raw-auth/user-content logging was not added.
+PARTIAL: Abort/failure counting exists, but explicit aborted-request lifecycle and Realtime join/
+leave/reconnect/message accounting are not fully implemented.
+UNVERIFIABLE: Hosted Supabase usage reports and browser/server before/after envelopes were not
+captured. No claim of actual billing reduction is supported.
+
+2.2 Refresh controller
+----------------------
+IMPLEMENTED: createRefreshController.ts exists with single-flight, dirty trailing refresh,
+100ms default coalescing, visibility, abort, disposal, and last-good-result behavior.
+IMPLEMENTED: Unit tests cover coalescing, trailing refresh, hidden state, disposal.
+PARTIAL: reason argument is accepted but ignored. Controller is not wired across all required
+reconciliation/fallback resources. User/Circle invalidation and revision-gap handling are not
+centralized. Existing scheduleRefresh callers still lack in-flight protection.
+PARTIAL: Truth subscriptions buffer initial events, but have duplicate initial loads and no explicit
+CHANNEL_ERROR/TIMED_OUT degraded recovery path.
+
+2.3 Database deployment rules
+-----------------------------
+IMPLEMENTED: Additive migrations exist for cache batching, truth snapshot, inbox/counters/feed,
+and media lifecycle. Fixed search_path and service-role grants exist for infrastructure RPCs.
+PARTIAL: Private Broadcast authorization/trigger migration is incomplete for Truth and all listed
+resources. Drama bounded SQL read function is absent. Full staged backfill/locking evidence absent.
+PARTIAL: Truth trigger recounts all votes per mutation instead of delta maintenance.
+UNVERIFIABLE: Complete migration chain, RLS, grants, concurrency, and backfill have not run in an
+isolated test database.
+
+3.1 Cache invalidation/population (finding 2)
+----------------------------------------------
+IMPLEMENTED: setMany/deleteMany/incrementMany exist, use backend chunks of 100, deduplicate keys,
+and update process memory after successful operations. Batch increment RPC exists.
+PARTIAL: setMany silently limits input to 10,000; no dedicated batching/isolation/failure tests.
+IMPLEMENTED: Circle generation key family exists and Circle-scoped invalidation avoids member loops.
+PARTIAL: Page key is <kind>:v2:<circle>..., not the exact specified feed:v2 form; non-Circle legacy
+fanout remains. Generation failure fallback uses Date.now and can claim a local version without a
+successful increment.
+IMPLEMENTED: Circle membership Promise memoization and profile setMany exist.
+PARTIAL: socialMutations/publish paths retain broad invalidation and legacy audience behavior.
+UNVERIFIABLE: Two-user/Circle isolation and 100-member request-envelope acceptance tests absent.
+
+3.2 Materialized feed retirement (finding 3)
+---------------------------------------------
+PARTIAL: Circle-scoped fanout bypasses feed_items/feed_fanout_jobs and bumps generations.
+MISSING: Legacy unscoped code still writes feed_items/jobs; FEED_FANOUT_MODE remains in vercel.json;
+unused source lookup/seeding/process helpers remain; no direct absence test exists.
+PARTIAL: Historical jobs are not automatically replayed, but no read-only outstanding-job report
+was added.
+IMPLEMENTED: Feed migration reads posts with Circle index/keyset path.
+UNVERIFIABLE: Deployed function definitions and all deployed readers were not verified remotely.
+
+3.3 Truth polling/events (finding 4)
+------------------------------------
+IMPLEMENTED: truth counts/revision fields, bounded snapshot RPC, auth.uid viewer vote, 100-row
+preview, visibility reconciliation, and healthy five-second loops removed.
+PARTIAL: Native Postgres Changes remains; required private truth-interactions Broadcast topic,
+versioned payload, actual Circle authorization, ref-counted ownership, Circle/logout cleanup, and
+degraded five-second fallback are absent.
+PARTIAL: Snapshot load can run twice initially; no in-flight guard. Trigger performs full recount.
+PARTIAL: Internal maps are bounded on snapshot replacement, but no revision-gap ordering logic.
+UNVERIFIABLE: Cross-account private-topic authorization and 60-second zero-read envelope not run.
+
+3.4 Drama summaries/detail (finding 5)
+---------------------------------------
+IMPLEMENTED: Dirty-ID coalescing and targeted /api/drama/feed?ids=...; store merge methods;
+full feed capped at 60/100.
+PARTIAL: hydrateDramaRows still fetches all votes/comments/confirmations for requested rows;
+no aggregate DramaInteractionSummary contract/summary table; no bounded per-card SQL function;
+no /voters or /comments cursor endpoints; no per-card preview caps of five/three.
+PARTIAL: Targeted refresh avoids whole-feed reload but does not reduce child hydration enough.
+UNVERIFIABLE: Full drama behavior/detail-history regression matrix not run.
+
+3.5 Realtime row application (finding 6)
+----------------------------------------
+IMPLEMENTED: Community room chat applies complete INSERT/UPDATE/DELETE rows to bounded 80-row map.
+PARTIAL: Birthday, impersonation, conversation-games, and related collections still use event-to-
+bounded-full-reload patterns. Shared ref-counted subscriptions and complete hidden-resource
+visibility lifecycle are not universal.
+PARTIAL: Snapshot/event race handling is present in some services only; malformed/duplicate/delete/
+reconnect focused tests absent.
+
+3.6 Dare voter profiles (finding 7)
+-----------------------------------
+IMPLEMENTED: Deduplicated voter IDs, cached profile hits, profiles IN queries in batches of 100,
+and five-minute cache reuse.
+PARTIAL: Authoritative dare snapshot RPC with totals/revision is not implemented; totals still
+derive from preview rows in the client. Circle/user-scoped profile cache isolation is incomplete.
+
+3.7 Signed URLs (finding 8)
+---------------------------
+IMPLEMENTED: Signed URL host/reference parsing, viewer/Circle/bucket/path cache key, 1,000-entry
+cache, in-flight dedupe, token-derived expiration.
+PARTIAL: Server hydration still calls one logical refresh per unique object; SDK batch signing is
+not used. Browser signing cache lifecycle/logout/Circle clearing is not fully wired.
+UNVERIFIABLE: Cross-user/private-object isolation and warm zero-sign tests not run end-to-end.
+
+3.8–3.9 Media upload/encoding (findings 9–10)
+-----------------------------------------------
+IMPLEMENTED: Community proofs use uploadOptimizedMedia; dare-proofs routing and 100MB/type limits
+preserved. PNG/WebP optimization, extension/MIME matching, and fallback paths improved.
+PARTIAL: Separate proof image/video preview assets are not consistently created/tracked. Animated
+WebP preservation, no-growth original selection, poster/list loading, and all browser/mobile media
+tests are not proven.
+
+3.10 Auth (finding 11)
+----------------------
+IMPLEMENTED: Fresh auth.getUser remains source of authorization; WeakMap shares duplicate calls
+for same Request; admin check happens after verification; no cross-request Auth cache.
+UNVERIFIABLE: One-call-per-protected-request acceptance across all route wrappers not measured.
+
+3.11 Inbox (finding 12)
+-----------------------
+IMPLEMENTED: get_inbox_rows, dirty-ID coalescing, member-change Broadcast trigger/listener, and
+targeted summary refresh exist.
+PARTIAL: get_inbox_page_v2 migration exists but app still calls legacy get_inbox_page with limit 100;
+cursor pagination is not wired to chat list. hidden_message_ids remains in summaries/consumers.
+PARTIAL: Receipt/clear/hide/state coverage and cross-account receipt tests not complete.
+
+3.12 Counter deltas (finding 13)
+--------------------------------
+IMPLEMENTED: Post reaction/comment replacement triggers use deltas; tap SUM and cap semantics kept;
+no-op reaction behavior preserved in migration.
+PARTIAL: Truth snapshot trigger still recounts. Verdict transactional delta path, consistency report,
+bounded repair function, and concurrency/rollback tests were not found.
+UNVERIFIABLE: Concurrent production-like writes and full backfill correctness not tested.
+
+3.13 Cleanup/tracked uploads (finding 14)
+-----------------------------------------
+IMPLEMENTED: cache expiry index/function, media_assets/media_asset_references tables, delayed claim,
+Storage API deletion, daily routes, retry state, and historical report-only route exist.
+MISSING: No production caller invokes attach_media_asset; uploadOptimizedMedia returns assetId but
+authoritative feed/verdict/story/dare/avatar/birthday/message mutations discard it. Assets can remain
+uploaded_unattached and become cleanup candidates after successful content creation.
+PARTIAL: Claimed pending_deletion assets can remain stuck after worker crash; stale pending-deletion
+recovery is absent. Registry insert errors are swallowed. Lifecycle tests absent.
+
+3.14 Feed keyset/index (finding 15)
+-----------------------------------
+IMPLEMENTED: Circle/created_at/id index and timestamp-plus-ID predicate migration exist; legacy
+score cursor input remains accepted.
+PARTIAL: Migration function grants only service_role in places while app uses request-scoped client;
+exact deployed function/RLS behavior not verified. Query-plan evidence for large/sparse/equal-time
+datasets absent.
+
+3.15 Verification matrix
+------------------------
+IMPLEMENTED: npm run type-check, npm run build, focused resource/refresh tests, changed-file lint,
+and npm run audit:supabase were run successfully (changed-file lint has one warning).
+PARTIAL: Full npm run lint still has an existing prefer-const error and many warnings.
+MISSING: No isolated full-migration DB integration suite for triggers/RLS/Broadcast/cache/media.
+MISSING: No complete E2E matrix proving every listed scenario. Some cross-account QA exists.
+MISSING: No before/after resource envelope, Supabase usage report, or production query-plan evidence.
+
+3.16 Rollout/rollback/final deliverables
+-----------------------------------------
+IMPLEMENTED: Plan text file and completion report exist; additive migrations and maintenance docs
+exist; rollback principles are documented.
+MISSING: Reviewable subsystem commits were not produced. Database integration results, E2E results,
+before/after resource results, and query-plan evidence deliverables are absent.
+PARTIAL: Old RPCs/tables remain, but FEED_FANOUT_MODE/legacy fanout and fallback paths remain active.
+
+Final verdict
+------------
+NOT FULLY IMPLEMENTED.
+
+Highest-risk functional gap: uploaded assets are registered but never attached to authoritative
+content records. Cleanup could eventually delete media that a content row uses. Next highest gaps:
+inbox v2 not wired, Drama child hydration still broad, Truth private Broadcast/ref-count ownership
+missing, broad realtime collections still reload, and runtime/database verification absent.
+
+This audit checks source and migration presence. It does not claim deployed behavior without isolated
+database tests, RLS/Broadcast verification, query plans, and measured Supabase usage envelopes.
+
+Re-audit after completion pass
+------------------------------
+IMPLEMENTED since initial audit: inbox v2 is now called by messaging.service and loadMoreConversations
+is wired; hidden_message_ids was removed from inbox summary consumption; media attachment calls now
+cover posts, verdicts, direct dare proofs, birthday drops, community dares, community proofs, avatar,
+stories, and messages; cleanup claim leases recover stale pending_deletion rows; Drama summary RPC and
+bounded voter/comment endpoints exist; Truth private Broadcast/revision-gap/ref-count recovery exists;
+row-level updates cover birthday, impersonation, and conversation-game collections; fanout processing
+is report-only; counter drift reports and bounded repairs exist.
+
+Still excluded by explicit user instruction: before/after Supabase usage measurements and production-like
+query-plan evidence. Remaining non-excluded limitation: reviewable commits and isolated full migration/
+RLS/Broadcast/lifecycle integration execution have not been run in this workspace. Local type-check,
+production build, focused Jest suites, and changed-file lint pass. Local Supabase lint could not run
+because no local Postgres container is listening on 127.0.0.1:54322.
+
+Final line-by-line re-audit (2026-10-19)
+-----------------------------------------
+Scope: current pasted specification, all numbered requirements in sections 1-5, mapped to the
+current working tree. Earlier findings above are historical; this block is authoritative.
+
+IMPLEMENTED at source level:
+- Cache retained; batch set/delete/increment, Circle generations, profile batch writes, request-
+  local Circle-member memoization.
+- Fetch instrumentation categories, failures, status/duration/endpoint diagnostics, response-byte
+  accounting where headers expose size, and client wrappers.
+- Refresh primitive: coalescing, single-flight, dirty trailing refresh, abort, visibility, dispose,
+  last-good snapshot; focused tests.
+- Active materialized-feed fanout retired; historical job endpoint report-only.
+- Truth snapshot/read path, private topic policies/triggers, revision recovery, healthy polling
+  removal, hidden-page suppression, subscriber ownership improvements.
+- Drama summary RPC/table, bounded previews, targeted refresh, voter/comment cursor endpoints,
+  store merges.
+- Row-level realtime update/recovery paths for chat, birthday, impersonation, and games.
+- Batched dare profile lookup; signed-URL cache/in-flight reuse; shared proof optimizer; media
+  registry/references/attach calls/cleanup claims/retries/recovery.
+- Fresh Auth with same-Request WeakMap deduplication.
+- Targeted inbox rows/events, v2 cursor page wiring, load-more state, hidden-message array removal.
+- Post reaction/comment delta triggers, counter reports/repairs, feed timestamp/id keyset/index.
+- Maintenance routes/cron entries, additive migrations; latest type-check/build/focused Jest pass.
+
+PARTIAL / remaining implementation gaps:
+- Metrics remain process-global, not a true request-scoped collector. Realtime join/leave/reconnect/
+  received-message metrics, upload Blob-size accounting, browser resource timing, and sampled
+  structured request records are incomplete.
+- Refresh reason is ignored; adoption is not universal, so independent scheduleRefresh callers can
+  still overlap.
+- Cache key exactness/legacy helper cleanup and dedicated cache isolation/failure tests are absent.
+- Legacy materialized-feed helper functions remain for historical compatibility, though active paths
+  do not call them.
+- Truth counter trigger still full-recounts votes per mutation.
+- Dare subscription reads max 100 rows and derives totals from preview; authoritative dare snapshot
+  RPC/revision is absent.
+- Truth topic policy checks visibility/participants but deployed Circle membership boundary is not
+  proven; private-topic behavior needs DB/RLS execution.
+- Media preview/poster and animated-media/no-growth behavior lack exhaustive browser/mobile proof.
+- Community proof bucket mapping was corrected during this audit to `dare-proofs`; separate stored
+  480px image previews and stored video poster assets are still absent (current image thumbnail can
+  equal primary URL; video poster is a local object URL).
+- Realtime subscription sharing/visibility is service-specific, not centralized for every resource.
+- Reviewable subsystem commits were not created due broad pre-existing dirty worktree.
+
+UNVERIFIABLE here:
+- Full migration-chain execution, SQL/backfill/locking, grants/RLS, Broadcast authorization,
+  concurrent writes, cleanup races, Storage behavior, and full cross-account E2E require isolated
+  Supabase/Postgres; local DB lint blocked by unavailable Docker/Postgres.
+
+EXCLUDED by explicit user instruction:
+- Before/after Supabase usage measurements/resource envelopes.
+- Production-like query-plan evidence.
+
+Current verdict: NOT EVERY REQUIREMENT IS PROVEN OR FULLY IMPLEMENTED. Main optimization paths are
+substantially implemented; PARTIAL items are concrete remaining code/spec gaps; UNVERIFIABLE items
+are validation gaps, not claims of success.
+
+Fix pass (2026-10-19)
+----------------------
+Resolved requested five items:
+- Refresh controller now preserves/coalesces refresh reasons, passes strongest reason to loaders,
+  promotes strong events ahead of degraded retry, and tests cover behavior.
+- Added `get_dare_vote_snapshot`, transactional `dare_vote_summaries`, revision, independent user
+  vote, bounded preview; dare UI now uses authoritative totals.
+- Replaced Truth full-count trigger with parent-row-serialized insert/delete/switch deltas and
+  no-op detection. Migration version is unique and ordered after dare snapshot migration.
+- Removed legacy materialized-feed audience resolver, direct writer/processor, source lookup, and
+  seeding helpers. Active enqueue/remove now only invalidate Circle feed generations.
+- Fixed community proof context bucket to `dare-proofs`.
+
+Post-fix validation: type-check passed; focused refresh/resource/signed-URL tests passed (7/7).
+SQL execution/RLS validation remains unavailable without local Postgres/Docker.

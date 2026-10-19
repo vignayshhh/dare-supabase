@@ -1,13 +1,12 @@
-/**
+﻿/**
  * Admin IP block management.
- *   GET    /api/admin/ip-block           — list blocked ips
- *   POST   /api/admin/ip-block   { ip }  — block
- *   DELETE /api/admin/ip-block   { ip }  — unblock
+ *   GET    /api/admin/ip-block           â€” list blocked ips
+ *   POST   /api/admin/ip-block   { ip }  â€” block
+ *   DELETE /api/admin/ip-block   { ip }  â€” unblock
  */
 import "server-only";
 import { NextResponse } from "next/server";
 import { withSecurity } from "../../_lib/withSecurity";
-import { adminDb, FieldValue } from "../../_lib/admin";
 import { blockIp, unblockIp, listBlockedIps } from "../../_lib/ipBlock";
 import { LIMITS } from "../../_lib/rateLimit";
 
@@ -24,12 +23,6 @@ export const POST = withSecurity(
     const { ip, reason } = (await req.json()) as { ip?: string; reason?: string };
     if (!ip || !IP_RE.test(ip)) return NextResponse.json({ error: "bad ip" }, { status: 400 });
     await blockIp(ip, reason);
-    await adminDb.collection("ip_blocks").doc(ip).set({
-      ip,
-      reason: (reason ?? "").slice(0, 500),
-      blocked_by: ctx.uid,
-      blocked_at: FieldValue.serverTimestamp(),
-    });
     return NextResponse.json({ ok: true });
   },
 );
@@ -40,7 +33,6 @@ export const DELETE = withSecurity(
     const { ip } = (await req.json()) as { ip?: string };
     if (!ip || !IP_RE.test(ip)) return NextResponse.json({ error: "bad ip" }, { status: 400 });
     await unblockIp(ip);
-    await adminDb.collection("ip_blocks").doc(ip).delete().catch(() => undefined);
     return NextResponse.json({ ok: true });
   },
 );

@@ -1,0 +1,302 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2580" viewBox="0 0 1400 2580">
+  <defs>
+    <radialGradient id="pageBg" cx="50%" cy="0%" r="84%">
+      <stop offset="0%" stop-color="#153d29"/>
+      <stop offset="44%" stop-color="#07100d"/>
+      <stop offset="100%" stop-color="#020403"/>
+    </radialGradient>
+    <linearGradient id="phoneBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#09140f"/>
+      <stop offset="52%" stop-color="#050b08"/>
+      <stop offset="100%" stop-color="#020403"/>
+    </linearGradient>
+    <radialGradient id="cardGlow" cx="50%" cy="0%" r="86%">
+      <stop offset="0%" stop-color="#4ade80" stop-opacity="0.16"/>
+      <stop offset="40%" stop-color="#38bdf8" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.045"/>
+      <stop offset="100%" stop-color="#4ade80" stop-opacity="0.055"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="edgeLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4ade80" stop-opacity="0"/>
+      <stop offset="48%" stop-color="#4ade80" stop-opacity="0.9"/>
+      <stop offset="72%" stop-color="#38bdf8" stop-opacity="0.48"/>
+      <stop offset="100%" stop-color="#4ade80" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="26" stdDeviation="22" flood-color="#000" flood-opacity="0.52"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="16" flood-color="#4ade80" flood-opacity="0.07"/>
+    </filter>
+    <filter id="dotGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#4ade80" flood-opacity="0.62"/>
+    </filter>
+    <style>
+      .pageTitle { fill:#f8fafc; font:900 34px Inter,Arial,sans-serif; }
+      .pageSub { fill:#9fb3a8; font:650 17px Inter,Arial,sans-serif; }
+      .phone { fill:#020403; stroke:#102118; stroke-width:2; filter:url(#shadow); }
+      .screen { fill:url(#phoneBg); }
+      .card { fill:#06100c; stroke:rgba(255,255,255,0.08); stroke-width:1; }
+      .topLabel { fill:#a7f3d0; font:900 10px Inter,Arial,sans-serif; letter-spacing:2px; }
+      .name { fill:#f8fafc; font:850 15px Inter,Arial,sans-serif; }
+      .handle { fill:#8fa99b; font:650 11px Inter,Arial,sans-serif; }
+      .questionLabel { fill:#86efac; font:900 10px Inter,Arial,sans-serif; letter-spacing:1.5px; }
+      .question { fill:#fff; font:850 19px Inter,Arial,sans-serif; }
+      .answer { fill:#f2fff7; font:800 17px Inter,Arial,sans-serif; }
+      .muted { fill:#94a3b8; font:650 12px Inter,Arial,sans-serif; }
+      .caption { fill:#d9fbe7; font:850 17px Inter,Arial,sans-serif; }
+      .small { fill:#9fb3a8; font:650 12px Inter,Arial,sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="2580" fill="url(#pageBg)"/>
+  <text x="70" y="78" class="pageTitle">Truth Card Full Screen Top Variations</text>
+  <text x="70" y="112" class="pageSub">Default message-style body kept consistent. Only the top section changes.</text>
+
+  <!-- Reusable body: manually repeated with each top for clarity -->
+
+  <!-- 1 -->
+  <g transform="translate(70 160)">
+    <rect class="phone" width="390" height="760" rx="46"/>
+    <clipPath id="clip1"><rect x="12" y="12" width="366" height="736" rx="36"/></clipPath>
+    <g clip-path="url(#clip1)">
+      <rect x="12" y="12" width="366" height="736" class="screen"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" class="card"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" fill="url(#cardGlow)"/>
+      <rect x="54" y="28" width="282" height="2" fill="url(#edgeLine)"/>
+      <rect x="46" y="54" width="298" height="74" rx="24" fill="url(#glass)" stroke="rgba(255,255,255,0.14)"/>
+      <circle cx="82" cy="91" r="24" fill="#4ade80"/>
+      <text x="116" y="88" class="name">Maya asked Jay</text>
+      <text x="116" y="108" class="handle">@maya -> @jay</text>
+      <rect x="254" y="73" width="66" height="34" rx="17" fill="url(#green)"/>
+      <text x="272" y="95" fill="#061006" font-family="Inter,Arial" font-size="11" font-weight="950">LIVE</text>
+      <g transform="translate(46 158)">
+        <line x1="0" y1="0" x2="94" y2="0" stroke="#4ade80" stroke-opacity="0.25"/>
+        <text x="109" y="4" class="topLabel">TRUTH OR LIE</text>
+        <line x1="214" y1="0" x2="298" y2="0" stroke="#38bdf8" stroke-opacity="0.22"/>
+      </g>
+      <g transform="translate(72 198)">
+        <circle cx="24" cy="24" r="24" fill="#4ade80"/>
+        <circle cx="150" cy="24" r="24" fill="#17221c" stroke="#fff" stroke-opacity="0.14"/>
+        <text x="8" y="64" class="small">Maya</text>
+        <rect x="66" y="10" width="72" height="28" rx="14" fill="rgba(74,222,128,0.14)" stroke="rgba(74,222,128,0.28)"/>
+        <text x="84" y="29" fill="#4ade80" font-family="Inter,Arial" font-size="11" font-weight="900">asked</text>
+        <text x="136" y="64" class="small">Jay</text>
+      </g>
+      <g transform="translate(48 304)">
+        <rect width="282" height="132" rx="24" fill="rgba(16,29,22,0.92)" stroke="rgba(255,255,255,0.09)"/>
+        <text x="18" y="30" class="questionLabel">QUESTION</text>
+        <text x="18" y="68" class="question">Would Jay tell the truth</text>
+        <text x="18" y="98" class="question">if it could hurt Maya?</text>
+      </g>
+      <g transform="translate(86 458)">
+        <rect width="244" height="104" rx="24" fill="rgba(74,222,128,0.10)" stroke="rgba(74,222,128,0.22)"/>
+        <text x="18" y="32" class="questionLabel">ANSWER</text>
+        <text x="18" y="68" class="answer">Jay says he would try,</text>
+        <text x="18" y="92" class="answer">but he is not sure.</text>
+      </g>
+      <rect x="48" y="626" width="136" height="54" rx="18" fill="url(#green)" filter="url(#dotGlow)"/>
+      <text x="91" y="660" fill="#061006" font-family="Inter,Arial" font-size="17" font-weight="950">Truth</text>
+      <rect x="202" y="626" width="140" height="54" rx="18" fill="rgba(255,255,255,0.09)" stroke="rgba(255,255,255,0.16)"/>
+      <text x="260" y="660" fill="#e2e8f0" font-family="Inter,Arial" font-size="17" font-weight="850">Lie</text>
+    </g>
+    <text x="0" y="804" class="caption">1. Clean Glass Header</text>
+    <text x="0" y="830" class="small">Best default: readable, app-native, low risk.</text>
+  </g>
+
+  <!-- 2 -->
+  <g transform="translate(505 160)">
+    <rect class="phone" width="390" height="760" rx="46"/>
+    <clipPath id="clip2"><rect x="12" y="12" width="366" height="736" rx="36"/></clipPath>
+    <g clip-path="url(#clip2)">
+      <rect x="12" y="12" width="366" height="736" class="screen"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" class="card"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" fill="url(#cardGlow)"/>
+      <path d="M48 68 C118 42 184 42 254 68 C292 82 316 82 344 72 L344 146 C250 169 168 150 98 134 C78 130 62 134 48 142 Z" fill="rgba(74,222,128,0.10)" stroke="rgba(255,255,255,0.11)"/>
+      <circle cx="90" cy="98" r="30" fill="#4ade80"/>
+      <circle cx="142" cy="98" r="30" fill="#10231c" stroke="#38bdf8" stroke-opacity="0.3"/>
+      <text x="190" y="94" class="name">Ava asked Jay</text>
+      <text x="190" y="116" class="handle">truth prompt</text>
+      <g transform="translate(52 178)">
+        <rect width="286" height="38" rx="19" fill="rgba(5,12,9,0.76)" stroke="rgba(74,222,128,0.18)"/>
+        <text x="84" y="25" class="topLabel">CONFESSION CHECK</text>
+      </g>
+      <g transform="translate(48 304)">
+        <rect width="282" height="132" rx="24" fill="rgba(16,29,22,0.92)" stroke="rgba(255,255,255,0.09)"/>
+        <text x="18" y="30" class="questionLabel">QUESTION</text>
+        <text x="18" y="68" class="question">Would Jay tell the truth</text>
+        <text x="18" y="98" class="question">if it could hurt Ava?</text>
+      </g>
+      <g transform="translate(86 458)">
+        <rect width="244" height="104" rx="24" fill="rgba(74,222,128,0.10)" stroke="rgba(74,222,128,0.22)"/>
+        <text x="18" y="32" class="questionLabel">ANSWER</text>
+        <text x="18" y="68" class="answer">Jay says he would try,</text>
+        <text x="18" y="92" class="answer">but he is not sure.</text>
+      </g>
+      <rect x="48" y="626" width="136" height="54" rx="18" fill="url(#green)"/>
+      <text x="91" y="660" fill="#061006" font-family="Inter,Arial" font-size="17" font-weight="950">Truth</text>
+      <rect x="202" y="626" width="140" height="54" rx="18" fill="rgba(255,255,255,0.09)" stroke="rgba(255,255,255,0.16)"/>
+      <text x="260" y="660" fill="#e2e8f0" font-family="Inter,Arial" font-size="17" font-weight="850">Lie</text>
+    </g>
+    <text x="0" y="804" class="caption">2. Wave Pair Header</text>
+    <text x="0" y="830" class="small">More social, relationship-led, less compact.</text>
+  </g>
+
+  <!-- 3 -->
+  <g transform="translate(940 160)">
+    <rect class="phone" width="390" height="760" rx="46"/>
+    <clipPath id="clip3"><rect x="12" y="12" width="366" height="736" rx="36"/></clipPath>
+    <g clip-path="url(#clip3)">
+      <rect x="12" y="12" width="366" height="736" class="screen"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" class="card"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" fill="url(#cardGlow)"/>
+      <rect x="48" y="56" width="294" height="56" rx="28" fill="rgba(255,255,255,0.045)" stroke="rgba(255,255,255,0.12)"/>
+      <rect x="62" y="69" width="80" height="30" rx="15" fill="url(#green)"/>
+      <text x="86" y="90" fill="#061006" font-family="Inter,Arial" font-size="12" font-weight="950">LIVE</text>
+      <text x="160" y="90" class="small">close friends truth</text>
+      <circle cx="312" cy="84" r="7" fill="#4ade80" filter="url(#dotGlow)"/>
+      <rect x="58" y="144" width="274" height="94" rx="28" fill="rgba(8,16,12,0.78)" stroke="rgba(74,222,128,0.18)"/>
+      <circle cx="102" cy="191" r="28" fill="#4ade80"/>
+      <text x="146" y="185" class="name">Nikhil</text>
+      <text x="146" y="207" class="handle">sent a prompt</text>
+      <g transform="translate(48 304)">
+        <rect width="282" height="132" rx="24" fill="rgba(16,29,22,0.92)" stroke="rgba(255,255,255,0.09)"/>
+        <text x="18" y="30" class="questionLabel">QUESTION</text>
+        <text x="18" y="68" class="question">Would Nikhil tell the truth</text>
+        <text x="18" y="98" class="question">if it could hurt Riya?</text>
+      </g>
+      <g transform="translate(86 458)">
+        <rect width="244" height="104" rx="24" fill="rgba(74,222,128,0.10)" stroke="rgba(74,222,128,0.22)"/>
+        <text x="18" y="32" class="questionLabel">ANSWER</text>
+        <text x="18" y="68" class="answer">Nikhil says he would try,</text>
+        <text x="18" y="92" class="answer">but he is not sure.</text>
+      </g>
+      <rect x="48" y="626" width="136" height="54" rx="18" fill="url(#green)"/>
+      <text x="91" y="660" fill="#061006" font-family="Inter,Arial" font-size="17" font-weight="950">Truth</text>
+      <rect x="202" y="626" width="140" height="54" rx="18" fill="rgba(255,255,255,0.09)" stroke="rgba(255,255,255,0.16)"/>
+      <text x="260" y="660" fill="#e2e8f0" font-family="Inter,Arial" font-size="17" font-weight="850">Lie</text>
+    </g>
+    <text x="0" y="804" class="caption">3. Live Status Header</text>
+    <text x="0" y="830" class="small">Fast scan, strong social-app feel.</text>
+  </g>
+
+  <!-- 4 -->
+  <g transform="translate(70 1060)">
+    <rect class="phone" width="390" height="760" rx="46"/>
+    <clipPath id="clip4"><rect x="12" y="12" width="366" height="736" rx="36"/></clipPath>
+    <g clip-path="url(#clip4)">
+      <rect x="12" y="12" width="366" height="736" class="screen"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" class="card"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" fill="url(#cardGlow)"/>
+      <rect x="50" y="50" width="290" height="172" rx="30" fill="rgba(4,10,8,0.72)" stroke="rgba(255,255,255,0.12)"/>
+      <line x1="78" y1="103" x2="158" y2="103" stroke="#4ade80" stroke-opacity="0.58"/>
+      <line x1="232" y1="103" x2="312" y2="103" stroke="#38bdf8" stroke-opacity="0.4"/>
+      <circle cx="195" cy="103" r="42" fill="#07130f" stroke="rgba(255,255,255,0.15)"/>
+      <circle cx="195" cy="103" r="31" fill="#4ade80"/>
+      <text x="126" y="174" class="name">Sana</text>
+      <text x="226" y="174" class="name">Riya</text>
+      <text x="118" y="202" class="topLabel">TRUTH BETWEEN US</text>
+      <g transform="translate(48 304)">
+        <rect width="282" height="132" rx="24" fill="rgba(16,29,22,0.92)" stroke="rgba(255,255,255,0.09)"/>
+        <text x="18" y="30" class="questionLabel">QUESTION</text>
+        <text x="18" y="68" class="question">Would Riya tell the truth</text>
+        <text x="18" y="98" class="question">if it could hurt Sana?</text>
+      </g>
+      <g transform="translate(86 458)">
+        <rect width="244" height="104" rx="24" fill="rgba(74,222,128,0.10)" stroke="rgba(74,222,128,0.22)"/>
+        <text x="18" y="32" class="questionLabel">ANSWER</text>
+        <text x="18" y="68" class="answer">Riya says she would try,</text>
+        <text x="18" y="92" class="answer">but she is not sure.</text>
+      </g>
+      <rect x="48" y="626" width="136" height="54" rx="18" fill="url(#green)"/>
+      <text x="91" y="660" fill="#061006" font-family="Inter,Arial" font-size="17" font-weight="950">Truth</text>
+      <rect x="202" y="626" width="140" height="54" rx="18" fill="rgba(255,255,255,0.09)" stroke="rgba(255,255,255,0.16)"/>
+      <text x="260" y="660" fill="#e2e8f0" font-family="Inter,Arial" font-size="17" font-weight="850">Lie</text>
+    </g>
+    <text x="0" y="804" class="caption">4. Center Medallion Header</text>
+    <text x="0" y="830" class="small">Premium, dramatic, best for special prompts.</text>
+  </g>
+
+  <!-- 5 -->
+  <g transform="translate(505 1060)">
+    <rect class="phone" width="390" height="760" rx="46"/>
+    <clipPath id="clip5"><rect x="12" y="12" width="366" height="736" rx="36"/></clipPath>
+    <g clip-path="url(#clip5)">
+      <rect x="12" y="12" width="366" height="736" class="screen"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" class="card"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" fill="url(#cardGlow)"/>
+      <rect x="44" y="54" width="302" height="94" rx="26" fill="rgba(255,255,255,0.045)" stroke="rgba(255,255,255,0.13)"/>
+      <text x="68" y="88" class="topLabel">TRUTH CARD</text>
+      <text x="68" y="118" class="small">anonymous-feeling prompt</text>
+      <rect x="246" y="80" width="74" height="34" rx="17" fill="#07120e" stroke="rgba(74,222,128,0.36)"/>
+      <text x="265" y="102" fill="#86efac" font-family="Inter,Arial" font-size="11" font-weight="950">PRIVATE</text>
+      <rect x="54" y="176" width="282" height="62" rx="22" fill="rgba(7,14,11,0.7)" stroke="rgba(255,255,255,0.09)"/>
+      <text x="78" y="213" class="handle">A quiet prompt before the message body.</text>
+      <g transform="translate(48 304)">
+        <rect width="282" height="132" rx="24" fill="rgba(16,29,22,0.92)" stroke="rgba(255,255,255,0.09)"/>
+        <text x="18" y="30" class="questionLabel">QUESTION</text>
+        <text x="18" y="68" class="question">Would Jay tell the truth</text>
+        <text x="18" y="98" class="question">if it could hurt Maya?</text>
+      </g>
+      <g transform="translate(86 458)">
+        <rect width="244" height="104" rx="24" fill="rgba(74,222,128,0.10)" stroke="rgba(74,222,128,0.22)"/>
+        <text x="18" y="32" class="questionLabel">ANSWER</text>
+        <text x="18" y="68" class="answer">Jay says he would try,</text>
+        <text x="18" y="92" class="answer">but he is not sure.</text>
+      </g>
+      <rect x="48" y="626" width="136" height="54" rx="18" fill="url(#green)"/>
+      <text x="91" y="660" fill="#061006" font-family="Inter,Arial" font-size="17" font-weight="950">Truth</text>
+      <rect x="202" y="626" width="140" height="54" rx="18" fill="rgba(255,255,255,0.09)" stroke="rgba(255,255,255,0.16)"/>
+      <text x="260" y="660" fill="#e2e8f0" font-family="Inter,Arial" font-size="17" font-weight="850">Lie</text>
+    </g>
+    <text x="0" y="804" class="caption">5. Anonymous Glass Header</text>
+    <text x="0" y="830" class="small">Text-first, calm, less personality.</text>
+  </g>
+
+  <!-- 6 -->
+  <g transform="translate(940 1060)">
+    <rect class="phone" width="390" height="760" rx="46"/>
+    <clipPath id="clip6"><rect x="12" y="12" width="366" height="736" rx="36"/></clipPath>
+    <g clip-path="url(#clip6)">
+      <rect x="12" y="12" width="366" height="736" class="screen"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" class="card"/>
+      <rect x="24" y="26" width="342" height="708" rx="30" fill="url(#cardGlow)"/>
+      <circle cx="88" cy="86" r="38" fill="#07120d" stroke="rgba(74,222,128,0.28)"/>
+      <circle cx="88" cy="86" r="29" fill="#4ade80"/>
+      <rect x="144" y="54" width="164" height="32" rx="16" fill="#0b1711" stroke="rgba(255,255,255,0.10)"/>
+      <text x="162" y="75" class="small">Maya asked Jay</text>
+      <rect x="144" y="96" width="106" height="34" rx="17" fill="url(#green)"/>
+      <text x="169" y="118" fill="#061006" font-family="Inter,Arial" font-size="12" font-weight="950">ANSWER</text>
+      <rect x="48" y="168" width="294" height="56" rx="22" fill="rgba(7,16,12,0.8)" stroke="rgba(74,222,128,0.18)"/>
+      <line x1="72" y1="190" x2="318" y2="190" stroke="url(#edgeLine)" stroke-width="2"/>
+      <text x="72" y="211" class="topLabel">TRUTH OR LIE</text>
+      <g transform="translate(48 304)">
+        <rect width="282" height="132" rx="24" fill="rgba(16,29,22,0.92)" stroke="rgba(255,255,255,0.09)"/>
+        <text x="18" y="30" class="questionLabel">QUESTION</text>
+        <text x="18" y="68" class="question">Would Jay tell the truth</text>
+        <text x="18" y="98" class="question">if it could hurt Maya?</text>
+      </g>
+      <g transform="translate(86 458)">
+        <rect width="244" height="104" rx="24" fill="rgba(74,222,128,0.10)" stroke="rgba(74,222,128,0.22)"/>
+        <text x="18" y="32" class="questionLabel">ANSWER</text>
+        <text x="18" y="68" class="answer">Jay says he would try,</text>
+        <text x="18" y="92" class="answer">but he is not sure.</text>
+      </g>
+      <rect x="48" y="626" width="136" height="54" rx="18" fill="url(#green)"/>
+      <text x="91" y="660" fill="#061006" font-family="Inter,Arial" font-size="17" font-weight="950">Truth</text>
+      <rect x="202" y="626" width="140" height="54" rx="18" fill="rgba(255,255,255,0.09)" stroke="rgba(255,255,255,0.16)"/>
+      <text x="260" y="660" fill="#e2e8f0" font-family="Inter,Arial" font-size="17" font-weight="850">Lie</text>
+    </g>
+    <text x="0" y="804" class="caption">6. Action Header</text>
+    <text x="0" y="830" class="small">Most compact. Gives body more breathing room.</text>
+  </g>
+
+  <text x="70" y="1990" fill="#f8fafc" font-family="Inter,Arial" font-size="26" font-weight="900">Best Direction</text>
+  <text x="70" y="2030" fill="#9fb3a8" font-family="Inter,Arial" font-size="18" font-weight="650">Feed framing should always say who asked who. Variation 1 is safest; variation 6 is best if the body needs more room.</text>
+</svg>

@@ -1,21 +1,28 @@
 import { create } from "zustand";
-import { subscribeWithSelector } from "zustand/middleware";
 import { messagingService } from "@/middleware/services/messaging.service";
-import { surveillanceService } from "@/middleware/services/service-factory";
 import { useAuthStore } from "./useAuthStore-v2";
-import {
-  presenceService,
-  Presence,
-} from "@/middleware/services/presence.service";
-import { ghostModeService } from "@/middleware/services/ghost-mode.service";
 import type {
-  Conversation,
   Message,
   MessageEvent,
+  MessageWithSender,
 } from "@/middleware/services/messaging.service";
 import { getCachedResolvedUserProfile } from "@/utils/profileResolver";
 
 const MESSAGING_STORE_DEBUG = false;
+const LIVE_STORE_DEBUG = true;
+const REDUNDANT_STORE_LOGS = false;
+
+function redundantStoreLog(...args: unknown[]) {
+  if (REDUNDANT_STORE_LOGS) console.info(...args);
+}
+
+function liveStoreDebug(label: string, details: Record<string, unknown> = {}) {
+  if (!LIVE_STORE_DEBUG) return;
+  console.info(`[DARE_LIVE_DEBUG][store] ${label}`, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
 
 // Re-export MessageEvent for components
 export { MessageEvent };
@@ -53,8 +60,10 @@ interface ConversationWithUser {
   is_typing: boolean;
   typing_speed?: string;
   cleared_at?: string | null;
-  created_at: string;
-  updated_at: string;
+  last_seen_by_user?: Record<string, unknown>;
+  last_seen_message_id_by_user?: Record<string, string>;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // Track when messages are seen for ignored message logic
@@ -69,10 +78,16 @@ interface SeenMessage {
 // Track which messages have already triggered ignored events to prevent spam
 const ignoredMessages = new Set<string>();
 const ignoredConversations = new Set<string>();
+let inboxCursor: { updatedAt: string; id: string } | null = null;
 const ignoredTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const IGNORED_MESSAGE_DELAY_MS = 30 * 60 * 1000;
+const CHAT_LIST_LIVE_ROW_LIMIT = 30;
+const LIVE_MESSAGE_PAGE_SIZE = 25;
+const OLDER_MESSAGE_PAGE_SIZE = 50;
+const LIVE_MESSAGE_EVENT_LIMIT = 20;
 let conversationPresenceTargetKey = "";
 let conversationTypingTargetKey = "";
+let realtimeConversationUserId = "";
 
 export interface CreateMessageRequest {
   conversation_id: string;
@@ -88,7 +103,7 @@ export interface TypingUser {
   is_typing: boolean;
   speed?: string;
   started_at: string;
-  source?: "local" | "rtdb" | "presence";
+  source?: "local" | "broadcast" | "presence";
 }
 
 export interface DareRequest {
@@ -149,6 +164,7 @@ export interface MessagingStore {
 
   // Actions
   loadConversations: (userId: string) => Promise<void>;
+  loadMoreConversations: (userId: string) => Promise<void>;
   getOrCreateConversation: (
     userId1: string,
     userId2: string,
@@ -165,27 +181,6 @@ export interface MessagingStore {
   setCurrentConversation: (conversation: ConversationWithUser | null) => void;
   clearError: () => void;
 
-  // Event tracking methods
-  trackScreenshot: (
-    conversationId: string,
-    messageId?: string,
-  ) => Promise<void>;
-  trackChatSwitch: (
-    conversationId: string,
-    targetUserName: string,
-    targetUserId: string,
-    recipientUserId?: string,
-  ) => Promise<void>;
-  trackOpenedNoReply: (conversationId: string) => Promise<void>;
-  trackLongUnsent: (conversationId: string, content: string) => Promise<void>;
-  trackMention: (
-    conversationId: string,
-    mentionedUsername: string,
-  ) => Promise<void>;
-  trackIgnoredMessage: (
-    conversationId: string,
-    targetUserName: string,
-  ) => Promise<void>;
   trackSeenMessage: (
     messageId: string,
     conversationId: string,
@@ -202,11 +197,6 @@ export interface MessagingStore {
 
   // Legacy methods (keep for compatibility)
   trackScreenshotLegacy: (messageId: string, userId: string) => Promise<void>;
-  trackAlmostSent: (
-    conversationId: string,
-    userId: string,
-    content: string,
-  ) => Promise<void>;
   startTyping: (
     conversationId: string,
     userId: string,
@@ -241,7 +231,7 @@ export interface MessagingStore {
     mediaUrl?: string,
     mediaType?: "TEXT" | "PHOTO" | "VIDEO",
     replyTo?: Message["reply_to"],
-  ) => Promise<void>;
+  ) => Promise<MessageWithSender>;
   markMessageAsSeen: (messageId: string) => Promise<void>;
   setTypingIndicator: (
     conversationId: string,
@@ -257,15 +247,15 @@ export interface MessagingStore {
   unsubscribeFromTypingIndicators: () => void;
 
   // Freeze chat
-  freezeChat: (conversationId: string) => void;
-  unfreezeChat: (conversationId: string) => void;
+  freezeChat: (conversationId: string) => Promise<boolean>;
+  unfreezeChat: (conversationId: string) => Promise<boolean>;
   subscribeToFreezeStatus: (conversationId: string) => void;
   unsubscribeFromFreezeStatus: () => void;
 
   // Live draft text (letter-by-letter preview)
   setDraftText: (conversationId: string, text: string) => void;
   clearDraftText: (conversationId: string) => void;
-  subscribeToDraftText: (conversationId: string) => void;
+  subscribeToDraftText: (conversationId: string, friendUserId: string) => void;
   unsubscribeFromDraftText: () => void;
 
   // Clear chat
@@ -279,8 +269,7 @@ function normalizeMessage(msg: any, currentUserId: string): ExtendedMessage {
   // Support both shapes:
   //   • real-time: { sender: { user_id, display_name, avatar_url }, ... }
   //   • optimistic / already-normalized: { senderId, senderName, ... }
-  const senderId: string = msg.sender?.user_id ?? msg.senderId ?? "";
-
+  const senderProfile = msg.sender || msg.sender_profile || {};
   return {
     id: msg.id,
     sender_id: msg.sender_id,
@@ -295,8 +284,11 @@ function normalizeMessage(msg: any, currentUserId: string): ExtendedMessage {
     // Legacy properties for compatibility
     senderId: msg.sender_id,
     senderName:
-      msg.senderName || msg.sender?.display_name || msg.sender?.username || "",
-    senderAvatar: msg.senderAvatar || msg.sender?.avatar_url || "",
+      msg.senderName ||
+      senderProfile.display_name ||
+      senderProfile.username ||
+      "",
+    senderAvatar: msg.senderAvatar || senderProfile.avatar_url || "",
     timestamp: msg.created_at,
     isOwn: msg.sender_id === currentUserId,
     mediaUrl: msg.media_url,
@@ -324,6 +316,46 @@ function filterItemsAfterClearedAt<T>(
   const clearedAtMs = toMillis(clearedAt);
   if (!clearedAtMs) return items;
   return items.filter((item) => toMillis(getCreatedAt(item)) > clearedAtMs);
+}
+
+function applyConversationReadReceipts(
+  messages: ExtendedMessage[],
+  conversation: any,
+  currentUserId: string,
+): ExtendedMessage[] {
+  if (!conversation || !currentUserId) return messages;
+
+  const lastSeenByUser = conversation.last_seen_by_user || {};
+  const lastSeenMessageIds = conversation.last_seen_message_id_by_user || {};
+  const otherUserId =
+    conversation.other_user?.user_id || conversation.other_user?.id || "";
+  const currentUserSeenAt = toMillis(lastSeenByUser[currentUserId]);
+  const otherUserSeenAt = otherUserId ? toMillis(lastSeenByUser[otherUserId]) : 0;
+  const currentUserLastSeenMessageId = lastSeenMessageIds[currentUserId];
+  const otherUserLastSeenMessageId = otherUserId
+    ? lastSeenMessageIds[otherUserId]
+    : undefined;
+
+  return messages.map((message) => {
+    const messageTime = toMillis(message.created_at ?? message.timestamp);
+    const senderId = message.senderId || message.sender_id;
+    const ownMessage = senderId === currentUserId;
+    const seenByCurrentUser =
+      !ownMessage &&
+      (message.id === currentUserLastSeenMessageId ||
+        (!!currentUserSeenAt && !!messageTime && messageTime <= currentUserSeenAt));
+    const seenByOtherUser =
+      ownMessage &&
+      (message.id === otherUserLastSeenMessageId ||
+        (!!otherUserSeenAt && !!messageTime && messageTime <= otherUserSeenAt));
+
+    if (!seenByCurrentUser && !seenByOtherUser) return message;
+    return {
+      ...message,
+      is_seen: message.is_seen || seenByCurrentUser || seenByOtherUser,
+      is_delivered: true,
+    };
+  });
 }
 
 export const useMessagingStore = create<MessagingStore>((set, get) => ({
@@ -376,8 +408,9 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
   loadConversations: async (userId: string) => {
     set({ loading: true, error: null });
     try {
-      const conversations =
-        await messagingService.getConversationsForUser(userId);
+      const firstPage = await messagingService.getConversationsPage(userId, 30);
+      const conversations = firstPage.items;
+      inboxCursor = firstPage.nextCursor;
 
       // Remove duplicates based on other_user.user_id
       const uniqueConversations = conversations.filter(
@@ -430,6 +463,8 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
             conv.last_message?.content || conv.last_message_content || "",
           last_message_at:
             conv.last_message?.created_at || conv.last_message_at || "",
+          last_seen_by_user: conv.last_seen_by_user || {},
+          last_seen_message_id_by_user: conv.last_seen_message_id_by_user || {},
           unread_count: conv.unread_count || 0,
           is_online: onlineFriends.includes(otherUserId),
           is_typing: isTyping || existing?.is_typing || conv.is_typing || false,
@@ -446,6 +481,16 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         error instanceof Error ? error.message : "Failed to load conversations";
       set({ loading: false, error: errorMessage });
     }
+  },
+
+  loadMoreConversations: async (userId: string) => {
+    // Pagination state is kept privately so existing consumers remain source-compatible.
+    const page = await messagingService.getConversationsPage(userId, 30, inboxCursor);
+    if (!page.items.length) return;
+    const existing = new Map(get().conversations.map((item: any) => [item.id, item]));
+    page.items.forEach((item) => existing.set(item.id, item));
+    set({ conversations: [...existing.values()].sort((a: any, b: any) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))) } as Partial<MessagingStore>);
+    inboxCursor = page.nextCursor;
   },
 
   getOrCreateConversation: async (userId1: string, userId2: string) => {
@@ -471,10 +516,14 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           : get().conversations.find(
               (conversation) => conversation.id === conversationId,
             );
-      const transformedMessages = filterItemsAfterClearedAt(
+      const transformedMessages = applyConversationReadReceipts(
+        filterItemsAfterClearedAt(
         messages.map((msg: any) => normalizeMessage(msg, userId)),
         activeConversation?.cleared_at,
         (message) => message.created_at,
+        ),
+        activeConversation,
+        userId,
       );
       set({ messages: transformedMessages, loadingMessages: false });
     } catch (error) {
@@ -503,7 +552,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     }
   },
 
-  markMessagesAsSeen: async (conversationId: string, _userId: string) => {
+  markMessagesAsSeen: async (conversationId: string) => {
     try {
       set((state) => ({
         messages: state.messages.map((msg) =>
@@ -526,7 +575,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     acceptOrResponse: boolean | string,
   ) => {
     try {
-      console.log(
+      redundantStoreLog(
         `Random chat dare response: ${acceptOrResponse} — ${conversationIdOrUserId} / ${userIdOrDareId}`,
       );
     } catch (error) {
@@ -534,15 +583,12 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     }
   },
 
-  subscribeToConversation: (
-    conversationId: string,
-    _callback: (payload: any) => void,
-  ) => {
-    console.log(`Subscribed to conversation ${conversationId}`);
+  subscribeToConversation: (conversationId: string) => {
+    redundantStoreLog(`Subscribed to conversation ${conversationId}`);
   },
 
   unsubscribeFromConversation: (conversationId: string) => {
-    console.log(`Unsubscribed from conversation ${conversationId}`);
+    redundantStoreLog(`Unsubscribed from conversation ${conversationId}`);
   },
 
   clearCurrentConversation: () => {
@@ -557,7 +603,13 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
 
       return {
         currentConversation: conversation,
-        messages: conversationChanged ? [] : state.messages,
+        messages: conversationChanged
+          ? []
+          : filterItemsAfterClearedAt(
+              state.messages,
+              conversation?.cleared_at,
+              (message) => message.created_at,
+            ),
         events: conversationChanged ? [] : state.events,
         messageEvents: conversationChanged ? [] : state.messageEvents,
         loadingMessages: conversationChanged && !!conversation,
@@ -571,106 +623,11 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     set({ error: null });
   },
 
-  // Event tracking methods
-  trackScreenshot: async (conversationId: string, messageId?: string) => {
-    try {
-      const { user } = useAuthStore.getState();
-      if (!user?.id) return;
-
-      await messagingService.trackScreenshot(
-        conversationId,
-        user.id,
-        messageId,
-      );
-    } catch (error) {
-      console.error("Error tracking screenshot:", error);
-    }
-  },
-
-  trackChatSwitch: async (
-    conversationId: string,
-    targetUserName: string,
-    targetUserId: string,
-    recipientUserId?: string,
-  ) => {
-    try {
-      const { user } = useAuthStore.getState();
-      if (!user?.id) return;
-      if (await ghostModeService.shouldSuppressAlerts(user.id)) return;
-
-      await messagingService.trackChatSwitch(
-        conversationId,
-        user.id,
-        targetUserName,
-        targetUserId,
-        recipientUserId,
-      );
-    } catch (error) {
-      console.error("Error tracking chat switch:", error);
-    }
-  },
-
-  trackOpenedNoReply: async (conversationId: string) => {
-    try {
-      const { user } = useAuthStore.getState();
-      if (!user?.id) return;
-      if (await ghostModeService.shouldSuppressAlerts(user.id)) return;
-
-      await messagingService.trackOpenedNoReply(conversationId, user.id);
-    } catch (error) {
-      console.error("Error tracking opened no reply:", error);
-    }
-  },
-
-  trackLongUnsent: async (conversationId: string, content: string) => {
-    try {
-      const { user } = useAuthStore.getState();
-      if (!user?.id) return;
-      if (await ghostModeService.shouldSuppressAlerts(user.id)) return;
-
-      await messagingService.trackLongUnsent(conversationId, user.id, content);
-    } catch (error) {
-      console.error("Error tracking long unsent:", error);
-    }
-  },
-
   trackMention: async (conversationId: string, mentionedUsername: string) => {
     try {
-      const { user } = useAuthStore.getState();
-      if (!user?.id) return;
-      if (await ghostModeService.shouldSuppressAlerts(user.id)) return;
+      void conversationId;
+      void mentionedUsername;
 
-      // Write to Firestore — onSnapshot delivers to BOTH users in real time
-      await messagingService.trackMention(
-        conversationId,
-        user.id,
-        mentionedUsername,
-      );
-
-      // Create SUS_MENTION_TALKING alert for the mentioned third-party user
-      const conv = get().currentConversation;
-      const otherUser = conv?.other_user;
-
-      // Resolve the other user's username — try multiple fields
-      const otherUsername =
-        otherUser?.username || otherUser?.display_name || "someone";
-      const otherUserId = otherUser?.user_id || otherUser?.id || "";
-
-      // Always attempt to create the sus alert — the surveillance service
-      // will look up the mentioned user by username in Firestore
-      surveillanceService
-        .trackMentionTalking({
-          mentionedUsername,
-          senderUserId: user.id,
-          senderUsername: user.username || "someone",
-          senderDisplayName: user.displayName || user.username || "Someone",
-          otherUserId,
-          otherUsername,
-          conversationId,
-        })
-        .catch((err) => {
-          console.error("[@mention store] Surveillance error:", err);
-        });
     } catch (error) {
       console.error("[@mention store] Error:", error);
     }
@@ -681,23 +638,14 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     targetUserName: string,
   ) => {
     try {
-      const { user } = useAuthStore.getState();
-      if (!user?.id) return;
-      if (await ghostModeService.shouldSuppressAlerts(user.id)) return;
-      const currentUserName = user.displayName || user.username || "Someone";
-
-      console.log(
-        "[@ignored store] Writing ignored to Firestore:",
+      redundantStoreLog(
+        "[@ignored store] Writing ignored to Postgres:",
         conversationId,
         targetUserName,
       );
-      await messagingService.trackIgnoredMessage(
-        conversationId,
-        user.id,
-        targetUserName,
-        currentUserName,
-      );
-      console.log("[@ignored store] Ignored write complete");
+      void conversationId;
+      void targetUserName;
+      redundantStoreLog("[@ignored store] Ignored write complete");
     } catch (error) {
       console.error("[@ignored store] Error:", error);
     }
@@ -727,7 +675,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
       senderName,
     };
 
-    console.log("[@ignored] Tracking seen message:", seenMessage);
+    redundantStoreLog("[@ignored] Tracking seen message:", seenMessage);
     set({
       seenMessages: [
         ...seenMessages.filter((m) => m.conversationId !== conversationId),
@@ -770,7 +718,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
 
     // Check if we've already triggered an ignored event for this conversation
     if (ignoredConversations.has(conversationId)) {
-      console.log(
+      redundantStoreLog(
         "[@ignored] Already triggered ignored event for conversation:",
         conversationId,
       );
@@ -788,10 +736,9 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     });
 
     if (!hasReply) {
-      console.log("[@ignored] Message ignored, triggering event:", senderName);
+      redundantStoreLog("[@ignored] Message ignored, triggering event:", senderName);
       // Mark this conversation as having triggered an ignored event
       ignoredConversations.add(conversationId);
-      get().trackIgnoredMessage(conversationId, senderName);
 
       // Remove from seenMessages to prevent re-checking
       const updatedSeenMessages = seenMessages.filter(
@@ -858,8 +805,9 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     content: string,
   ) => {
     try {
-      // Map legacy ALMOST_SENT to long_unsent event
-      await messagingService.trackLongUnsent(conversationId, userId, content);
+      void conversationId;
+      void userId;
+      void content;
     } catch (error) {
       console.error("Error tracking almost sent:", error);
     }
@@ -917,7 +865,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     }
   },
 
-  deleteMessage: async (messageId: string, _userId: string) => {
+  deleteMessage: async (messageId: string) => {
     try {
       await messagingService.deleteMessageForEveryone(messageId);
       set((state) => ({
@@ -930,7 +878,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
 
   initiateRandomChatDare: async (userId: string, friendId: string) => {
     try {
-      console.log(`Random chat dare initiated by ${userId} to ${friendId}`);
+      redundantStoreLog(`Random chat dare initiated by ${userId} to ${friendId}`);
     } catch (error) {
       console.error("Error initiating random chat dare:", error);
     }
@@ -954,7 +902,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
       const older = await messagingService.getOlderMessages(
         currentConversation.id,
         oldestCreatedAt,
-        50,
+        OLDER_MESSAGE_PAGE_SIZE,
         isTemporaryParticipant ? currentUserId : undefined,
       );
       if (older.length === 0) {
@@ -962,14 +910,19 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         return;
       }
 
-      const normalized = filterItemsAfterClearedAt(
-        older.map((msg: any) => normalizeMessage(msg, currentUserId)),
-        currentConversation.cleared_at,
-        (message) => message.created_at,
+      const normalized = applyConversationReadReceipts(
+        filterItemsAfterClearedAt(
+          older.map((msg: any) => normalizeMessage(msg, currentUserId)),
+          currentConversation.cleared_at,
+          (message) => message.created_at,
+        ),
+        currentConversation,
+        currentUserId,
       );
       set((state) => ({
         messages: [...normalized, ...state.messages],
-        hasMoreMessages: older.length === 50 && normalized.length > 0,
+        hasMoreMessages:
+          older.length === OLDER_MESSAGE_PAGE_SIZE && normalized.length > 0,
       }));
     } catch (error) {
       console.error("❌ loadOlderMessages:", error);
@@ -980,13 +933,26 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
 
   // REAL-TIME METHODS
   subscribeToRealTimeConversations: (userId: string) => {
-    console.log(
+    redundantStoreLog(
       "🔍 [MessagingStore DEBUG] subscribeToRealTimeConversations called with userId:",
       userId,
     );
 
     // Cancel any existing subscription first so we never have two listeners
-    const existingSub = get().realTimeSubscriptions.get("conversations");
+    const subscriptions = get().realTimeSubscriptions;
+    const userChanged = realtimeConversationUserId !== userId;
+    if (userChanged) {
+      subscriptions.get("conversationOnlineStatus")?.();
+      subscriptions.delete("conversationOnlineStatus");
+      subscriptions.get("conversationTypingStatus")?.();
+      subscriptions.delete("conversationTypingStatus");
+      conversationPresenceTargetKey = "";
+      conversationTypingTargetKey = "";
+      realtimeConversationUserId = userId;
+      set({ onlineFriends: [], typingUsers: [] });
+    }
+
+    const existingSub = subscriptions.get("conversations");
     if (existingSub) existingSub();
 
     const unsubscribe = messagingService.subscribeToConversations(
@@ -1021,27 +987,51 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         });
 
         const activeConversationId = get().currentConversation?.id;
+        const liveConversations = deduped.slice(0, CHAT_LIST_LIVE_ROW_LIMIT);
+        const activeConversationForLiveRows = activeConversationId
+          ? deduped.find(
+              (conversation) => conversation.id === activeConversationId,
+            )
+          : undefined;
+        if (
+          activeConversationForLiveRows &&
+          !liveConversations.some(
+            (conversation) => conversation.id === activeConversationId,
+          )
+        ) {
+          liveConversations.push(activeConversationForLiveRows);
+        }
         const nextCurrentConversation =
           activeConversationId != null
             ? (merged.find(
                 (conversation) => conversation.id === activeConversationId,
               ) ?? get().currentConversation)
             : get().currentConversation;
+        const nextMessages =
+          nextCurrentConversation?.id === activeConversationId
+            ? filterItemsAfterClearedAt(
+                get().messages,
+                nextCurrentConversation?.cleared_at,
+                (message) => message.created_at,
+              )
+            : get().messages;
 
         set({
           conversations: merged,
           currentConversation: nextCurrentConversation,
+          messages: nextMessages,
           loading: false,
         });
 
         const subscriptions = get().realTimeSubscriptions;
-        const participantIds = [
-          ...new Set(
-            deduped
-              .map((c) => c.other_user?.user_id || c.other_user?.id)
-              .filter(Boolean) as string[],
-          ),
-        ].sort();
+        // Presence is only needed for the open chat. Watching every inbox
+        // peer grows channels with inbox size while inactive rows can render
+        // their persisted last-seen state.
+        const activePeerId =
+          activeConversationForLiveRows?.other_user?.user_id ||
+          activeConversationForLiveRows?.other_user?.id ||
+          "";
+        const participantIds = activePeerId ? [activePeerId] : [];
         const participantTargetKey = participantIds.join("|");
 
         if (participantTargetKey !== conversationPresenceTargetKey) {
@@ -1053,7 +1043,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
             set({ onlineFriends: [] });
           } else {
             if (MESSAGING_STORE_DEBUG) {
-              console.log(
+              redundantStoreLog(
                 "🔍 [MessagingStore DEBUG] Setting up presence subscription for participantIds:",
                 participantIds,
               );
@@ -1063,7 +1053,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
                 participantIds,
                 (statuses) => {
                   if (MESSAGING_STORE_DEBUG) {
-                    console.log(
+                    redundantStoreLog(
                       "🔍 [MessagingStore DEBUG] Presence subscription callback received statuses:",
                       statuses,
                     );
@@ -1073,67 +1063,37 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
                     .map((status) => status.userId);
                   const onlineSet = new Set(onlineIds);
                   if (MESSAGING_STORE_DEBUG) {
-                    console.log(
+                    redundantStoreLog(
                       "🔍 [MessagingStore DEBUG] Processed onlineIds:",
                       onlineIds,
                     );
                   }
-                  const presenceTypingUsers = statuses
-                    .filter(
-                      (status) =>
-                        !!status.typingConversationId &&
-                        status.userId !== currentUserId,
-                    )
-                    .map((status) => ({
-                      conversation_id: status.typingConversationId!,
-                      user_id: status.userId,
-                      is_typing: true,
-                      speed: status.typingSpeed,
-                      started_at: new Date().toISOString(),
-                      source: "presence" as const,
-                    }));
                   if (MESSAGING_STORE_DEBUG) {
-                    console.log(
-                      "[MessagingStore DEBUG] Presence-derived indicators:",
+                    redundantStoreLog(
+                      "[MessagingStore DEBUG] Presence online indicators:",
                       {
                         currentUserId,
                         participantIds,
                         onlineIds,
-                        presenceTypingUsers,
                       },
                     );
                   }
                   set((state) => {
-                    const nextTypingUsers = [
-                      ...state.typingUsers.filter(
-                        (typingUser) => typingUser.source !== "presence",
-                      ),
-                      ...presenceTypingUsers,
-                    ];
                     if (MESSAGING_STORE_DEBUG) {
-                      console.log(
+                      redundantStoreLog(
                         "[MessagingStore DEBUG] Applying presence indicators:",
                         {
                           previousOnlineFriends: state.onlineFriends,
-                          previousTypingUsers: state.typingUsers,
                           nextOnlineFriends: onlineIds,
-                          nextTypingUsers,
                         },
                       );
                     }
                     return {
                       onlineFriends: onlineIds,
-                      typingUsers: nextTypingUsers,
                       conversations: state.conversations.map((conv) => ({
                         ...conv,
                         is_online: onlineSet.has(
                           conv.other_user?.user_id || conv.other_user?.id || "",
-                        ),
-                        is_typing: nextTypingUsers.some(
-                          (typingUser) =>
-                            typingUser.conversation_id === conv.id &&
-                            typingUser.user_id !== currentUserId &&
-                            typingUser.is_typing,
                         ),
                       })),
                       currentConversation: state.currentConversation
@@ -1141,15 +1101,8 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
                             ...state.currentConversation,
                             is_online: onlineSet.has(
                               state.currentConversation.other_user?.user_id ||
-                                state.currentConversation.other_user?.id ||
+                              state.currentConversation.other_user?.id ||
                                 "",
-                            ),
-                            is_typing: nextTypingUsers.some(
-                              (typingUser) =>
-                                typingUser.conversation_id ===
-                                  state.currentConversation?.id &&
-                                typingUser.user_id !== currentUserId &&
-                                typingUser.is_typing,
                             ),
                           }
                         : state.currentConversation,
@@ -1161,13 +1114,16 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           }
         }
 
-        const conversationIds = deduped
+        const conversationIds = liveConversations
           .map((conversation) => conversation.id)
           .filter(Boolean)
           .sort();
         const typingTargetKey = conversationIds.join("|");
+        // Keep typing Realtime scoped to the open chat. Subscribing to every
+        // inbox thread grows channel use linearly and duplicates its heartbeat.
+        const subscribeInboxTyping = false;
 
-        if (typingTargetKey !== conversationTypingTargetKey) {
+        if (subscribeInboxTyping && typingTargetKey !== conversationTypingTargetKey) {
           subscriptions.get("conversationTypingStatus")?.();
           subscriptions.delete("conversationTypingStatus");
           conversationTypingTargetKey = typingTargetKey;
@@ -1175,7 +1131,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           if (conversationIds.length === 0 || !currentUserId) {
             set({ typingUsers: [] });
           } else {
-            console.log(
+            redundantStoreLog(
               "🔍 [MessagingStore DEBUG] Setting up typing subscription for conversationIds:",
               conversationIds,
             );
@@ -1184,11 +1140,11 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
                 conversationIds,
                 currentUserId,
                 (typingByConvId) => {
-                  console.log(
+                  redundantStoreLog(
                     "🔍 [MessagingStore DEBUG] Typing subscription callback received typingByConvId:",
                     typingByConvId,
                   );
-                  console.log(
+                  redundantStoreLog(
                     "[MessagingStore DEBUG] Typing subscription callback details:",
                     {
                       currentUserId,
@@ -1204,20 +1160,20 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
                       user_id: typingUserId,
                       is_typing: true,
                       started_at: new Date().toISOString(),
-                      source: "rtdb" as const,
+                      source: "broadcast" as const,
                     })),
                   );
                   set((state) => {
                     const nextTypingUsers = [
                       ...state.typingUsers.filter(
                         (typingUser) =>
-                          typingUser.source !== "rtdb" ||
+                          typingUser.source !== "broadcast" ||
                           !conversationIds.includes(typingUser.conversation_id),
                       ),
                       ...remoteTypingUsers,
                     ];
-                    console.log(
-                      "[MessagingStore DEBUG] Applying RTDB typing users:",
+                    redundantStoreLog(
+                      "[MessagingStore DEBUG] Applying Realtime typing users:",
                       {
                         currentUserId,
                         remoteTypingUsers,
@@ -1258,7 +1214,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
 
         set({ realTimeSubscriptions: subscriptions });
 
-        // ── RTDB: per-participant online status ───────────────────────────
+        // ── Presence: per-participant online status ───────────────────────
         // Covers conversation partners who aren't in the formal friends list.
         /*
         if (participantUnsub) participantUnsub();
@@ -1284,7 +1240,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           },
         );
 
-        // ── RTDB: per-conversation typing channels ────────────────────────
+        // ── Broadcast: per-conversation typing channels ───────────────────
         // Allows the chat list to show live typing indicators without the
         // user needing to have a conversation open.
         if (typingUnsub) typingUnsub();
@@ -1319,9 +1275,9 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
       },
     );
 
-    const subscriptions = get().realTimeSubscriptions;
-    subscriptions.set("conversations", unsubscribe);
-    set({ realTimeSubscriptions: subscriptions });
+    const latestSubscriptions = get().realTimeSubscriptions;
+    latestSubscriptions.set("conversations", unsubscribe);
+    set({ realTimeSubscriptions: latestSubscriptions });
   },
 
   unsubscribeFromRealTimeConversations: () => {
@@ -1337,6 +1293,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     subscriptions.delete("conversationTypingStatus");
     conversationPresenceTargetKey = "";
     conversationTypingTargetKey = "";
+    realtimeConversationUserId = "";
     set({
       onlineFriends: [],
       typingUsers: [],
@@ -1345,14 +1302,16 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
   },
 
   subscribeToRealTimeMessages: (conversationId: string) => {
-    console.log(`📦 Store: subscribeToRealTimeMessages for ${conversationId}`);
+    redundantStoreLog(`📦 Store: subscribeToRealTimeMessages for ${conversationId}`);
 
     // Cancel any existing message subscription before creating a new one
     const existingSub = get().realTimeSubscriptions.get("messages");
     if (existingSub) {
-      console.log(`📦 Store: Cancelling existing message subscription`);
+      redundantStoreLog(`📦 Store: Cancelling existing message subscription`);
       existingSub();
     }
+    get().realTimeSubscriptions.get("messageReadReceipts")?.();
+    get().realTimeSubscriptions.delete("messageReadReceipts");
 
     set((state) => ({
       messages:
@@ -1384,7 +1343,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         if (get().currentConversation?.id !== conversationId) {
           return;
         }
-        console.log(
+        redundantStoreLog(
           `📦 Store: Received ${messages.length} messages from service for ${conversationId}`,
         );
         const currentUserId = useAuthStore.getState().user?.id ?? "";
@@ -1397,16 +1356,20 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
             : get().conversations.find(
                 (conversation) => conversation.id === conversationId,
               );
-        const filteredMessages = filterItemsAfterClearedAt(
-          normalized,
-          activeConversation?.cleared_at,
-          (message) => message.created_at,
+        const filteredMessages = applyConversationReadReceipts(
+          filterItemsAfterClearedAt(
+            normalized,
+            activeConversation?.cleared_at,
+            (message) => message.created_at,
+          ),
+          activeConversation,
+          currentUserId,
         );
         const clearingConversationIds = get().clearingConversationIds;
         const isClearingConversation =
           clearingConversationIds.has(conversationId);
         if (isClearingConversation && filteredMessages.length > 0) {
-          console.log(
+          redundantStoreLog(
             `[subscribeToRealTimeMessages] Ignoring ${filteredMessages.length} stale messages while clearing ${conversationId}`,
           );
           set({ loadingMessages: false });
@@ -1417,25 +1380,36 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           nextClearingConversationIds.delete(conversationId);
           set({ clearingConversationIds: nextClearingConversationIds });
         }
-        // Service fetches DESC + limit(50) then reverses, so result is asc order.
+        // Service fetches DESC + a small live window then reverses, so result is asc order.
         // Set directly — assume more history exists if we received a full page.
-        console.log(
+        redundantStoreLog(
           `📦 Store: Setting ${filteredMessages.length} messages in state`,
         );
         set({
           messages: filteredMessages,
           loadingMessages: false,
-          hasMoreMessages: filteredMessages.length >= 50,
+          hasMoreMessages: filteredMessages.length >= LIVE_MESSAGE_PAGE_SIZE,
         });
       },
-      50,
+      LIVE_MESSAGE_PAGE_SIZE,
       isTemporaryParticipant ? currentUserIdForSubscription : undefined,
     );
 
     const subscriptions = get().realTimeSubscriptions;
     subscriptions.set("messages", unsubscribe);
+    subscriptions.set("messageReadReceipts", messagingService.subscribeToConversationRead(conversationId, ({ user_id, message_id }) => {
+      const currentUserId = useAuthStore.getState().user?.id ?? "";
+      if (!user_id || user_id === currentUserId || !message_id) return;
+      set((state) => ({
+        messages: state.messages.map((message) =>
+          message.id === message_id && (message.senderId || message.sender_id) === currentUserId
+            ? { ...message, is_seen: true, is_delivered: true }
+            : message,
+        ),
+      }));
+    }));
     set({ realTimeSubscriptions: subscriptions });
-    console.log(`📦 Store: Subscription stored for ${conversationId}`);
+    redundantStoreLog(`📦 Store: Subscription stored for ${conversationId}`);
   },
 
   unsubscribeFromRealTimeMessages: () => {
@@ -1446,6 +1420,8 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
       subscriptions.delete("messages");
       set({ realTimeSubscriptions: subscriptions });
     }
+    subscriptions.get("messageReadReceipts")?.();
+    subscriptions.delete("messageReadReceipts");
   },
 
   sendRealTimeMessage: async (
@@ -1461,29 +1437,10 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     set({ sendingMessage: true });
 
     try {
-      // Check if current user (sender) is in ghost mode
-      const shouldSuppress = await ghostModeService.shouldSuppressAlerts(
-        user.id,
-      );
-      if (shouldSuppress) {
-        console.log(
-          `Ghost mode active for sender ${user.id} - message will not trigger surveillance alerts`,
-        );
-        // Still deliver the message, but don't trigger surveillance
-      }
-
-      // Pass recipientId from cached state — avoids a getDoc(conversation) on every send
+      // Pass recipientId from cached state to avoid rereading the conversation on every send.
       const recipientId =
         get().currentConversation?.other_user?.user_id ??
         get().currentConversation?.other_user?.id;
-      const conversation = get().currentConversation;
-      const participantIds = [
-        conversation?.user1_id,
-        conversation?.user2_id,
-        ...(conversation?.temporary_participant_ids || []),
-      ].filter(
-        (id, index, self): id is string => !!id && self.indexOf(id) === index,
-      );
       const sentMessage = await messagingService.sendMessageWithDelivery(
         conversationId,
         user.id,
@@ -1492,7 +1449,6 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         mediaType,
         recipientId,
         replyTo,
-        participantIds.length > 0 ? participantIds : undefined,
       );
       set((state) => {
         if (state.messages.some((message) => message.id === sentMessage.id)) {
@@ -1504,6 +1460,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           messages: [...state.messages, normalized],
         };
       });
+      return sentMessage;
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
@@ -1517,7 +1474,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
       const { user } = useAuthStore.getState();
       if (!user?.id) throw new Error("User not authenticated");
 
-      // Pass conversationId from cached state — avoids a getDoc(message) re-read
+      // Pass conversationId from cached state to avoid rereading the message.
       const conversationId = get().currentConversation?.id;
       await messagingService.markMessageAsSeen(
         messageId,
@@ -1525,11 +1482,59 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         conversationId,
       );
 
-      set((state) => ({
-        messages: state.messages.map((msg) =>
-          msg.id === messageId ? { ...msg, is_seen: true } : msg,
-        ),
-      }));
+      set((state) => {
+        const targetMessage = state.messages.find((msg) => msg.id === messageId);
+        const targetTime = toMillis(
+          targetMessage?.created_at ?? targetMessage?.timestamp,
+        );
+        const nowIso = new Date().toISOString();
+        const currentConversation = state.currentConversation;
+        const nextCurrentConversation =
+          currentConversation && currentConversation.id === conversationId
+            ? {
+                ...currentConversation,
+                unread_count: 0,
+                last_seen_by_user: {
+                  ...(currentConversation.last_seen_by_user || {}),
+                  [user.id]: nowIso,
+                },
+                last_seen_message_id_by_user: {
+                  ...(currentConversation.last_seen_message_id_by_user || {}),
+                  [user.id]: messageId,
+                },
+              }
+            : currentConversation;
+        const markSeen = (msg: any) => {
+          if (!targetMessage || msg.conversation_id !== conversationId) return msg;
+          if ((msg.senderId || msg.sender_id) === user.id) return msg;
+          const messageTime = toMillis(msg.created_at ?? msg.timestamp);
+          if (msg.id !== messageId && (!targetTime || messageTime > targetTime)) {
+            return msg;
+          }
+          return { ...msg, is_seen: true, is_delivered: true };
+        };
+
+        return {
+          messages: state.messages.map(markSeen),
+          conversations: state.conversations.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  unread_count: 0,
+                  last_seen_by_user: {
+                    ...(conversation.last_seen_by_user || {}),
+                    [user.id]: nowIso,
+                  },
+                  last_seen_message_id_by_user: {
+                    ...(conversation.last_seen_message_id_by_user || {}),
+                    [user.id]: messageId,
+                  },
+                }
+              : conversation,
+          ),
+          currentConversation: nextCurrentConversation,
+        };
+      });
     } catch (error) {
       console.error("❌ Error marking message as seen:", error);
     }
@@ -1542,7 +1547,13 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
   ) => {
     try {
       const { user } = useAuthStore.getState();
-      console.log("[MessagingStore DEBUG] setTypingIndicator requested:", {
+      redundantStoreLog("[MessagingStore DEBUG] setTypingIndicator requested:", {
+        conversationId,
+        isTyping,
+        speed: speed || "normal",
+        userId: user?.id ?? null,
+      });
+      liveStoreDebug("typing_action_requested", {
         conversationId,
         isTyping,
         speed: speed || "normal",
@@ -1550,13 +1561,19 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
       });
       if (!user?.id) return;
 
-      messagingService.setTypingIndicator(
+      void messagingService.setTypingIndicator(
         conversationId,
         user.id,
         isTyping,
         speed,
-      );
-      console.log("[MessagingStore DEBUG] setTypingIndicator sent to service:", {
+      ).catch((error) => console.error("Typing indicator failed:", error));
+      redundantStoreLog("[MessagingStore DEBUG] setTypingIndicator sent to service:", {
+        conversationId,
+        isTyping,
+        speed: speed || "normal",
+        userId: user.id,
+      });
+      liveStoreDebug("typing_action_sent_to_service", {
         conversationId,
         isTyping,
         speed: speed || "normal",
@@ -1575,7 +1592,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           speed: speed || "normal",
           started_at: new Date().toISOString(),
         });
-        console.log("[MessagingStore DEBUG] setTypingIndicator local add:", {
+        redundantStoreLog("[MessagingStore DEBUG] setTypingIndicator local add:", {
           conversationId,
           userId: user.id,
           typingUsers,
@@ -1586,7 +1603,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           (u) =>
             !(u.conversation_id === conversationId && u.user_id === user.id),
         );
-        console.log("[MessagingStore DEBUG] setTypingIndicator local remove:", {
+        redundantStoreLog("[MessagingStore DEBUG] setTypingIndicator local remove:", {
           conversationId,
           userId: user.id,
           typingUsers,
@@ -1604,7 +1621,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     const unsubscribe = messagingService.subscribeToFriendsOnlineStatus(
       userId,
       (onlineFriends) => {
-        console.log(`🟢 Online status update:`, onlineFriends);
+        redundantStoreLog(`🟢 Online status update:`, onlineFriends);
 
         // Update conversations with online status
         const { conversations } = get();
@@ -1613,7 +1630,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
             conv.other_user?.user_id || conv.other_user?.id || "",
           );
           if (conv.is_online !== isOnline) {
-            console.log(
+            redundantStoreLog(
               `🟢 ${conv.other_user?.username} is now ${isOnline ? "online" : "offline"}`,
             );
           }
@@ -1647,13 +1664,13 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
   setOnlineStatus: (isOnline: boolean) => {
     try {
       const { user } = useAuthStore.getState();
-      console.log("[MessagingStore DEBUG] setOnlineStatus requested:", {
+      redundantStoreLog("[MessagingStore DEBUG] setOnlineStatus requested:", {
         userId: user?.id ?? null,
         isOnline,
       });
       if (!user?.id) return;
       messagingService.setOnlineStatus(user.id, isOnline);
-      console.log("[MessagingStore DEBUG] setOnlineStatus sent to service:", {
+      redundantStoreLog("[MessagingStore DEBUG] setOnlineStatus sent to service:", {
         userId: user.id,
         isOnline,
       });
@@ -1677,18 +1694,6 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
     }));
 
     const currentUserIdForSubscription = useAuthStore.getState().user?.id ?? "";
-    const activeConversationForSubscription =
-      get().currentConversation?.id === conversationId
-        ? get().currentConversation
-        : get().conversations.find(
-            (conversation) => conversation.id === conversationId,
-          );
-    const isTemporaryParticipant =
-      !!currentUserIdForSubscription &&
-      activeConversationForSubscription?.user1_id !==
-        currentUserIdForSubscription &&
-      activeConversationForSubscription?.user2_id !==
-        currentUserIdForSubscription;
 
     const unsubscribe = messagingService.subscribeToEvents(
       conversationId,
@@ -1717,12 +1722,12 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           (e) => e.event_type === "mention",
         );
         if (mentionEvents.length > 0) {
-          console.log(
+          redundantStoreLog(
             "[@mention store] Received events, mentions:",
             mentionEvents.length,
             mentionEvents,
           );
-          console.log(
+          redundantStoreLog(
             "[@mention store] Total messageEvents now:",
             filteredEvents.length,
           );
@@ -1734,7 +1739,8 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         }
         set({ events: filteredEvents, messageEvents: filteredEvents });
       },
-      isTemporaryParticipant ? currentUserIdForSubscription : undefined,
+      currentUserIdForSubscription || undefined,
+      LIVE_MESSAGE_EVENT_LIMIT,
     );
 
     const subscriptions = get().realTimeSubscriptions;
@@ -1764,7 +1770,12 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
       conversationId,
       user.id,
       (typingUsers) => {
-        console.log(`📝 Typing update for ${conversationId}:`, typingUsers);
+        redundantStoreLog(`📝 Typing update for ${conversationId}:`, typingUsers);
+        liveStoreDebug("typing_subscription_payload", {
+          conversationId,
+          currentUserId: user.id,
+          typingUsers,
+        });
 
         // Update the conversation's typing status
         const { conversations } = get();
@@ -1773,7 +1784,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
             const otherUserTyping = typingUsers.some(
               (t) => t.user_id !== user.id && t.is_typing,
             );
-            console.log(
+            redundantStoreLog(
               `📝 Setting typing for ${conv.other_user?.username}: ${otherUserTyping}`,
             );
             return { ...conv, is_typing: otherUserTyping };
@@ -1817,25 +1828,44 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
   },
 
   // ── Freeze chat ──
-  freezeChat: (conversationId: string) => {
+  freezeChat: async (conversationId: string) => {
     const { user } = useAuthStore.getState();
-    if (!user?.id) return;
-    messagingService.freezeChat(conversationId, user.id);
+    liveStoreDebug("freeze_action_requested", {
+      conversationId,
+      userId: user?.id ?? null,
+    });
+    if (!user?.id) return false;
+    const froze = await messagingService.freezeChat(conversationId, user.id);
+    if (froze) set({ frozenBy: user.id });
+    return froze;
   },
 
-  unfreezeChat: (conversationId: string) => {
+  unfreezeChat: async (conversationId: string) => {
     const { user } = useAuthStore.getState();
-    if (!user?.id) return;
-    messagingService.unfreezeChat(conversationId, user.id);
+    liveStoreDebug("unfreeze_action_requested", {
+      conversationId,
+      userId: user?.id ?? null,
+    });
+    if (!user?.id) return false;
+    const unfroze = await messagingService.unfreezeChat(conversationId, user.id);
+    if (unfroze) set({ frozenBy: null });
+    return unfroze;
   },
 
   subscribeToFreezeStatus: (conversationId: string) => {
     const existingSub = get().realTimeSubscriptions.get("freezeStatus");
     if (existingSub) existingSub();
+    set({ frozenBy: null });
+    liveStoreDebug("freeze_subscription_start", { conversationId });
 
     const unsubscribe = messagingService.subscribeToFreezeStatus(
       conversationId,
       ({ is_frozen, frozen_by }) => {
+        liveStoreDebug("freeze_subscription_payload", {
+          conversationId,
+          is_frozen,
+          frozen_by,
+        });
         set({ frozenBy: is_frozen ? frozen_by : null });
       },
     );
@@ -1859,42 +1889,45 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
 
   setDraftText: (conversationId: string, text: string) => {
     const { user } = useAuthStore.getState();
-    console.log(
-      "[draft store] setDraftText user:",
-      user?.id,
-      "conv:",
+    liveStoreDebug("draft_action_requested", {
       conversationId,
-      "text:",
-      text,
-    );
+      userId: user?.id ?? null,
+      textLength: text.length,
+      textPreview: text.slice(0, 32),
+    });
     if (!user?.id) return;
     messagingService.setDraftText(conversationId, user.id, text);
   },
 
   clearDraftText: (conversationId: string) => {
     const { user } = useAuthStore.getState();
+    liveStoreDebug("draft_clear_action_requested", {
+      conversationId,
+      userId: user?.id ?? null,
+    });
     if (!user?.id) return;
     messagingService.clearDraftText(conversationId, user.id);
   },
 
-  subscribeToDraftText: (conversationId: string) => {
+  subscribeToDraftText: (conversationId: string, friendUserId: string) => {
     const existingSub = get().realTimeSubscriptions.get("draft");
     if (existingSub) existingSub();
 
-    const { user } = useAuthStore.getState();
-    console.log(
-      "[draft store] subscribeToDraftText user:",
-      user?.id,
-      "conv:",
+    if (!friendUserId) return;
+    liveStoreDebug("draft_subscription_start", {
       conversationId,
-    );
-    if (!user?.id) return;
+      friendUserId,
+    });
 
-    const unsubscribe = messagingService.subscribeToDraftText(
+    const unsubscribe = messagingService.subscribeToUserDraftText(
       conversationId,
-      user.id,
+      friendUserId,
       (draft) => {
-        console.log("[draft store] Received draft from friend:", draft);
+        liveStoreDebug("draft_subscription_payload", {
+          conversationId,
+          friendUserId,
+          draft,
+        });
         set({ friendDraft: draft?.text ?? null });
       },
     );
@@ -1916,7 +1949,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
 
   // Clear chat
   clearMessages: async (conversationId: string) => {
-    console.log("[clearMessages] Called for conversation:", conversationId);
+    redundantStoreLog("[clearMessages] Called for conversation:", conversationId);
     const { user } = useAuthStore.getState();
     if (!user?.id) {
       throw new Error("User not authenticated");
@@ -1931,7 +1964,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
       hasMoreMessages: previousHasMoreMessages,
       clearingConversationIds,
     } = get();
-    console.log(
+    redundantStoreLog(
       "[clearMessages] Current messages count:",
       previousMessages.length,
     );
@@ -1974,7 +2007,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
           : previousCurrentConversation,
       clearingConversationIds: nextClearingConversationIds,
     });
-    console.log("[clearMessages] Optimistic update - messages cleared");
+    redundantStoreLog("[clearMessages] Optimistic update - messages cleared");
 
     try {
       await messagingService.clearMessages(conversationId, user.id, clearedAt);
@@ -1988,7 +2021,7 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         nextClearingConversationIds.delete(conversationId);
         set({ clearingConversationIds: nextClearingConversationIds });
       }, 4000);
-      console.log("[clearMessages] Firestore deletion completed");
+      redundantStoreLog("[clearMessages] Postgres deletion completed");
     } catch (error) {
       console.error("[clearMessages] Error clearing messages:", error);
       const rollbackClearingConversationIds = new Set(

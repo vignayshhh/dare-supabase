@@ -25,6 +25,7 @@ import {
   Users,
   X,
   BellRing,
+  LogOut,
 } from "lucide-react";
 import "@/styles/design-system.css";
 
@@ -154,10 +155,8 @@ import {
   guestConversations,
   guestAlerts,
   guestSusAlerts,
-  guestActivity,
   type GuestUserProfile,
   type GuestConversation,
-  type GuestActivity,
 } from "../../mock/guestModeData";
 
 // ---------------------------------------------------------------------------
@@ -657,7 +656,6 @@ type Screen =
   | "alerts"
   | "user-search"
   | "user-profile"
-  | "activity"
   | "create";
 
 type GuestHistorySnapshot = {
@@ -1952,6 +1950,15 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
                 <div className="flex items-center space-x-3">
                   <button
                     type="button"
+                    onClick={onExitGuestMode}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[#94a3b8] transition-all duration-200 hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-400"
+                    aria-label="Exit guest mode"
+                    title="Exit guest mode"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setCurrentScreen("alerts")}
                     className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-white/[0.03] text-[#94a3b8] transition-all duration-200 hover:border-[#fb7185]/30 hover:bg-[#fb7185]/8 hover:text-white"
                     aria-label="Notifications"
@@ -2075,7 +2082,7 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
                   <div
                     key={post.id}
                     id={`feed-post-${post.id}`}
-                    className="overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(21,21,21,0.98),rgba(14,14,14,0.98))] shadow-[0_18px_40px_rgba(0,0,0,0.28)]"
+                    className="overflow-hidden rounded-[28px] border border-transparent bg-transparent shadow-none"
                     style={{ animationDelay: `${index * 0.05}s` }}
                   >
                     {/* Post header */}
@@ -2087,7 +2094,7 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
                       <button
                         type="button"
                         onClick={() => openProfile(profile.id)}
-                        className="relative cursor-pointer btn-ghost"
+                        className="relative cursor-pointer"
                       >
                         <h3 className="font-bold text-white text-base leading-tight">
                           {profile.name}
@@ -3450,9 +3457,9 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
       <div
         style={{
           fontFamily:
-            "'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
+            "var(--font-ui)",
           height: "100dvh",
-          paddingBottom: "calc(var(--bottom-nav-total-height) + 16px)",
+          paddingBottom: "var(--bottom-nav-total-height)",
         }}
         className="flex flex-col bg-black max-w-7xl mx-auto lg:px-8"
       >
@@ -3797,7 +3804,7 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
       <div
         style={{
           fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif",
+            "var(--font-ui)",
           color: "#fff",
           overflow: "hidden",
           height: "100dvh",
@@ -4642,12 +4649,6 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
         >
           Preview chat
         </GlassButton>
-        <GlassButton
-          onClick={() => setCurrentScreen("activity")}
-          className="flex-1"
-        >
-          View activity
-        </GlassButton>
       </div>
 
       <SectionHeader title="Featured mock post" />
@@ -4672,26 +4673,6 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
             </article>
           ))}
       </div>
-    </div>
-  );
-
-  const renderActivity = () => (
-    <div className="px-4 pb-8 pt-4 space-y-4">
-      {guestActivity.map((item, index) => (
-        <article
-          key={item.id}
-          className="card-compact rounded-[28px] border border-white/10 bg-[#101610] p-4 animate-slide-up"
-          style={{ animationDelay: `${index * 0.05}s` }}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-white">{item.title}</p>
-            <span className="text-xs text-[#92a494]">
-              {formatTimeAgo(item.createdAt)}
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-[#d5e1d7]">{item.detail}</p>
-        </article>
-      ))}
     </div>
   );
 
@@ -4797,13 +4778,6 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
           <>
             {renderTopBar("Profile Preview", "user-search")}
             {renderUserProfile()}
-          </>
-        );
-      case "activity":
-        return (
-          <>
-            {renderTopBar("Activity", "profile")}
-            {renderActivity()}
           </>
         );
       case "create":
@@ -4974,8 +4948,9 @@ export function GuestApp({ onExitGuestMode }: { onExitGuestMode: () => void }) {
               </div>
             );
           })()}
-        {["feed", "truth", "main", "dares", "profile"].includes(currentScreen) &&
-        !isDesktop ? (
+        {["feed", "truth", "main", "dares", "profile"].includes(
+          currentScreen,
+        ) && !isDesktop ? (
           <BottomNavigation
             currentScreen={
               tabScreen as "feed" | "truth" | "main" | "dares" | "profile"

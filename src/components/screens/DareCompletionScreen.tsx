@@ -221,13 +221,44 @@ export function DareCompletionScreen({
     return `${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const getMediaStream = async (
+    constraints: MediaStreamConstraints,
+    unavailableMessage: string,
+  ) => {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      alert(unavailableMessage);
+      return null;
+    }
+
+    return navigator.mediaDevices.getUserMedia(constraints);
+  };
+
+  const canUseMediaRecorder = () => {
+    if (typeof MediaRecorder !== "undefined") return true;
+
+    alert("Recording is not available in this browser. Please choose a file from your gallery.");
+    return false;
+  };
+
   const handleRecordVideo = async () => {
+    if (!canUseMediaRecorder()) return;
+
     try {
       setIsRecording(true);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: true,
-      });
+      const stream = await getMediaStream(
+        {
+          video: { facingMode: "environment" },
+          audio: true,
+        },
+        "Camera recording is not available in this browser. Please choose a file from your gallery.",
+      );
+      if (!stream) {
+        setIsRecording(false);
+        return;
+      }
 
       const mediaRecorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
@@ -272,9 +303,16 @@ export function DareCompletionScreen({
   const handleTakePhoto = async () => {
     try {
       setIsCapturing(true);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
+      const stream = await getMediaStream(
+        {
+          video: { facingMode: "environment" },
+        },
+        "Camera capture is not available in this browser. Please choose an image from your gallery.",
+      );
+      if (!stream) {
+        setIsCapturing(false);
+        return;
+      }
 
       const video = document.createElement("video");
       video.srcObject = stream;
@@ -332,9 +370,18 @@ export function DareCompletionScreen({
   };
 
   const handleRecordVoice = async () => {
+    if (!canUseMediaRecorder()) return;
+
     try {
       setIsRecording(true);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await getMediaStream(
+        { audio: true },
+        "Microphone recording is not available in this browser. Please choose a saved media file instead.",
+      );
+      if (!stream) {
+        setIsRecording(false);
+        return;
+      }
       const mediaRecorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
 
@@ -880,23 +927,23 @@ export function DareCompletionScreen({
                 )}
               </div>
               <h3 className="mb-1.5 text-lg font-bold text-white">
-                {submittedAction === "video" && "Video Recorded - Under review"}
-                {submittedAction === "photo" && "Photo Taken - Under review"}
-                {submittedAction === "voice" && "Voice Recorded - Under review"}
+                {submittedAction === "video" && "Video recorded - Dare completed"}
+                {submittedAction === "photo" && "Photo taken - Dare completed"}
+                {submittedAction === "voice" && "Voice recorded - Dare completed"}
                 {submittedAction === "gallery" &&
-                  "Image Selected - Under review"}
-                {!submittedAction && "Submitted - Under review"}
+                  "Image selected - Dare completed"}
+                {!submittedAction && "Dare completed"}
               </h3>
               <p className="mx-auto max-w-md text-xs text-[#b8c4b8]">
                 {submittedAction === "video" &&
-                  "Your video is being reviewed by friends"}
+                  "Your video was submitted successfully"}
                 {submittedAction === "photo" &&
-                  "Your photo is being reviewed by friends"}
+                  "Your photo was submitted successfully"}
                 {submittedAction === "voice" &&
-                  "Your voice note is being reviewed by friends"}
+                  "Your voice note was submitted successfully"}
                 {submittedAction === "gallery" &&
-                  "Your image is being reviewed by friends"}
-                {!submittedAction && "Your proof is being reviewed by friends"}
+                  "Your image was submitted successfully"}
+                {!submittedAction && "Your proof was submitted successfully"}
               </p>
             </div>
           )}

@@ -36,7 +36,7 @@ const FEED_SCREEN_SURFACE_BACKGROUND =
 
 // Map CommunityChallenge icons to ChallengeRunIcon types
 const mapIconToChallengeRun = (
-  icon: "flame" | "shield" | "trophy",
+  icon: CommunityChallenge["icon"],
 ): ChallengeRunIcon => {
   switch (icon) {
     case "flame":
@@ -74,14 +74,17 @@ const getRecommendedChallenges = (
 };
 
 function formatHubCountdown(proofDueAtMs: number | null) {
-  if (!proofDueAtMs) return "24:00:00";
+  if (!proofDueAtMs) return "24 hours left";
   const totalSeconds = Math.max(0, Math.floor((proofDueAtMs - Date.now()) / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds]
-    .map((part) => String(part).padStart(2, "0"))
-    .join(":");
+  if (totalSeconds <= 0) return "Due now";
+
+  const totalMinutes = Math.ceil(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    return `${totalMinutes} ${totalMinutes === 1 ? "minute" : "minutes"} left`;
+  }
+
+  const totalHours = Math.ceil(totalMinutes / 60);
+  return `${totalHours} ${totalHours === 1 ? "hour" : "hours"} left`;
 }
 
 function getRunStatus(join: CommunityChallengeJoin): JoinedChallengeRun["status"] {
@@ -124,6 +127,7 @@ function toJoinedRun(
           : formatHubCountdown(join.proofDueAtMs),
     lifecycleStatus: derivedLifecycleStatus,
     proofDueAtMs: join.proofDueAtMs,
+    joinedAtMs: join.joinedAtMs,
     eliminatedAtMs: join.eliminatedAtMs,
     completedAtMs: join.completedAtMs,
     eliminationReason: join.eliminationReason,
@@ -260,7 +264,7 @@ function ChallengeRunCard({
 
   return (
     <div
-      className={`challenge-hub-panel relative overflow-hidden rounded-[26px] border p-3.5 shadow-[0_20px_54px_rgba(0,0,0,0.38),inset_0_1px_0_rgba(255,255,255,0.05)] ${
+      className={`challenge-hub-panel relative overflow-hidden rounded-[24px] border p-3 shadow-[0_18px_46px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.05)] ${
         isEliminated ? "border-red-300/14" : "border-white/8"
       }`}
       style={{ background: FEED_SCREEN_SURFACE_BACKGROUND }}
@@ -270,61 +274,51 @@ function ChallengeRunCard({
         className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full blur-3xl"
         style={{ background: `${challenge.accent}14` }}
       />
-      <div className="relative z-10 flex items-start gap-3">
-        <ChallengeGlyph challenge={challenge} accent={challenge.accent} />
+      <div className="relative z-10 flex items-center gap-2.5">
+        <ChallengeGlyph challenge={challenge} accent={challenge.accent} compact />
 
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-start justify-between gap-2.5">
-            <div className="min-w-0">
-              <div className="truncate text-[17px] font-black uppercase leading-tight text-white">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex min-w-0 flex-col items-start gap-1.5">
+              <div className="max-w-full truncate text-[16px] font-black uppercase leading-none text-white">
                 {challenge.title}
               </div>
-              <div className="mt-1 text-[11px] font-black uppercase tracking-[0.12em] text-[#6ee7b7]">
-                Day {challenge.day} of {challenge.totalDays}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onContinue}
-              className="app-pressable flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#4ade80]/18 bg-[#4ade80]/10 text-[#bbf7d0] shadow-[0_10px_22px_rgba(0,0,0,0.22)]"
-              aria-label={`Open ${challenge.title}`}
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
 
-          <div className="mb-2.5 flex flex-wrap gap-1.5">
-            <span
-              className={`rounded-full border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] ${
-                isEliminated
-                  ? "border-red-300/22 bg-red-500/10 text-red-200"
+              <span
+                className={`inline-flex max-w-full rounded-full border px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.1em] ${
+                  isEliminated
+                    ? "border-red-300/22 bg-red-500/10 text-red-200"
+                    : isSubmitted
+                    ? "border-[#4ade80]/22 bg-[#4ade80]/10 text-[#86efac]"
+                    : "border-red-400/22 bg-red-500/10 text-red-200"
+                }`}
+              >
+                {isEliminated
+                  ? "Eliminated"
                   : isSubmitted
-                  ? "border-[#4ade80]/22 bg-[#4ade80]/10 text-[#86efac]"
-                  : "border-red-400/22 bg-red-500/10 text-red-200"
-              }`}
-            >
-              {isEliminated
-                ? "Eliminated"
-                : isSubmitted
-                ? "Proof submitted"
-                : challenge.countdown || "30 mins"}
-            </span>
-            <span className="rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-[#94a3b8]">
-              {isEliminated
-                ? "Moved to eliminated"
-                : `${Math.max(0, challenge.totalDays - challenge.day + 1)} days left`}
-            </span>
-          </div>
+                  ? "Proof submitted"
+                  : challenge.countdown || "30 mins"}
+              </span>
+            </div>
 
-          <div className="h-2 overflow-hidden rounded-full bg-white/[0.055]">
-            <div
-              className="h-full rounded-full shadow-[0_0_18px_rgba(74,222,128,0.24)]"
-              style={{
-                width: `${progress}%`,
-                background: `linear-gradient(90deg, ${challenge.accent}, #4ade80)`,
-              }}
-            />
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.055]">
+              <div
+                className="h-full rounded-full shadow-[0_0_18px_rgba(74,222,128,0.24)]"
+                style={{
+                  width: `${progress}%`,
+                  background: `linear-gradient(90deg, ${challenge.accent}, #4ade80)`,
+                }}
+              />
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={onContinue}
+            className="app-pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#4ade80]/18 bg-[#4ade80]/10 text-[#bbf7d0] shadow-[0_10px_22px_rgba(0,0,0,0.22)]"
+            aria-label={`Open ${challenge.title}`}
+          >
+            <ChevronRight size={18} />
+          </button>
         </div>
       </div>
     </div>
@@ -375,9 +369,15 @@ function RecommendedChallengeCard({
 export function ChallengeHubScreen({
   isActive = true,
   onBack,
+  communityChallengeSummaries: providedCommunityChallengeSummaries,
+  customCommunityChallenges: providedCustomCommunityChallenges,
+  registeredChallengeIds: providedRegisteredChallengeIds,
 }: {
   isActive?: boolean;
   onBack?: () => void;
+  communityChallengeSummaries?: Record<string, CommunityChallengeSummary>;
+  customCommunityChallenges?: CommunityChallenge[];
+  registeredChallengeIds?: Set<string>;
 }) {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<HubTab>("active");
@@ -387,6 +387,9 @@ export function ChallengeHubScreen({
     useState<CommunityChallenge | null>(null);
   const [communityChallengeSummaries, setCommunityChallengeSummaries] =
     useState<Record<string, CommunityChallengeSummary>>({});
+  const [customCommunityChallenges, setCustomCommunityChallenges] = useState<
+    CommunityChallenge[]
+  >([]);
   const [joinedChallenges, setJoinedChallenges] = useState<
     CommunityChallengeJoin[]
   >([]);
@@ -395,11 +398,43 @@ export function ChallengeHubScreen({
   >(() => new Set());
 
   useEffect(() => {
+    if (!isActive) return;
+
+    const bottomNavElements = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        ".app-bottom-nav, .app-bottom-nav-motion",
+      ),
+    );
+    const previousDisplay = bottomNavElements.map((element) => ({
+      element,
+      display: element.style.display,
+    }));
+
+    bottomNavElements.forEach((element) => {
+      element.style.display = "none";
+    });
+
+    return () => {
+      previousDisplay.forEach(({ element, display }) => {
+        element.style.display = display;
+      });
+    };
+  }, [isActive]);
+
+  useEffect(() => {
+    if (providedCommunityChallengeSummaries) return;
     return communityChallengeService.subscribeToSummaries(
       COMMUNITY_CHALLENGES.map((challenge) => challenge.id),
       setCommunityChallengeSummaries,
     );
-  }, []);
+  }, [providedCommunityChallengeSummaries]);
+
+  useEffect(() => {
+    if (providedCustomCommunityChallenges) return;
+    return communityChallengeService.subscribeToCustomChallenges(
+      setCustomCommunityChallenges,
+    );
+  }, [providedCustomCommunityChallenges]);
 
   useEffect(() => {
     return communityChallengeService.subscribeToJoinedChallenges(
@@ -408,20 +443,32 @@ export function ChallengeHubScreen({
     );
   }, [user?.id]);
 
+
   useEffect(() => {
+    if (providedRegisteredChallengeIds) return;
     return communityChallengeService.subscribeToJoinedChallengeIds(
       user?.id,
       setRegisteredChallengeIds,
     );
-  }, [user?.id]);
+  }, [providedRegisteredChallengeIds, user?.id]);
+
+  const effectiveCommunityChallengeSummaries =
+    providedCommunityChallengeSummaries ?? communityChallengeSummaries;
+  const effectiveCustomCommunityChallenges =
+    providedCustomCommunityChallenges ?? customCommunityChallenges;
+  const effectiveRegisteredChallengeIds =
+    providedRegisteredChallengeIds ?? registeredChallengeIds;
+
 
   const hydratedCommunityChallenges = useMemo(
-    () =>
-      communityChallengeService.hydrateChallenges(
+    () => [
+      ...effectiveCustomCommunityChallenges,
+      ...communityChallengeService.hydrateChallenges(
         COMMUNITY_CHALLENGES,
-        communityChallengeSummaries,
+        effectiveCommunityChallengeSummaries,
       ),
-    [communityChallengeSummaries],
+    ],
+    [effectiveCommunityChallengeSummaries, effectiveCustomCommunityChallenges],
   );
 
   const runs = useMemo(() => {
@@ -429,14 +476,13 @@ export function ChallengeHubScreen({
       hydratedCommunityChallenges.map((challenge) => [challenge.id, challenge]),
     );
     return joinedChallenges
-      .filter((join) => join.officialDare)
       .map((join) => {
         const challenge = challengeById.get(join.challengeId);
         if (!challenge) return null;
         return toJoinedRun(
           join,
           challenge,
-          communityChallengeSummaries[join.challengeId],
+          effectiveCommunityChallengeSummaries[join.challengeId],
         );
       })
       .filter((run): run is JoinedChallengeRun => Boolean(run))
@@ -454,19 +500,21 @@ export function ChallengeHubScreen({
       });
   }, [
     activeTab,
-    communityChallengeSummaries,
+    effectiveCommunityChallengeSummaries,
     hydratedCommunityChallenges,
     joinedChallenges,
   ]);
 
+
   const handleJoinRecommended = async (challenge: CommunityChallenge) => {
-    if (!user?.id) return;
-    await communityChallengeService.joinChallenge(challenge, {
+    if (!user?.id) return false;
+    const result = await communityChallengeService.joinChallenge(challenge, {
       id: user.id,
       username: user.username,
       displayName: user.displayName || user.username,
       avatar: user.avatar || "",
     });
+    return result.success;
   };
 
   return (
@@ -483,13 +531,13 @@ export function ChallengeHubScreen({
         className="min-h-0 flex-1 overflow-y-auto px-4"
         style={{
           paddingTop: "calc(var(--safe-area-top) + 20px)",
-          paddingBottom: "calc(var(--bottom-nav-total-height) + 22px)",
+          paddingBottom: "calc(var(--safe-area-bottom) + 18px)",
           scrollPaddingTop: "calc(var(--safe-area-top) + 20px)",
           WebkitOverflowScrolling: "touch",
           overscrollBehaviorY: "contain",
         }}
       >
-        <div className="mx-auto flex min-h-[calc(100dvh-var(--safe-area-top)-var(--bottom-nav-total-height)-42px)] max-w-[448px] flex-col">
+        <div className="mx-auto flex min-h-[calc(100dvh-var(--safe-area-top)-var(--safe-area-bottom)-42px)] max-w-[448px] flex-col">
           {onBack ? (
             <div className="relative mb-4 flex min-h-[46px] items-center justify-center">
               <button
@@ -563,25 +611,9 @@ export function ChallengeHubScreen({
           </div>
 
           <div className="mt-auto pt-10">
-            <div className="challenge-hub-panel relative mb-3 overflow-hidden rounded-[24px] border border-white/8 bg-white/[0.04] px-4 py-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <div className="relative z-10 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10.5px] font-black uppercase tracking-[0.2em] text-[#86efac]">
-                    Recommended for you
-                  </p>
-                  <h2 className="mt-1 text-[16px] font-black leading-tight text-white/92">
-                    Start another community run
-                  </h2>
-                </div>
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[15px] border border-[#4ade80]/18 bg-[#4ade80]/9 text-[14px] font-black text-[#86efac]">
-                  D
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-2 flex items-center justify-between px-0.5">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#64748b]">
-                Pick a run
+            <div className="mb-3 flex items-center justify-between px-0.5">
+              <p className="text-[10.5px] font-black uppercase tracking-[0.2em] text-[#86efac]">
+                Recommended for you
               </p>
               <button
                 type="button"
@@ -594,7 +626,7 @@ export function ChallengeHubScreen({
 
             <div className="-mx-4 flex gap-2.5 overflow-x-auto px-4 pb-2 scrollbar-hide">
               {getRecommendedChallenges(
-                registeredChallengeIds,
+                effectiveRegisteredChallengeIds,
                 hydratedCommunityChallenges,
               ).map((item) => (
                 <RecommendedChallengeCard
@@ -618,7 +650,7 @@ export function ChallengeHubScreen({
       {selectedRecommendedChallenge && (
         <CommunityChallengePreviewScreen
           challenge={selectedRecommendedChallenge}
-          isJoined={registeredChallengeIds.has(selectedRecommendedChallenge.id)}
+          isJoined={effectiveRegisteredChallengeIds.has(selectedRecommendedChallenge.id)}
           onClose={() => setSelectedRecommendedChallenge(null)}
           onJoin={() => handleJoinRecommended(selectedRecommendedChallenge)}
           onOpenHub={() => setSelectedRecommendedChallenge(null)}

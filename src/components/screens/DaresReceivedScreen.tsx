@@ -2,19 +2,19 @@
 
 import { useState, useEffect, memo, useCallback, useRef, useMemo } from "react";
 import {
-  ArrowRight,
   Clock,
   Inbox,
-  Sparkles,
+  Image as ImageIcon,
+  Mic,
+  Play,
   Target,
+  Video,
   X,
   CheckCircle,
-  AlertCircle,
 } from "lucide-react";
 import "@/styles/design-system.css";
 import { TruthAnswerScreen } from "./TruthAnswerScreen";
 import { DareCompletionScreen } from "./DareCompletionScreen";
-import { DareApprovedCinematicScreen } from "./DareApprovedCinematicScreen";
 import { DareSubmittedCinematicScreen } from "./DareSubmittedCinematicScreen";
 import { ReviewScreen } from "./ReviewScreen";
 import {
@@ -23,12 +23,21 @@ import {
   truthService,
   userService,
 } from "@/middleware/services/service-factory";
-import { useContentStore } from "@/stores/useContentStore";
 import { useProfileDataStore } from "@/stores/profileDataStore";
 import { useAlertStore } from "@/stores/useAlertStore";
 import { Avatar } from "../ui/Avatar";
 import { useAuthStore } from "@/stores/useAuthStore-v2";
 import { useAvatarStore } from "@/stores/avatarStore";
+import {
+  type PredictionPost,
+  type PredictionVote,
+  usePredictionStore,
+} from "@/stores/usePredictionStore";
+import { InteractionReceipt } from "../circles/InteractionReceipt";
+import { InteractionInbox } from "../circles/InteractionInbox";
+import { ChatSourceQuote } from "../circles/CircleChatScreen";
+import type { ChatSource } from "@/lib/chatContext";
+import { loadDramaFeed } from "@/stores/dramaBackend";
 import { resolveUserProfile } from "@/utils/profileResolver";
 
 interface Challenge {
@@ -70,23 +79,47 @@ interface Challenge {
   };
 }
 
+type PredictionMention = {
+  kind: "prediction";
+  prediction: PredictionPost;
+  sortAt: string;
+};
+
+type ReceivedFeedItem = Challenge | PredictionMention;
+
 const stripAtSymbol = (username?: string) =>
   (username || "unknown").replace(/^@/, "");
 
-const getCompletedCapsuleClasses =
-  "border border-[#4ade80]/24 bg-[#4ade80]/10 text-[#bbf7d0] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
 const sharedChallengeCardClass =
-  "card relative isolate animate-slide-up overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,22,18,0.97)_0%,rgba(8,13,9,0.99)_52%,rgba(5,8,6,0.99)_100%)] p-3.5 shadow-[0_20px_52px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.055)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-[#4ade80]/22 hover:shadow-[0_24px_60px_rgba(0,0,0,0.48),0_0_22px_rgba(74,222,128,0.07)]";
+  "dares-received-item relative isolate overflow-hidden rounded-[20px] border border-white/9 bg-[#0d100d] p-3.5 text-white shadow-[0_16px_34px_rgba(0,0,0,0.24)] transition-[transform,border-color,background-color] duration-200 active:scale-[0.995]";
 const highlightedChallengeRingClass =
-  "ring-2 ring-[#4ade80] ring-offset-2 ring-offset-[#071008]";
-const curvedPromptPanelClass =
-  "rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,22,18,0.94),rgba(6,9,8,0.98))] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.045)]";
-const curvedStatusCapsuleClass =
-  "flex min-h-[42px] flex-1 items-center justify-center rounded-full px-3 py-2.5 text-center";
+  "ring-2 ring-[#4ade80] ring-offset-2 ring-offset-[#050705]";
 const curvedActionButtonClass =
-  "dares-received-action-button flex-1 rounded-full px-4 py-2.5 text-sm font-black shadow-[0_12px_28px_rgba(0,0,0,0.22)] transition-all duration-200 active:scale-[0.98]";
+  "dares-received-action-button flex-1 rounded-[14px] px-5 py-2.5 text-[13px] font-black transition-[transform,background-color,border-color] duration-200 active:scale-[0.98]";
 const curvedModalButtonClass =
-  "dares-received-action-button w-full rounded-full py-3.5 text-base font-semibold";
+  "dares-received-action-button w-full rounded-[16px] py-3.5 text-base font-black";
+
+function formatRelativeChallengeTime(value?: string | null) {
+  const timestamp = parseChallengeTime(value);
+  if (!timestamp) return "";
+
+  const elapsedMinutes = Math.max(
+    1,
+    Math.floor((Date.now() - timestamp) / 60_000),
+  );
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h`;
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 7) return `${elapsedDays}d`;
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(timestamp));
+}
 
 const TimerDisplay = memo(
   ({
@@ -96,11 +129,12 @@ const TimerDisplay = memo(
     time: number;
     formatTime: (s: number) => string;
   }) => (
-    <p className="text-sm font-bold text-[#a8f0bf] transition-all duration-100">
-      Time remaining: {formatTime(time)}
-    </p>
+    <span className="font-mono text-[12px] font-black tabular-nums text-[#bbf7d0]">
+      {formatTime(time)} left
+    </span>
   ),
 );
+TimerDisplay.displayName = "TimerDisplay";
 
 const ChallengeCard = memo(
   ({
@@ -131,123 +165,123 @@ const ChallengeCard = memo(
     const isAnswered =
       challenge.type === "truth" &&
       (challenge.state === "APPROVED" || challenge.state === "REJECTED");
-    const isWaitingForApproval =
+    const canAccept = challenge.state === "SENT";
+    const isLegacySubmissionProcessing =
       challenge.state === "ANSWERED" ||
       challenge.state === "PROOF_SUBMITTED" ||
+      challenge.state === "UNDER_REVIEW" ||
       challenge.state === "FRIENDS_VALIDATION";
 
+    const prompt = challenge.type === "truth" ? challenge.question : challenge.action;
+    const relativeTime = formatRelativeChallengeTime(challenge.sortAt || challenge.createdAt);
+    const statusText = isChickenOut
+      ? "You backed away like a loser"
+      : isExpired
+        ? "Dare expired"
+        : isTimedOut
+          ? "Time up! You lost professionally"
+          : isCompleted || isAnswered
+            ? challenge.type === "truth"
+              ? "Truth completed"
+              : "Dare completed"
+            : isMarkedFake
+              ? "Dare rejected"
+              : isLegacySubmissionProcessing
+                ? "Finishing submission"
+                : "Challenge updated";
+    const statusTone =
+      isChickenOut || isExpired || isMarkedFake
+        ? "text-red-300"
+        : isCompleted || isAnswered
+          ? "text-[#86efac]"
+          : isLegacySubmissionProcessing
+            ? "text-white/48"
+            : "text-white/42";
+
     return (
-      <div
+      <article
         className={`${sharedChallengeCardClass} ${isHighlighted ? highlightedChallengeRingClass : ""}`}
       >
-        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.68),rgba(14,165,233,0.46),rgba(74,222,128,0))]" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,rgba(74,222,128,0.075),transparent_72%)] opacity-80" />
-        <div className="pointer-events-none absolute -right-14 -top-14 h-32 w-32 rounded-full bg-[#22d3ee]/7 blur-3xl" />
+        <InteractionReceipt id={challenge.id} table={challenge.type === "dare" ? "dares" : "truths"} />
+        <div className="relative z-10 flex items-start gap-3">
+          <div className="relative shrink-0">
+            <Avatar
+              src={challenge.challenger.avatar}
+              alt={challenge.challenger.name}
+              size="md"
+              userId={challenge.challengerId}
+              username={challenge.challenger.username}
+              className="ring-1 ring-white/10"
+            />
+            {challenge.challenger.verified && (
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#4ade80]">
+                <CheckCircle size={10} className="text-[#061007]" />
+              </span>
+            )}
+          </div>
 
-        <div className="relative z-10 mb-3 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center space-x-3">
-            <div className="relative">
-              <Avatar
-                src={challenge.challenger.avatar}
-                alt={challenge.challenger.name}
-                size="md"
-                userId={challenge.challengerId}
-                username={challenge.challenger.username}
-                className="ring-1 ring-white/10 shadow-[0_14px_30px_rgba(0,0,0,0.28)]"
-                disableGhostMode
-              />
-              {challenge.challenger.verified && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-accent-primary rounded-full flex items-center justify-center shadow-sm">
-                  <CheckCircle size={10} className="text-black" />
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="mb-1 inline-flex rounded-full border border-[#79d99a]/16 bg-[#79d99a]/8 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#a8f0bf] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                Challenger
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-extrabold leading-5 text-white">
+                  {challenge.challenger.name || `@${stripAtSymbol(challenge.challenger.username)}`}
+                  <span className="font-medium text-white/46">
+                    {challenge.type === "truth" ? " asked a truth" : " dared you"}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-[12px] font-medium text-white/36">
+                  @{stripAtSymbol(challenge.challenger.username)}
+                  {relativeTime ? ` · ${relativeTime}` : ""}
+                </p>
               </div>
-              <div className="flex items-center space-x-2">
-                <h3 className="truncate text-[14.5px] font-black leading-tight tracking-tight text-white">
-                  @{challenge.challenger.username || "unknown"}
-                </h3>
-                {challenge.challenger.verified && (
-                  <CheckCircle size={14} className="text-accent-primary" />
+              <span className="shrink-0 pt-0.5 text-[11px] font-black uppercase tracking-[0.14em] text-[#72e994]">
+                {challenge.type}
+              </span>
+            </div>
+
+            <p className="mt-2.5 pr-1 text-[18px] font-black leading-[1.14] tracking-[-0.02em] text-white">
+              {prompt}
+            </p>
+
+            {challenge.type === "dare" && challenge.state === "ACCEPTED" && !isExpired && (
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-bold text-white/45">
+                <span className="inline-flex items-center gap-1.5">
+                  <Video size={14} className="text-[#72e994]" />
+                  Proof required
+                </span>
+                {timeRemaining !== undefined && timeRemaining > 0 && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock size={14} className="text-[#72e994]" />
+                    <TimerDisplay time={timeRemaining} formatTime={formatTime} />
+                  </span>
                 )}
               </div>
-            </div>
+            )}
           </div>
-
-          <div
-            className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${
-              challenge.type === "truth"
-                ? "border border-[#4ade80]/28 bg-[#4ade80]/12 text-[#bbf7d0]"
-                : "border border-[#22d3ee]/24 bg-[#22d3ee]/10 text-[#a5f3fc]"
-            }`}
-          >
-            {challenge.type.toUpperCase()}
-          </div>
-        </div>
-
-        <div className="relative z-10 mb-3">
-          {challenge.type === "truth" ? (
-            <>
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                Wants to know the truth about:
-              </p>
-              <div className={curvedPromptPanelClass}>
-                <div className="mb-3 h-1 w-14 rounded-full bg-[#4ade80]/90 shadow-[0_0_18px_rgba(74,222,128,0.22)]" />
-                <p className="text-[14.5px] font-bold leading-relaxed text-white">
-                  {challenge.question}
-                </p>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                Dared you to:
-              </p>
-              <div className={curvedPromptPanelClass}>
-                <div className="mb-3 h-1 w-14 rounded-full bg-[linear-gradient(90deg,#22d3ee,#4ade80)] shadow-[0_0_18px_rgba(34,211,238,0.18)]" />
-                <p className="text-[14.5px] font-bold leading-relaxed text-white">
-                  {challenge.action}
-                </p>
-              </div>
-            </>
-          )}
         </div>
 
         {challenge.type === "truth" && challenge.poll && (
-          <div className="relative z-10 mb-3.5 rounded-[24px] border border-white/8 bg-white/[0.035] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-            <div className="mb-2.5 flex items-center justify-between gap-3">
-              <h4 className="text-xs font-bold text-white">
-                {challenge.poll.question}
-              </h4>
-              <span className="shrink-0 text-xs font-semibold text-[#94a3b8]">
+          <div className="relative z-10 mt-3 border-y border-white/8 py-2.5">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h4 className="text-[13px] font-extrabold text-white/82">{challenge.poll.question}</h4>
+              <span className="shrink-0 text-[11px] font-bold text-white/32">
                 {challenge.poll.totalVotes} votes
               </span>
             </div>
             <div className="space-y-2">
               {challenge.poll.options.map((option, index) => {
                 const votes = challenge.poll!.votes[option] || 0;
-                const percentage =
-                  challenge.poll!.totalVotes > 0
-                    ? Math.round((votes / challenge.poll!.totalVotes) * 100)
-                    : 0;
+                const percentage = challenge.poll!.totalVotes > 0
+                  ? Math.round((votes / challenge.poll!.totalVotes) * 100)
+                  : 0;
                 return (
-                  <div key={index} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-white">
-                        {option}
-                      </span>
-                      <span className="text-xs text-[#94a3b8]">
-                        {votes} votes
-                      </span>
+                  <div key={index}>
+                    <div className="mb-1.5 flex items-center justify-between gap-3 text-[12px]">
+                      <span className="font-bold text-white/74">{option}</span>
+                      <span className="font-bold tabular-nums text-white/34">{percentage}%</span>
                     </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/30">
-                      <div
-                        className="h-1.5 rounded-full bg-linear-to-r from-[#79d99a] to-[#35b96f]"
-                        style={{ width: `${percentage}%` }}
-                      />
+                    <div className="h-1 overflow-hidden rounded-full bg-white/8">
+                      <div className="h-full rounded-full bg-[#4ade80]" style={{ width: `${percentage}%` }} />
                     </div>
                   </div>
                 );
@@ -256,57 +290,8 @@ const ChallengeCard = memo(
           </div>
         )}
 
-        {/* Action Buttons / Status Messages */}
-        <div className="relative z-10 flex space-x-2.5">
-          {isChickenOut ? (
-            // Refused — fade in shame message, no buttons
-            <div
-              className={`${curvedStatusCapsuleClass} border border-red-400/18 bg-red-400/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]`}
-              style={{ animation: "fadeIn 0.5s ease" }}
-            >
-              <p className="text-red-400 font-semibold text-xs">
-                You backed away like a loser
-              </p>
-            </div>
-          ) : isExpired ? (
-            // Dare expired
-            <div
-              className={`${curvedStatusCapsuleClass} border border-red-400/18 bg-red-400/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]`}
-              style={{ animation: "fadeIn 0.5s ease" }}
-            >
-              <p className="text-red-400 font-semibold text-xs">Dare expired</p>
-            </div>
-          ) : isTimedOut ? (
-            // Timer ran out while accepted
-            <div
-              className={`${curvedStatusCapsuleClass} border border-white/10 bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]`}
-              style={{ animation: "fadeIn 0.5s ease" }}
-            >
-              <p className="text-gray-400 font-semibold text-xs">
-                Time up! You lost professionally
-              </p>
-            </div>
-          ) : isCompleted || isAnswered ? (
-            <div
-              className={`${curvedStatusCapsuleClass} ${getCompletedCapsuleClasses}`}
-              style={{ animation: "fadeIn 0.5s ease" }}
-            >
-              <p className="text-[#4ade80] font-semibold text-xs">
-                {challenge.type === "truth"
-                  ? "Truth completed"
-                  : "Dare completed"}
-              </p>
-            </div>
-          ) : isMarkedFake ? (
-            <div
-              className={`${curvedStatusCapsuleClass} border border-red-400/18 bg-red-400/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]`}
-              style={{ animation: "fadeIn 0.5s ease" }}
-            >
-              <p className="text-red-400 font-semibold text-xs">
-                Dare rejected
-              </p>
-            </div>
-          ) : challenge.state === "ACCEPTED" ? (
+        <div className="relative z-10 mt-3 flex items-center gap-3 border-t border-white/8 pt-3">
+          {challenge.state === "ACCEPTED" && !isExpired ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -314,18 +299,9 @@ const ChallengeCard = memo(
               }}
               className={`btn btn-primary ${curvedActionButtonClass}`}
             >
-              Complete Now
+              Complete now
             </button>
-          ) : isWaitingForApproval ? (
-            <div
-              className={`${curvedStatusCapsuleClass} border border-[#22d3ee]/20 bg-[#22d3ee]/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]`}
-              style={{ animation: "fadeIn 0.5s ease" }}
-            >
-              <p className="text-[#a5f3fc] font-semibold text-xs">
-                Waiting for approval
-              </p>
-            </div>
-          ) : (
+          ) : canAccept ? (
             <>
               <button
                 onClick={(e) => {
@@ -346,34 +322,173 @@ const ChallengeCard = memo(
                 Refuse
               </button>
             </>
-          )}
-        </div>
-
-        {/* Timer — only show when accepted and time remaining > 0 and not expired */}
-        {challenge.state === "ACCEPTED" &&
-          timeRemaining !== undefined &&
-          timeRemaining > 0 &&
-          !isExpired && (
-            <div className="relative z-10 mt-2.5 rounded-full border border-[#79d99a]/16 bg-[#79d99a]/8 px-3 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <TimerDisplay time={timeRemaining} formatTime={formatTime} />
+          ) : (
+            <div className="min-w-0 flex-1">
+              <p className={`text-[12px] font-bold ${statusTone}`}>
+                {statusText}
+              </p>
             </div>
           )}
-      </div>
+        </div>
+      </article>
     );
   },
 );
+ChallengeCard.displayName = "ChallengeCard";
+
+function PredictionMentionCard({
+  mention,
+  onRespond,
+}: {
+  mention: PredictionMention;
+  onRespond: (prediction: PredictionPost) => void;
+}) {
+  const { prediction } = mention;
+  const hasResponded = Boolean(prediction.subjectThought);
+
+  return (
+    <article className={`${sharedChallengeCardClass} border-[#4ade80]/16`}>
+      <div className="relative z-10 flex items-start gap-3">
+        <Avatar
+          src={prediction.poster.avatar}
+          alt={prediction.poster.name}
+          size="md"
+          userId={prediction.poster.id}
+          username={prediction.poster.username}
+          className="shrink-0 ring-1 ring-white/10"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-extrabold leading-5 text-white">
+                {prediction.poster.name}
+                <span className="font-medium text-white/46"> predicted about you</span>
+              </p>
+              <p className="mt-0.5 text-[12px] font-medium text-white/36">
+                @{stripAtSymbol(prediction.poster.username)} · {formatRelativeChallengeTime(mention.sortAt)}
+              </p>
+            </div>
+            <span className="shrink-0 pt-0.5 text-[11px] font-black uppercase tracking-[0.14em] text-[#72e994]">
+              Prediction
+            </span>
+          </div>
+          <p className="mt-2.5 pr-1 text-[18px] font-black leading-[1.14] tracking-[-0.02em] text-white">
+            {prediction.text}
+          </p>
+        </div>
+      </div>
+
+      <div className="relative z-10 mt-3 border-t border-white/8 pt-3">
+        <button
+          type="button"
+          onClick={() => onRespond(prediction)}
+          className={`btn btn-primary ${curvedActionButtonClass} w-full`}
+        >
+          {hasResponded ? "Edit your thought" : "Say something"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function PredictionResponseScreen({
+  prediction,
+  onBack,
+}: {
+  prediction: PredictionPost;
+  onBack: () => void;
+}) {
+  const respondAsSubject = usePredictionStore((s) => s.respondAsSubject);
+  const [outcome, setOutcome] = useState<PredictionVote>(
+    prediction.subjectOutcome || "happens",
+  );
+  const [thought, setThought] = useState(prediction.subjectThought || "");
+
+  const submit = () => {
+    if (!thought.trim()) return;
+    respondAsSubject(prediction.id, outcome, thought);
+    onBack();
+  };
+
+  return (
+    <div className="screen-container flex flex-col bg-[#050705] px-5 text-white">
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col pt-[calc(var(--safe-area-top)+16px)]">
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-8 flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.06] text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label="Back"
+        >
+          <X size={18} />
+        </button>
+
+        <p className="mb-3 text-[12px] font-black uppercase tracking-[0.16em] text-[#72e994]">Your take</p>
+        <h1 className="mb-8 text-[30px] font-black leading-[1.06] tracking-[-0.035em] text-white">
+          {prediction.text}
+        </h1>
+
+        <p className="mb-2.5 text-[13px] font-bold text-white/48">Will it happen?</p>
+        <div className="mb-6 grid grid-cols-2 rounded-[18px] bg-white/[0.055] p-1">
+          <button
+            type="button"
+            onClick={() => setOutcome("happens")}
+            className={`rounded-[14px] px-3 py-3 text-[14px] font-black transition-colors ${
+              outcome === "happens"
+                ? "bg-[#4ade80] text-[#041006]"
+                : "text-white/50"
+            }`}
+          >
+            It happens
+          </button>
+          <button
+            type="button"
+            onClick={() => setOutcome("wont")}
+            className={`rounded-[14px] px-3 py-3 text-[14px] font-black transition-colors ${
+              outcome === "wont"
+                ? "bg-white text-[#0a0c0a]"
+                : "text-white/50"
+            }`}
+          >
+            Won&apos;t happen
+          </button>
+        </div>
+
+        <textarea
+          value={thought}
+          onChange={(e) => setThought(e.target.value)}
+          maxLength={240}
+          placeholder="Write what you think..."
+          className="min-h-[190px] w-full resize-none rounded-[20px] border border-white/9 bg-[#0d100d] p-4 text-[16px] font-semibold leading-relaxed text-white outline-none transition-colors placeholder:text-white/24 focus:border-[#4ade80]/40"
+        />
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-xs font-bold tabular-nums text-white/32">
+            {thought.length}/240
+          </span>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!thought.trim()}
+            className="rounded-[15px] bg-[#4ade80] px-5 py-3 text-sm font-black text-[#041006] transition-transform active:scale-[0.98] disabled:opacity-35"
+          >
+            Post thought
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const SentChallengeCard = memo(
   ({
     challenge,
-    onReview,
     isHighlighted,
+    onReview,
   }: {
     challenge: Challenge;
-    onReview: (c: Challenge) => void;
     isHighlighted?: boolean;
+    onReview: (challenge: Challenge) => void;
   }) => {
-    const isAwaitingApproval =
+    const isLegacySubmissionProcessing =
       (challenge.type === "dare" &&
         (challenge.state === "PROOF_SUBMITTED" ||
           challenge.state === "FRIENDS_VALIDATION")) ||
@@ -389,156 +504,144 @@ const SentChallengeCard = memo(
       challenge.type === "dare" && challenge.state === "CHICKEN_OUT";
     const isMarkedFake =
       challenge.type === "dare" && challenge.state === "REJECTED_FAKE";
+    const isReadyForChallengerReview =
+      challenge.type === "dare" && challenge.state === "PROOF_SUBMITTED";
+    const prompt = challenge.type === "truth" ? challenge.question : challenge.action;
+    const recipientName = challenge.receiver?.name || `@${stripAtSymbol(challenge.receiver?.username)}`;
+    const relativeTime = formatRelativeChallengeTime(challenge.sortAt || challenge.createdAt);
+    const statusText = isCompleted
+      ? challenge.type === "truth"
+        ? "Truth completed"
+        : "Dare completed"
+      : isSurrendered
+        ? `${stripAtSymbol(challenge.receiver?.username)} surrendered`
+        : isMarkedFake
+          ? "Dare rejected"
+          : isLegacySubmissionProcessing
+            ? challenge.type === "truth"
+              ? "Answer is being posted"
+                : "Proof waiting for your review"
+            : isAwaitingCompletion
+              ? "Waiting for them to complete it"
+              : challenge.type === "truth" && challenge.state === "SENT"
+                ? "Waiting for them to answer"
+                : "Challenge updated";
 
     return (
-      <div
+      <article
         className={`${sharedChallengeCardClass} ${
           isHighlighted ? highlightedChallengeRingClass : ""
         }`}
       >
-        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.68),rgba(14,165,233,0.46),rgba(74,222,128,0))]" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,rgba(74,222,128,0.075),transparent_72%)] opacity-80" />
-        <div className="pointer-events-none absolute -right-14 -top-14 h-32 w-32 rounded-full bg-[#22d3ee]/7 blur-3xl" />
-
-        <div className="relative z-10 mb-3 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center space-x-3">
-            <div className="relative">
-              <Avatar
-                src={challenge.receiver?.avatar || "/default-avatar.png"}
-                alt={challenge.receiver?.name || "Unknown"}
-                size="md"
-                userId={challenge.receiverId}
-                username={challenge.receiver?.username}
-                className="ring-1 ring-white/10 shadow-[0_14px_30px_rgba(0,0,0,0.28)]"
-                disableGhostMode
-              />
-              {challenge.receiver?.verified && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-accent-primary rounded-full flex items-center justify-center shadow-sm">
-                  <CheckCircle size={10} className="text-black" />
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="mb-1 inline-flex rounded-full border border-[#79d99a]/16 bg-[#79d99a]/8 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#a8f0bf] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                Sent to
-              </div>
-              <div className="flex items-center space-x-2">
-                <h3 className="truncate text-[14.5px] font-black leading-tight tracking-tight text-white">
-                  @{challenge.receiver?.username || "unknown"}
-                </h3>
-              </div>
-              <p className="mt-1 text-[11px] font-semibold text-[#94a3b8]">
-                {challenge.type === "truth"
-                  ? "Truth you sent"
-                  : "Dare you sent"}
-              </p>
-            </div>
+        <div className="relative z-10 flex items-start gap-3">
+          <div className="relative shrink-0">
+            <Avatar
+              src={challenge.receiver?.avatar || "/default-avatar.png"}
+              alt={challenge.receiver?.name || "Unknown"}
+              size="md"
+              userId={challenge.receiverId}
+              username={challenge.receiver?.username}
+              className="ring-1 ring-white/10"
+            />
+            {challenge.receiver?.verified && (
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#4ade80]">
+                <CheckCircle size={10} className="text-[#061007]" />
+              </span>
+            )}
           </div>
-          <div className="text-right">
-            <span
-              className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${
-                challenge.state === "SENT"
-                  ? "border border-sky-400/20 bg-sky-400/10 text-sky-200"
-                  : challenge.state === "ACCEPTED_REAL"
-                    ? "border border-[#4ade80]/24 bg-[#4ade80]/10 text-[#bbf7d0]"
-                    : challenge.state === "REJECTED_FAKE"
-                      ? "border border-red-400/20 bg-red-400/10 text-red-300"
-                      : challenge.state === "ANSWERED" ||
-                          challenge.state === "PROOF_SUBMITTED" ||
-                          challenge.state === "FRIENDS_VALIDATION"
-                        ? "border border-[#22d3ee]/20 bg-[#22d3ee]/10 text-[#a5f3fc]"
-                        : "border border-white/10 bg-white/[0.045] text-[#94a3b8]"
-              }`}
-            >
-              {challenge.state}
-            </span>
-          </div>
-        </div>
-
-        <div className="relative z-10 mb-3">
-          {challenge.type === "truth" ? (
-            <>
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                You asked:
-              </p>
-              <div className={curvedPromptPanelClass}>
-                <div className="mb-3 h-1 w-14 rounded-full bg-[#4ade80]/90 shadow-[0_0_18px_rgba(74,222,128,0.22)]" />
-                <p className="text-[14.5px] font-bold leading-relaxed text-white">
-                  {challenge.question}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-extrabold leading-5 text-white">
+                  Sent to {recipientName}
+                </p>
+                <p className="mt-0.5 text-[12px] font-medium text-white/36">
+                  @{stripAtSymbol(challenge.receiver?.username)}
+                  {relativeTime ? ` · ${relativeTime}` : ""}
                 </p>
               </div>
-            </>
-          ) : (
-            <>
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
-                You dared them to:
-              </p>
-              <div className={curvedPromptPanelClass}>
-                <div className="mb-3 h-1 w-14 rounded-full bg-[linear-gradient(90deg,#22d3ee,#4ade80)] shadow-[0_0_18px_rgba(34,211,238,0.18)]" />
-                <p className="text-[14.5px] font-bold leading-relaxed text-white">
-                  {challenge.action}
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="relative z-10 mb-3.5">
-          <div
-            className={`${curvedStatusCapsuleClass} ${
-              isCompleted
-                ? getCompletedCapsuleClasses
-                : isSurrendered
-                  ? "border border-red-400/18 bg-red-400/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-                  : "border border-[#22d3ee]/20 bg-[#22d3ee]/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-            }`}
-            style={{ animation: "fadeIn 0.5s ease" }}
-          >
-            <p
-              className={
-                isCompleted
-                  ? "text-[#4ade80] font-semibold text-xs"
-                  : isSurrendered
-                    ? "text-red-400 font-semibold text-xs"
-                    : "text-[#a5f3fc] font-semibold text-xs"
-              }
-            >
-              {isCompleted
-                ? challenge.type === "truth"
-                  ? "Truth completed"
-                  : "Dare completed"
-                : isSurrendered
-                  ? `${stripAtSymbol(challenge.receiver?.username)} surrendered`
-                  : isMarkedFake
-                    ? "Dare rejected"
-                    : isAwaitingApproval
-                      ? challenge.type === "truth"
-                        ? "They answered — tap to review"
-                        : "Waiting for your approval"
-                      : isAwaitingCompletion
-                        ? "Waiting for them to complete it"
-                        : challenge.type === "truth" &&
-                            challenge.state === "SENT"
-                          ? "Waiting for them to answer"
-                          : "Waiting for your approval"}
+              <span className="shrink-0 pt-0.5 text-[11px] font-black uppercase tracking-[0.14em] text-[#72e994]">
+                {challenge.type}
+              </span>
+            </div>
+            <p className="mt-2.5 pr-1 text-[18px] font-black leading-[1.14] tracking-[-0.02em] text-white">
+              {prompt}
             </p>
           </div>
         </div>
 
-        {isAwaitingApproval && (
-          <div className="relative z-10 flex space-x-2.5">
-            <button
-              onClick={() => onReview(challenge)}
-              className={`btn btn-primary ${curvedActionButtonClass}`}
-            >
-              Review
-            </button>
+        {challenge.proof && (
+        <div className="relative z-10 mt-3 overflow-hidden rounded-[16px] border border-white/8 bg-black/30">
+            {challenge.proof.type === "image" ? (
+              <div className="relative aspect-[16/7]">
+                <img
+                  src={challenge.proof.url}
+                  alt={`Proof submitted by ${recipientName}`}
+                  className="h-full w-full object-cover"
+                />
+                <span className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1.5 rounded-full bg-black/68 px-2.5 py-1.5 text-[11px] font-extrabold text-white backdrop-blur-md">
+                  <ImageIcon size={13} /> Proof submitted
+                </span>
+              </div>
+            ) : challenge.proof.type === "video" ? (
+              <div className="relative aspect-[16/7]">
+                <video
+                  src={challenge.proof.url}
+                  poster={challenge.proof.thumbnail}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="h-full w-full object-cover"
+                />
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/62 text-white backdrop-blur-md">
+                    <Play size={20} fill="currentColor" />
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 px-3.5 py-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#4ade80]/12 text-[#72e994]">
+                  <Mic size={18} />
+                </span>
+                <div>
+                  <p className="text-[13px] font-extrabold text-white">Audio proof</p>
+                  <p className="mt-0.5 text-[11px] font-semibold text-white/38">Posted to the feed</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
-      </div>
+
+        <div className="relative z-10 mt-3 flex items-center gap-3 border-t border-white/8 pt-3">
+          <div className="min-w-0 flex-1">
+            <p className={`text-[12px] font-bold ${
+              isCompleted
+                ? "text-[#86efac]"
+                : isSurrendered || isMarkedFake
+                  ? "text-red-300"
+                  : isLegacySubmissionProcessing
+                    ? "text-white/72"
+                    : "text-white/42"
+            }`}>
+              {statusText}
+            </p>
+          </div>
+          {isReadyForChallengerReview && (
+            <button
+              type="button"
+              onClick={() => onReview(challenge)}
+              className="dares-received-action-button shrink-0 rounded-[12px] bg-[#f5b942] px-3.5 py-2 text-[12px] font-black text-[#191203] transition-transform active:scale-[0.98]"
+            >
+              Review proof
+            </button>
+          )}
+        </div>
+      </article>
     );
   },
 );
+SentChallengeCard.displayName = "SentChallengeCard";
 
 // In production mode, challenges come from backend
 // Start with empty arrays - will be populated by real data
@@ -576,7 +679,7 @@ function mapProofTypeToDareMediaType(type: "image" | "video" | "audio") {
 
 function parseChallengeTime(value?: string | null): number {
   if (!value) return 0;
-  // Handle Firestore Timestamp objects accidentally passed through
+  // Handle Postgres Timestamp objects accidentally passed through
   if (typeof value === "object" && "toMillis" in (value as any)) {
     return (value as any).toMillis();
   }
@@ -615,6 +718,22 @@ function sortChallengesByNewestCreated(challenges: Challenge[]): Challenge[] {
   });
 }
 
+function isPredictionMention(item: ReceivedFeedItem): item is PredictionMention {
+  return "kind" in item && item.kind === "prediction";
+}
+
+function getReceivedItemSortTime(item: ReceivedFeedItem): number {
+  return isPredictionMention(item)
+    ? parseChallengeTime(item.sortAt || item.prediction.createdAt)
+    : getChallengeSortTime(item);
+}
+
+function sortReceivedFeedItems(items: ReceivedFeedItem[]): ReceivedFeedItem[] {
+  return [...items].sort(
+    (a, b) => getReceivedItemSortTime(b) - getReceivedItemSortTime(a),
+  );
+}
+
 function getSortAtValue(...values: Array<string | null | undefined>): string {
   for (const value of values) {
     if (value) return value;
@@ -636,13 +755,18 @@ type DaresNavigationRequest = {
 };
 
 export function DaresReceivedScreen({
+  chatSource,
+  onOpenInteraction,
+  isActive = true,
   navigationRequest,
   resetKey,
 }: {
+  chatSource?: ChatSource | null;
+  onOpenInteraction?: (kind: string, id: string) => void;
+  isActive?: boolean;
   navigationRequest?: DaresNavigationRequest | null;
   resetKey?: number;
 }) {
-  const approvalCinematicTimeoutsRef = useRef<number[]>([]);
   const submissionCinematicTimeoutsRef = useRef<number[]>([]);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<"received" | "sent">("received");
@@ -654,13 +778,18 @@ export function DaresReceivedScreen({
     initialSentChallenges,
   );
   const [currentScreen, setCurrentScreen] = useState<
-    "dares" | "truth" | "dare" | "review" | "approval" | "submitted"
+    | "dares"
+    | "truth"
+    | "dare"
+    | "review"
+    | "submitted"
+    | "prediction-response"
   >("dares");
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(
     null,
   );
-  const [isApprovalCinematicExiting, setIsApprovalCinematicExiting] =
-    useState(false);
+  const [activePrediction, setActivePrediction] =
+    useState<PredictionPost | null>(null);
   const [isSubmissionCinematicExiting, setIsSubmissionCinematicExiting] =
     useState(false);
   const [acceptedTimers, setAcceptedTimers] = useState<{
@@ -720,9 +849,6 @@ export function DaresReceivedScreen({
 
   useEffect(() => {
     return () => {
-      approvalCinematicTimeoutsRef.current.forEach((timeoutId) =>
-        window.clearTimeout(timeoutId),
-      );
       submissionCinematicTimeoutsRef.current.forEach((timeoutId) =>
         window.clearTimeout(timeoutId),
       );
@@ -731,11 +857,10 @@ export function DaresReceivedScreen({
 
   // Load truth data from backend
   const { user } = useAuthStore();
-  const { addDarePost, addTruthPost } = useContentStore();
+  const predictions = usePredictionStore((s) => s.predictions);
   const { userProfiles, setUserProfile } = useProfileDataStore();
   const { setUserAvatar } = useAvatarStore();
   const alerts = useAlertStore((s) => s.alerts);
-  const subscribeToAlerts = useAlertStore((s) => s.subscribeToAlerts);
 
   const profileCache = useRef<Map<string, ResolvedUserProfile>>(new Map());
 
@@ -822,6 +947,7 @@ export function DaresReceivedScreen({
 
     setCurrentScreen("dares");
     setActiveChallenge(null);
+    setActivePrediction(null);
     window.scrollTo(0, 0);
     if (listScrollRef.current) {
       listScrollRef.current.scrollTop = 0;
@@ -1122,7 +1248,7 @@ export function DaresReceivedScreen({
   );
 
   const refreshSentDares = useCallback(async () => {
-    if (!user?.id) return;
+    if (!isActive || !user?.id) return;
 
     try {
       const sentDaresResponse = await dareService.getSentDares(user.id);
@@ -1136,7 +1262,7 @@ export function DaresReceivedScreen({
     } catch (error) {
       console.error("Error refreshing sent dares:", error);
     }
-  }, [mapSentDareToChallenge, mergeSentChallenges, user?.id]);
+  }, [isActive, mapSentDareToChallenge, mergeSentChallenges, user?.id]);
 
   // Keep rendered cards in sync with real-time profile/avatar updates.
   // Re-sort after mapping so truths and dares always interleave by latest activity,
@@ -1228,7 +1354,7 @@ export function DaresReceivedScreen({
   }, [resolveLiveProfileForUser]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!isActive || !user?.id) return;
 
     const loadTruths = async () => {
       try {
@@ -1346,13 +1472,14 @@ export function DaresReceivedScreen({
     mapSentTruthToChallenge,
     mapSentDareToChallenge,
     shouldRefresh,
+    isActive,
     user?.id,
   ]); // Add shouldRefresh as dependency
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!isActive || !user?.id) return;
 
-    let isActive = true;
+    let isMounted = true;
     const unsubscribe = dareService.subscribeToUserDares(
       user.id,
       "sent",
@@ -1362,7 +1489,7 @@ export function DaresReceivedScreen({
             dares.map((dare) => mapSentDareToChallenge(dare)),
           );
 
-          if (!isActive) return;
+          if (!isMounted) return;
 
           setSentChallenges((prev) => mergeSentChallenges(prev, liveSentDares));
         })();
@@ -1370,15 +1497,15 @@ export function DaresReceivedScreen({
     );
 
     return () => {
-      isActive = false;
+      isMounted = false;
       unsubscribe();
     };
-  }, [mapSentDareToChallenge, mergeSentChallenges, user?.id]);
+  }, [isActive, mapSentDareToChallenge, mergeSentChallenges, user?.id]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!isActive || !user?.id) return;
 
-    let isActive = true;
+    let isMounted = true;
     const unsubscribe = dareService.subscribeToUserDares(
       user.id,
       "received",
@@ -1388,7 +1515,7 @@ export function DaresReceivedScreen({
             dares.map((dare) => mapReceivedDareToChallenge(dare)),
           );
 
-          if (!isActive) return;
+          if (!isMounted) return;
 
           setChallenges((prev) =>
             mergeReceivedChallenges(prev, liveReceivedDares),
@@ -1398,16 +1525,16 @@ export function DaresReceivedScreen({
     );
 
     return () => {
-      isActive = false;
+      isMounted = false;
       unsubscribe();
     };
-  }, [mapReceivedDareToChallenge, mergeReceivedChallenges, user?.id]);
+  }, [isActive, mapReceivedDareToChallenge, mergeReceivedChallenges, user?.id]);
 
   // Real-time listener for received truths
   useEffect(() => {
-    if (!user?.id) return;
+    if (!isActive || !user?.id) return;
 
-    let isActive = true;
+    let isMounted = true;
     const unsubscribe = truthService.subscribeToUserTruths(
       user.id,
       "received",
@@ -1415,7 +1542,7 @@ export function DaresReceivedScreen({
         const mapped = await Promise.all(
           truths.map((t) => mapReceivedTruthToChallenge(t)),
         );
-        if (!isActive) return;
+        if (!isMounted) return;
         setChallenges((prev) => {
           const dares = prev.filter((c) => c.type === "dare");
           return sortChallengesByLatestActivity([...dares, ...mapped]);
@@ -1424,16 +1551,16 @@ export function DaresReceivedScreen({
     );
 
     return () => {
-      isActive = false;
+      isMounted = false;
       unsubscribe();
     };
-  }, [mapReceivedTruthToChallenge, user?.id]);
+  }, [isActive, mapReceivedTruthToChallenge, user?.id]);
 
   // Real-time listener for sent truths
   useEffect(() => {
-    if (!user?.id) return;
+    if (!isActive || !user?.id) return;
 
-    let isActive = true;
+    let isMounted = true;
     const unsubscribe = truthService.subscribeToUserTruths(
       user.id,
       "sent",
@@ -1441,7 +1568,7 @@ export function DaresReceivedScreen({
         const mapped = await Promise.all(
           truths.map((t) => mapSentTruthToChallenge(t)),
         );
-        if (!isActive) return;
+        if (!isMounted) return;
         setSentChallenges((prev) => {
           const dares = prev.filter((c) => c.type === "dare");
           return sortChallengesByLatestActivity([...dares, ...mapped]);
@@ -1450,23 +1577,19 @@ export function DaresReceivedScreen({
     );
 
     return () => {
-      isActive = false;
+      isMounted = false;
       unsubscribe();
     };
-  }, [mapSentTruthToChallenge, user?.id]);
+  }, [isActive, mapSentTruthToChallenge, user?.id]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    return subscribeToAlerts(user.id);
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id || alerts.length === 0) return;
+    if (!isActive || !user?.id || alerts.length === 0) return;
 
     const pendingCompletedAlerts = alerts.filter(
       (alert) =>
         alert.userId === user.id &&
-        alert.type === "DARE_COMPLETED" &&
+        (alert.type === "DARE_COMPLETED" ||
+          alert.type === "DARE_PROOF_SUBMITTED") &&
         !!alert.entityId &&
         !handledCompletedAlertIds.current.has(alert.id),
     );
@@ -1492,13 +1615,25 @@ export function DaresReceivedScreen({
         }
       }
     })();
-  }, [alerts, mapSentDareToChallenge, mergeSentChallenges, user?.id]);
+  }, [alerts, isActive, mapSentDareToChallenge, mergeSentChallenges, user?.id]);
 
   // Function to trigger refresh when coming back from TruthAnswerScreen
   const refreshTruths = useCallback(() => {
     console.log("Refreshing truths...");
     setShouldRefresh((prev) => prev + 1);
   }, []);
+
+  const syncReceivedDare = useCallback(
+    async (dareId: string) => {
+      const dareResponse = await dareService.getDareById(dareId);
+      if (!dareResponse.success || !dareResponse.dare) return null;
+
+      const liveChallenge = await mapReceivedDareToChallenge(dareResponse.dare);
+      setChallenges((prev) => mergeReceivedChallenges(prev, [liveChallenge]));
+      return liveChallenge;
+    },
+    [mapReceivedDareToChallenge, mergeReceivedChallenges],
+  );
 
   const handleAccept = useCallback(
     async (challenge: Challenge) => {
@@ -1511,9 +1646,14 @@ export function DaresReceivedScreen({
           console.error("Error accepting truth:", error);
         }
       } else {
+        if (challenge.state !== "SENT") {
+          await syncReceivedDare(challenge.id);
+          return;
+        }
+
         // For dares, persist ACCEPTED state first so completion screen validation passes.
         if (!user?.id) {
-          console.error("Cannot accept dare: missing current user");
+          console.warn("Cannot accept dare: missing current user");
           return;
         }
         try {
@@ -1522,7 +1662,11 @@ export function DaresReceivedScreen({
             user.id,
           );
           if (!acceptResponse?.success) {
-            console.error("Failed to accept dare:", acceptResponse?.error);
+            const liveChallenge = await syncReceivedDare(challenge.id);
+            if (liveChallenge?.state === "ACCEPTED") {
+              setAcceptedTimers((prev) => ({ ...prev, [challenge.id]: 900 }));
+              setShowAcceptPrompt(liveChallenge);
+            }
             return;
           }
 
@@ -1543,226 +1687,53 @@ export function DaresReceivedScreen({
           setAcceptedTimers((prev) => ({ ...prev, [challenge.id]: 900 }));
           setShowAcceptPrompt(challenge);
         } catch (error) {
-          console.error("Error accepting dare:", error);
+          console.warn("Error accepting dare:", error);
+          await syncReceivedDare(challenge.id).catch(() => null);
         }
       }
     },
-    [user?.id],
+    [syncReceivedDare, user?.id],
   );
-
-  // ✅ Fixed: ReviewScreen's onAccept now correctly points to this function
-  const handleAcceptReview = useCallback(
-    async (challengeId: string, comment?: string) => {
-      try {
-        const challenge = sentChallenges.find((c) => c.id === challengeId);
-        if (!challenge || !user?.id) return;
-
-        if (challenge.type === "truth") {
-          // Directly approve the truth so Firestore state becomes APPROVED
-          const approveResponse = await truthService.approveTruth(
-            challengeId,
-            user.id,
-          );
-
-          if (!approveResponse.success || !approveResponse.truth) {
-            throw new Error(approveResponse.error || "Failed to approve truth");
-          }
-
-          const approvedTruth = approveResponse.truth;
-          const [challengerProfile, receiverProfile] = await Promise.all([
-            getUserProfileCached(approvedTruth.challengerId),
-            getUserProfileCached(approvedTruth.receiverId),
-          ]);
-
-          // Push a complete card to the main truth feed immediately. The same
-          // backend entity will also arrive through realtime refresh for the receiver.
-          addTruthPost({
-            id: approvedTruth.id,
-            challengerId: approvedTruth.challengerId,
-            receiverId: approvedTruth.receiverId,
-            challenger: {
-              nickname: challengerProfile.displayName,
-              avatar: challengerProfile.avatarUrl,
-              verified: false,
-            },
-            receiver: {
-              nickname: receiverProfile.displayName,
-              avatar: receiverProfile.avatarUrl,
-              verified: false,
-            },
-            question: approvedTruth.question,
-            answer: approvedTruth.answer || "",
-            state: approvedTruth.state,
-            createdAt: approvedTruth.createdAt,
-          });
-
-          // Immediately update card to APPROVED locally
-          setSentChallenges((prev) =>
-            sortChallengesByLatestActivity(
-              prev.map((c) =>
-                c.id === challengeId
-                  ? {
-                      ...c,
-                      answer: approvedTruth.answer || c.answer,
-                      state: approvedTruth.state,
-                      updatedAt:
-                        approvedTruth.reviewedAt ||
-                        approvedTruth.updatedAt ||
-                        new Date().toISOString(),
-                      sortAt:
-                        approvedTruth.reviewedAt ||
-                        approvedTruth.updatedAt ||
-                        new Date().toISOString(),
-                    }
-                  : c,
-              ),
-            ),
-          );
-
-          // Also update received challenges for the same truth
-          setChallenges((prev) =>
-            sortChallengesByLatestActivity(
-              prev.map((c) =>
-                c.id === challengeId
-                  ? {
-                      ...c,
-                      answer: approvedTruth.answer || c.answer,
-                      state: approvedTruth.state,
-                      updatedAt:
-                        approvedTruth.reviewedAt ||
-                        approvedTruth.updatedAt ||
-                        new Date().toISOString(),
-                      sortAt:
-                        approvedTruth.reviewedAt ||
-                        approvedTruth.updatedAt ||
-                        new Date().toISOString(),
-                    }
-                  : c,
-              ),
-            ),
-          );
-        } else if (challenge.type === "dare") {
-          await dareService.challengerReviewDare(
-            challengeId,
-            user.id,
-            "ACCEPT",
-          );
-
-          // Immediately update dare card to ACCEPTED_REAL locally
-          setSentChallenges((prev) =>
-            sortChallengesByLatestActivity(
-              prev.map((c) =>
-                c.id === challengeId
-                  ? {
-                      ...c,
-                      state: "ACCEPTED_REAL" as const,
-                      updatedAt: new Date().toISOString(),
-                      sortAt: new Date().toISOString(),
-                    }
-                  : c,
-              ),
-            ),
-          );
-
-          if (
-            challenge.proof &&
-            (challenge.proof.type === "image" ||
-              challenge.proof.type === "video")
-          ) {
-            addDarePost({
-              id: challenge.id,
-              challengerId: challenge.challengerId,
-              receiverId: challenge.receiverId,
-              challenger: {
-                nickname: challenge.challenger.name,
-                avatar: challenge.challenger.avatar,
-                verified: challenge.challenger.verified,
-              },
-              receiver: {
-                nickname: challenge.receiver?.name || "Unknown",
-                avatar: challenge.receiver?.avatar || "/default-avatar.png",
-                verified: challenge.receiver?.verified,
-              },
-              description: challenge.action || "",
-              proof: {
-                type: challenge.proof.type,
-                url: challenge.proof.url,
-                thumbnail: challenge.proof.thumbnail,
-              },
-              state: "ACCEPTED_REAL",
-              createdAt: new Date().toISOString(),
-            });
-          }
-
-          approvalCinematicTimeoutsRef.current.forEach((timeoutId) =>
-            window.clearTimeout(timeoutId),
-          );
-          approvalCinematicTimeoutsRef.current = [];
-
-          setIsApprovalCinematicExiting(false);
-          setActiveChallenge(challenge);
-          setCurrentScreen("approval");
-
-          approvalCinematicTimeoutsRef.current.push(
-            window.setTimeout(() => {
-              setIsApprovalCinematicExiting(true);
-            }, 3600),
-          );
-
-          approvalCinematicTimeoutsRef.current.push(
-            window.setTimeout(() => {
-              setCurrentScreen("dares");
-              setActiveChallenge(null);
-              setIsApprovalCinematicExiting(false);
-              approvalCinematicTimeoutsRef.current = [];
-            }, 4400),
-          );
-
-          return;
-        }
-      } catch (error) {
-        console.error("❌ Error accepting challenge:", error);
-      }
-
-      // Navigate back — do NOT filter out the card, let it show Answered ✓
-      setCurrentScreen("dares");
-      setActiveChallenge(null);
-    },
-    [addDarePost, addTruthPost, getUserProfileCached, sentChallenges, user],
-  );
-
-  const handleReject = useCallback((challengeId: string, comment?: string) => {
-    setSentChallenges((prev) => prev.filter((c) => c.id !== challengeId));
-    setCurrentScreen("dares");
-    setActiveChallenge(null);
-  }, []);
 
   const handleSurrender = useCallback(async (challenge: Challenge) => {
-    // Increment dares refused count on challenger's profile
-    if (challenge.challengerId) {
-      try {
-        await userService.incrementDaresRefused(challenge.challengerId);
-      } catch (error) {
-        console.error("Failed to increment dares refused count:", error);
-      }
-    }
+    if (challenge.type !== "dare" || !user?.id) return;
 
-    setChallenges((prev) =>
-      sortChallengesByLatestActivity(
-        prev.map((c) =>
-          c.id === challenge.id
-            ? {
-                ...c,
-                state: "CHICKEN_OUT" as const,
-                updatedAt: new Date().toISOString(),
-                completedAt: new Date().toISOString(),
-                sortAt: new Date().toISOString(),
-              }
-            : c,
+    try {
+      // Persist the refusal before updating the local inbox. Without this
+      // call, the UI showed CHICKEN_OUT only until the next reload.
+      await dareService.chickenOut(challenge.id, user.id);
+
+      // Increment the challenger's refused count only after the state change
+      // has been accepted by the server.
+      if (challenge.challengerId) {
+        try {
+          await userService.incrementDaresRefused(challenge.challengerId);
+        } catch (error) {
+          console.error("Failed to increment dares refused count:", error);
+        }
+      }
+
+      const now = new Date().toISOString();
+      setChallenges((prev) =>
+        sortChallengesByLatestActivity(
+          prev.map((c) =>
+            c.id === challenge.id
+              ? {
+                  ...c,
+                  state: "CHICKEN_OUT" as const,
+                  updatedAt: now,
+                  completedAt: now,
+                  sortAt: now,
+                }
+              : c,
+          ),
         ),
-      ),
-    );
-  }, []);
+      );
+    } catch (error) {
+      console.warn("Error refusing dare:", error);
+      await syncReceivedDare(challenge.id).catch(() => null);
+    }
+  }, [syncReceivedDare, user?.id]);
 
   const handleComplete = useCallback((challenge: Challenge) => {
     setActiveChallenge(challenge);
@@ -1790,11 +1761,22 @@ export function DaresReceivedScreen({
     setCurrentScreen("review");
   }, []);
 
+  const handlePredictionResponse = useCallback((prediction: PredictionPost) => {
+    setActivePrediction(prediction);
+    setCurrentScreen("prediction-response");
+  }, []);
+
   const handleBackToDares = useCallback(() => {
     console.log("Coming back to dares, refreshing truths and dares...");
     refreshTruths(); // Refresh truths to get updated state
+    submissionCinematicTimeoutsRef.current.forEach((timeoutId) =>
+      window.clearTimeout(timeoutId),
+    );
+    submissionCinematicTimeoutsRef.current = [];
+    setIsSubmissionCinematicExiting(false);
     setCurrentScreen("dares");
     setActiveChallenge(null);
+    setActivePrediction(null);
 
     // Clear expired flags for completed dares
     if (activeChallenge?.type === "dare") {
@@ -1802,6 +1784,23 @@ export function DaresReceivedScreen({
       localStorage.removeItem(expiredKey);
     }
   }, [refreshTruths, activeChallenge]);
+
+  const handleReviewDecision = useCallback(
+    async (decision: "ACCEPT" | "REJECT") => {
+      if (!activeChallenge || !user?.id) return;
+      const response = await dareService.challengerReviewDare(
+        activeChallenge.id,
+        user.id,
+        decision,
+      );
+      if (!response.success) {
+        throw new Error(response.error || "Could not review this dare");
+      }
+      await refreshTruths();
+      handleBackToDares();
+    },
+    [activeChallenge, handleBackToDares, refreshTruths, user?.id],
+  );
 
   const handleDareSubmit = (_proof: {
     type: "image" | "video" | "audio";
@@ -1878,15 +1877,74 @@ export function DaresReceivedScreen({
     }
   };
 
-  const receivedChallengesForDisplay = useMemo(
-    () => sortChallengesByLatestActivity(challenges),
-    [challenges],
+  useEffect(() => {
+    if (!isActive || !user?.id) return;
+    void loadDramaFeed(true);
+  }, [isActive, user?.id]);
+
+  const predictionMentions = useMemo<PredictionMention[]>(() => {
+    if (!user?.id) return [];
+    const viewerId = String(user.id).trim();
+    return predictions
+      .filter((prediction) => {
+        if (prediction.subject.type !== "friend" || prediction.verdict) {
+          return false;
+        }
+        return String(prediction.subject.id).trim() === viewerId;
+      })
+      .map((prediction) => ({
+        kind: "prediction" as const,
+        prediction,
+        sortAt: prediction.createdAt,
+      }));
+  }, [predictions, user?.id]);
+
+  const receivedChallengesForDisplay = useMemo<ReceivedFeedItem[]>(
+    () =>
+      sortReceivedFeedItems([
+        ...sortChallengesByLatestActivity(challenges),
+        ...predictionMentions,
+      ]),
+    [challenges, predictionMentions],
   );
 
   const sentChallengesForDisplay = useMemo(
     () => sortChallengesByLatestActivity(sentChallenges),
     [sentChallenges],
   );
+
+  const receivedQueueSummary = useMemo(() => {
+    let waiting = 0;
+    let active = 0;
+    receivedChallengesForDisplay.forEach((item) => {
+      if (isPredictionMention(item)) {
+        if (!item.prediction.subjectThought) waiting += 1;
+        return;
+      }
+      if (item.state === "SENT") waiting += 1;
+      if (item.state === "ACCEPTED") active += 1;
+    });
+    return { waiting, active };
+  }, [receivedChallengesForDisplay]);
+
+  const receivedUnreadSummary = useMemo(() => {
+    let dares = 0;
+    let truths = 0;
+    let predictions = 0;
+
+    receivedChallengesForDisplay.forEach((item) => {
+      if (isPredictionMention(item)) {
+        if (!item.prediction.subjectThought) predictions += 1;
+        return;
+      }
+
+      if (item.state !== "SENT") return;
+      if (item.type === "dare") dares += 1;
+      if (item.type === "truth") truths += 1;
+    });
+
+    return { total: dares + truths + predictions };
+  }, [receivedChallengesForDisplay]);
 
   const handleDareSubmittedCinematic = async (proof: {
     type: "image" | "video" | "audio";
@@ -1898,37 +1956,19 @@ export function DaresReceivedScreen({
       throw new Error("Cannot submit proof without a signed-in user");
     }
 
-    const submitResponse = await dareService.submitProof(
-      activeChallenge.id,
-      user.id,
-      proof.url,
-      mapProofTypeToDareMediaType(proof.type),
-      proof.thumbnail,
-    );
-
-    if (!submitResponse.success || !submitResponse.dare) {
-      throw new Error(submitResponse.error || "Failed to submit proof");
-    }
-
     const now = new Date().toISOString();
-    const submittedDare = submitResponse.dare;
-    const submittedProof =
-      mapDareProofToChallengeProof(
-        submittedDare.proofMediaType,
-        submittedDare.proofMediaUrl,
-        submittedDare.proofThumbnailUrl,
-      ) || proof;
-    const submittedAt = submittedDare.proofSubmittedAt || now;
+    const challengeId = activeChallenge.id;
+    const submittedProof = proof;
 
     setChallenges((prev) =>
       sortChallengesByLatestActivity(
         prev.map((c) =>
-          c.id === activeChallenge.id
+          c.id === challengeId
             ? {
                 ...c,
-                state: submittedDare.state,
-                updatedAt: submittedAt,
-                sortAt: submittedAt,
+                state: "PROOF_SUBMITTED" as const,
+                updatedAt: now,
+                sortAt: now,
                 proof: submittedProof,
               }
             : c,
@@ -1939,12 +1979,12 @@ export function DaresReceivedScreen({
     setSentChallenges((prev) =>
       sortChallengesByLatestActivity(
         prev.map((c) =>
-          c.id === activeChallenge.id
+          c.id === challengeId
             ? {
                 ...c,
-                state: submittedDare.state,
-                updatedAt: submittedAt,
-                sortAt: submittedAt,
+                state: "PROOF_SUBMITTED" as const,
+                updatedAt: now,
+                sortAt: now,
                 proof: submittedProof,
               }
             : c,
@@ -1956,14 +1996,13 @@ export function DaresReceivedScreen({
       window.clearTimeout(timeoutId),
     );
     submissionCinematicTimeoutsRef.current = [];
-
     setIsSubmissionCinematicExiting(false);
     setCurrentScreen("submitted");
 
     submissionCinematicTimeoutsRef.current.push(
       window.setTimeout(() => {
         setIsSubmissionCinematicExiting(true);
-      }, 3600),
+      }, 2200),
     );
 
     submissionCinematicTimeoutsRef.current.push(
@@ -1972,9 +2011,27 @@ export function DaresReceivedScreen({
         setActiveChallenge(null);
         setIsSubmissionCinematicExiting(false);
         submissionCinematicTimeoutsRef.current = [];
-        refreshTruths();
-      }, 4400),
+      }, 2800),
     );
+
+    // Persist after UI updates, so network latency cannot block completion feedback.
+    void dareService
+      .submitProof(
+        challengeId,
+        user.id,
+        proof.url,
+        mapProofTypeToDareMediaType(proof.type),
+        proof.thumbnail,
+      )
+      .then((submitResponse) => {
+        if (!submitResponse.success || !submitResponse.dare) {
+          throw new Error(submitResponse.error || "Failed to submit proof");
+        }
+        void refreshTruths();
+      })
+      .catch((error) => {
+        console.error("[DaresReceived] Background proof submission failed:", error);
+      });
   };
 
   if (currentScreen === "truth" && activeChallenge) {
@@ -2003,23 +2060,13 @@ export function DaresReceivedScreen({
     );
   }
 
-  if (currentScreen === "review" && activeChallenge) {
+  if (currentScreen === "review" && activeChallenge?.type === "dare") {
     return (
       <ReviewScreen
         challenge={activeChallenge}
         onBack={handleBackToDares}
-        onAccept={handleAcceptReview}
-        onReject={handleReject}
-      />
-    );
-  }
-
-  if (currentScreen === "approval" && activeChallenge?.type === "dare") {
-    return (
-      <DareApprovedCinematicScreen
-        receiverName={activeChallenge.receiver?.name}
-        receiverUsername={activeChallenge.receiver?.username}
-        isExiting={isApprovalCinematicExiting}
+        onAccept={() => handleReviewDecision("ACCEPT")}
+        onReject={() => handleReviewDecision("REJECT")}
       />
     );
   }
@@ -2033,203 +2080,214 @@ export function DaresReceivedScreen({
     );
   }
 
+  if (currentScreen === "prediction-response" && activePrediction) {
+    return (
+      <PredictionResponseScreen
+        prediction={activePrediction}
+        onBack={handleBackToDares}
+      />
+    );
+  }
+
   return (
-    <div
-      className="screen-container flex flex-col"
-      style={{
-        background:
-          "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.18), transparent 34%), radial-gradient(circle at 12% 18%, rgba(14,165,233,0.12), transparent 28%), linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%)",
-      }}
-    >
+    <div className="dares-received-screen screen-container relative flex flex-col overflow-hidden bg-[#050705] text-white">
       <style>
-        {`@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-          @keyframes daresReceivedSweep {
-            0% { transform: translateX(-125%); }
-            42% { transform: translateX(125%); }
-            100% { transform: translateX(125%); }
+        {`@keyframes daresReceivedEnter {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
           }
-          @keyframes daresReceivedFloatIn {
-            from { opacity: 0; transform: translateY(14px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-          }
-          @keyframes daresReceivedPulse {
-            0%, 100% { opacity: 0.58; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.08); }
-          }
-          .dares-received-panel {
-            animation: daresReceivedFloatIn 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
-          }
-          .dares-received-shine::after {
+          .dares-received-screen::before {
             content: "";
             position: absolute;
             inset: 0;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
-            animation: daresReceivedSweep 6.8s ease-in-out infinite;
+            opacity: 0.14;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.12'/%3E%3C/svg%3E");
             pointer-events: none;
           }
-          .dares-received-live-dot {
-            animation: daresReceivedPulse 2.2s ease-in-out infinite;
+          .dares-received-item {
+            animation: daresReceivedEnter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
           }
           .dares-received-action-button {
-            border-radius: 999px;
-            min-height: 42px;
+            min-height: 44px;
           }
           .dares-received-action-button.btn-primary {
             background: #4ade80;
             color: #041006;
-            box-shadow: 0 14px 30px rgba(74,222,128,0.18);
+            box-shadow: none;
           }
           .dares-received-action-button.btn-primary:hover {
             background: #22c55e;
-            box-shadow: 0 16px 36px rgba(74,222,128,0.24);
           }
           .dares-received-action-button.btn-secondary {
             border: 1px solid rgba(255,255,255,0.1);
-            background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
-            color: #cbd5e1;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 28px rgba(0,0,0,0.18);
+            background: rgba(255,255,255,0.04);
+            color: rgba(255,255,255,0.62);
           }
           .dares-received-action-button.btn-secondary:hover {
-            border-color: rgba(248,113,113,0.22);
-            background: rgba(248,113,113,0.1);
-            color: #fca5a5;
-          }
-          .dares-received-active-tab {
-            background: #4ade80;
-            box-shadow: 0 10px 26px rgba(74,222,128,0.22);
+            border-color: rgba(255,255,255,0.16);
+            background: rgba(255,255,255,0.07);
+            color: white;
           }`}
       </style>
-      <div
-        className="px-4"
-        style={{ paddingTop: "calc(var(--safe-area-top) + 14px)" }}
+      <header
+        className="relative z-10 px-5"
+        style={{ paddingTop: "calc(var(--safe-area-top) + 16px)" }}
       >
-        <div className="mx-auto max-w-2xl pb-4">
-          <div className="dares-received-panel relative mb-3 overflow-hidden rounded-[30px] border border-white/8 bg-[radial-gradient(ellipse_at_24%_-45%,rgba(74,222,128,0.13),transparent_64%),radial-gradient(ellipse_at_82%_-40%,rgba(14,165,233,0.09),transparent_62%),linear-gradient(180deg,rgba(13,19,14,0.94),rgba(8,13,9,0.97))] p-3.5 shadow-[0_22px_62px_rgba(0,0,0,0.38),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl">
-            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.78),rgba(14,165,233,0.45),rgba(74,222,128,0))]" />
-            <div className="relative z-10 mb-4 flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="mb-2 inline-flex rounded-full border border-[#4ade80]/16 bg-[#4ade80]/9 px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.16em] text-[#86efac]">
-                  Dare inbox
-                </div>
-                <h1 className="text-[29px] font-black leading-none tracking-tight text-white">
-                  Dares & Truths
-                </h1>
-              </div>
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] border border-white/8 bg-white/[0.04] text-[#4ade80] shadow-[0_12px_30px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)]">
-                <Inbox size={22} strokeWidth={2.5} />
-              </div>
+        <div className="mx-auto max-w-2xl">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-[32px] font-black leading-none tracking-[-0.045em] text-white">Dares</h1>
+              <p className="mt-2 text-[13px] font-semibold text-white/38">
+                {activeTab === "received"
+                  ? `${receivedUnreadSummary.total} new · ${receivedQueueSummary.active} active`
+                  : `${sentChallengesForDisplay.length} sent`}
+              </p>
             </div>
-            <div className="relative z-10 grid grid-cols-2 rounded-full border border-white/8 bg-black/25 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-              <button
-                onClick={() => setActiveTab("received")}
-                className={`min-h-[38px] rounded-full px-4 text-[13px] font-black transition-all duration-300 ${
-                  activeTab === "received"
-                    ? "dares-received-active-tab text-[#041006]"
-                    : "text-[#94a3b8] hover:text-white"
-                }`}
-              >
+            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/[0.055] text-white/68">
+              <Inbox size={20} strokeWidth={2.2} />
+              {activeTab === "received" && receivedUnreadSummary.total > 0 && (
+                <span className="absolute -right-1 -top-1 text-[11px] font-black leading-none text-[#4ade80]">
+                  {receivedUnreadSummary.total > 99 ? "99+" : receivedUnreadSummary.total}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <nav className="grid grid-cols-2 rounded-[17px] bg-white/[0.055] p-1" aria-label="Dare inbox">
+            <button
+              type="button"
+              onClick={() => setActiveTab("received")}
+              className={`min-h-[38px] rounded-[13px] px-4 text-[13px] font-black transition-colors ${
+                activeTab === "received"
+                  ? "bg-white text-[#090b09]"
+                  : "text-white/42 hover:text-white/70"
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
                 Received
-              </button>
-              <button
-                onClick={() => setActiveTab("sent")}
-                className={`min-h-[38px] rounded-full px-4 text-[13px] font-black transition-all duration-300 ${
-                  activeTab === "sent"
-                    ? "dares-received-active-tab text-[#041006]"
-                    : "text-[#94a3b8] hover:text-white"
-                }`}
-              >
-                Sent
-              </button>
-            </div>
-          </div>
-          <div className="dares-received-panel dares-received-shine relative overflow-hidden rounded-[26px] border border-[#4ade80]/18 bg-[radial-gradient(circle_at_18%_-18%,rgba(74,222,128,0.12),transparent_34%),radial-gradient(circle_at_92%_16%,rgba(14,165,233,0.09),transparent_32%),linear-gradient(180deg,rgba(15,22,18,0.98),rgba(7,11,8,0.98))] px-3.5 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.34),0_0_22px_rgba(74,222,128,0.06),inset_0_1px_0_rgba(255,255,255,0.05)]">
-            <div className="relative z-10 flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] border border-[#4ade80]/18 bg-[#4ade80]/9 text-[#86efac] shadow-[0_12px_30px_rgba(74,222,128,0.08)]">
-                <Sparkles size={20} strokeWidth={2.5} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="dares-received-live-dot h-2 w-2 shrink-0 rounded-full bg-[#4ade80] shadow-[0_0_14px_rgba(74,222,128,0.55)]" />
-                  <p className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-[#86efac]">
-                    {activeTab === "received" ? "Active queue" : "Sent queue"}
-                  </p>
-                </div>
-                <p className="truncate text-[15px] font-black text-white">
-                  {activeTab === "received"
-                    ? `${receivedChallengesForDisplay.length} received challenge${receivedChallengesForDisplay.length === 1 ? "" : "s"}`
-                    : `${sentChallengesForDisplay.length} sent challenge${sentChallengesForDisplay.length === 1 ? "" : "s"}`}
-                </p>
-              </div>
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[16px] border border-white/8 bg-white/[0.055] text-[#cbd5e1]">
-                <ArrowRight size={18} strokeWidth={2.6} />
-              </div>
-            </div>
-          </div>
+                {receivedUnreadSummary.total > 0 && (
+                  <span className="text-[11px] font-black text-[#16a34a]">
+                    {receivedUnreadSummary.total > 99 ? "99+" : receivedUnreadSummary.total}
+                  </span>
+                )}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("sent")}
+              className={`min-h-[38px] rounded-[13px] px-4 text-[13px] font-black transition-colors ${
+                activeTab === "sent"
+                  ? "bg-white text-[#090b09]"
+                  : "text-white/42 hover:text-white/70"
+              }`}
+            >
+              Sent
+            </button>
+          </nav>
         </div>
-      </div>
+      </header>
 
       <div
         ref={listScrollRef}
-        className="custom-scrollbar flex-1 overflow-y-auto px-4 pt-1"
+        className="custom-scrollbar relative z-10 mt-3 flex-1 overflow-y-auto px-3"
         style={{
-          paddingBottom: "calc(var(--bottom-nav-total-height) + 24px)",
+          paddingBottom: "calc(var(--safe-area-bottom) + 20px)",
         }}
       >
-        <div className="mx-auto max-w-2xl space-y-3.5">
+        <div className="mx-auto max-w-2xl space-y-2.5">
+          {chatSource && <ChatSourceQuote source={chatSource} />}
+          {activeTab === "received" && <InteractionInbox onOpen={onOpenInteraction} />}
           {activeTab === "received"
-            ? receivedChallengesForDisplay.map((challenge) => (
-                <ChallengeCard
-                  key={`${challenge.type}-${challenge.id}`}
-                  challenge={challenge}
-                  timeRemaining={acceptedTimers[challenge.id]}
-                  formatTime={formatTime}
-                  onAccept={handleAccept}
-                  onSurrender={handleSurrender}
-                  onComplete={handleComplete}
-                  isHighlighted={
-                    challenge.id === highlightedTruthId ||
-                    challenge.id === highlightedDareId
-                  }
-                />
-              ))
-            : sentChallengesForDisplay.map((challenge) => (
-                <SentChallengeCard
-                  key={`${challenge.type}-${challenge.id}`}
-                  challenge={challenge}
-                  onReview={handleReview}
-                  isHighlighted={
-                    challenge.id === highlightedTruthId ||
-                    challenge.id === highlightedDareId
-                  }
-                />
-              ))}
+            ? receivedChallengesForDisplay.length > 0
+              ? receivedChallengesForDisplay.map((item) =>
+                  isPredictionMention(item) ? (
+                    <PredictionMentionCard
+                      key={`prediction-${item.prediction.id}`}
+                      mention={item}
+                      onRespond={handlePredictionResponse}
+                    />
+                  ) : (
+                    <ChallengeCard
+                      key={`${item.type}-${item.id}`}
+                      challenge={item}
+                      timeRemaining={acceptedTimers[item.id]}
+                      formatTime={formatTime}
+                      onAccept={handleAccept}
+                      onSurrender={handleSurrender}
+                      onComplete={handleComplete}
+                      isHighlighted={
+                        item.id === highlightedTruthId || item.id === highlightedDareId
+                      }
+                    />
+                  ),
+                )
+              : (
+                  <div className="flex min-h-[280px] flex-col items-center justify-center px-8 text-center">
+                    <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.05] text-white/32">
+                      <Inbox size={23} />
+                    </span>
+                    <h2 className="text-[18px] font-black text-white">Nothing waiting</h2>
+                    <p className="mt-2 max-w-[240px] text-[13px] font-medium leading-5 text-white/36">
+                      New truths, dares, and predictions will land here.
+                    </p>
+                  </div>
+                )
+            : sentChallengesForDisplay.length > 0
+              ? sentChallengesForDisplay.map((challenge) => (
+                  <SentChallengeCard
+                    key={`${challenge.type}-${challenge.id}`}
+                    challenge={challenge}
+                    isHighlighted={
+                      challenge.id === highlightedTruthId || challenge.id === highlightedDareId
+                    }
+                    onReview={handleReview}
+                  />
+                ))
+              : (
+                  <div className="flex min-h-[280px] flex-col items-center justify-center px-8 text-center">
+                    <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.05] text-white/32">
+                      <Target size={23} />
+                    </span>
+                    <h2 className="text-[18px] font-black text-white">No sent dares yet</h2>
+                    <p className="mt-2 max-w-[240px] text-[13px] font-medium leading-5 text-white/36">
+                      Challenges you send to friends will stay organized here.
+                    </p>
+                  </div>
+                )}
         </div>
       </div>
 
       {showAcceptPrompt && (
         <div
-          className="app-modal-backdrop fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="app-modal-backdrop fixed inset-0 z-50 flex items-end bg-black/74 backdrop-blur-[3px]"
           onClick={() => setShowAcceptPrompt(null)}
         >
           <div
-            className="app-modal-dialog w-full max-w-sm overflow-y-auto rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(24,28,24,0.98),rgba(16,19,16,0.98))] p-6 shadow-[0_28px_80px_rgba(0,0,0,0.42)]"
+            className="app-modal-dialog mx-auto w-full max-w-2xl overflow-y-auto rounded-t-[30px] border-x border-t border-white/9 bg-[#111411] px-5 pb-[calc(var(--safe-area-bottom)+20px)] pt-3 shadow-[0_-24px_70px_rgba(0,0,0,0.5)]"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="accepted-challenge-title"
           >
-            <div className="text-center mb-6">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[#79d99a]/18 bg-[#79d99a]/10">
-                <Target size={22} className="text-[#9ae6b4]" />
+            <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-white/14" />
+            <div className="mb-7 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#4ade80]/10 text-[#72e994]">
+                <Target size={23} strokeWidth={2.3} />
               </div>
-              <h3 className="text-white font-bold text-lg mb-2 leading-tight">
-                You&apos;ve accepted this {showAcceptPrompt.type.toUpperCase()}
+              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-[#72e994]">
+                Challenge accepted
+              </p>
+              <h3 id="accepted-challenge-title" className="text-[24px] font-black leading-tight tracking-[-0.025em] text-white">
+                {showAcceptPrompt.type === "truth" ? "Ready to answer?" : "Ready to prove it?"}
               </h3>
-              <p className="text-sm leading-relaxed text-[#8ea18e]">
+              <p className="mx-auto mt-2 max-w-[280px] text-[14px] font-medium leading-5 text-white/42">
                 {showAcceptPrompt.type === "truth"
-                  ? "Answer the truth question honestly"
-                  : "Complete the dare and submit proof"}
+                  ? "Answer honestly now, or return to it from your active queue."
+                  : "Your timer is already running. Complete the dare and submit proof."}
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <button
                 onClick={async () => {
                   setShowAcceptPrompt(null);
@@ -2264,13 +2322,13 @@ export function DaresReceivedScreen({
                 }}
                 className={`btn btn-primary ${curvedModalButtonClass}`}
               >
-                Start Now
+                Start now
               </button>
               <button
                 onClick={() => setShowAcceptPrompt(null)}
                 className={`btn btn-secondary ${curvedModalButtonClass}`}
               >
-                Do it Later
+                Do it later
               </button>
             </div>
           </div>

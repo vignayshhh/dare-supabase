@@ -1,16 +1,87 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { userService, UserProfile } from "@/middleware/services/user.service";
-import { AlertType } from "@/backend/domain/entities/Alert";
-import {
-  collection,
-  addDoc,
-  Timestamp,
-  deleteDoc,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
-import { db } from "@/backend/lib/firebase";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { recordResourceMetric } from "@/lib/observability/resourceMetrics";
+
+type ProfileSocialContext = {
+  friends_count: number;
+  friends_preview: any[];
+  friendship: any | null;
+};
+
+const socialContextCache = new Map<
+  string,
+  { value: ProfileSocialContext; expiresAt: number }
+>();
+const socialContextRequests = new Map<string, Promise<ProfileSocialContext>>();
+
+const socialContextKey = (viewerId: string, profileId: string) =>
+  `${viewerId}:${profileId}`;
+
+const invalidateSocialContext = (...userIds: string[]) => {
+  for (const key of socialContextCache.keys()) {
+    if (userIds.some((id) => key.includes(id))) socialContextCache.delete(key);
+  }
+};
+
+const getProfileSocialContext = async (
+  viewerId: string,
+  profileId: string,
+): Promise<ProfileSocialContext> => {
+  const key = socialContextKey(viewerId, profileId);
+  const cached = socialContextCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    recordResourceMetric("cache_hits");
+    return cached.value;
+  }
+  const existing = socialContextRequests.get(key);
+  if (existing) {
+    recordResourceMetric("cache_hits");
+    return existing;
+  }
+  recordResourceMetric("cache_misses");
+  const request = (async () => {
+    const { data, error } = await getSupabaseBrowserClient().rpc(
+      "get_profile_social_context",
+      { p_profile_id: profileId },
+    );
+    let value: ProfileSocialContext;
+    if (error) {
+      // Upgrade-safe fallback until forward migration is applied.
+      const { friendsService } = await import(
+        "@/middleware/services/service-factory"
+      );
+      const [friendsResult, friendshipResult] = await Promise.all([
+        friendsService.getFriends(profileId),
+        friendsService.getFriendshipStatus(viewerId, profileId),
+      ]);
+      const friends = friendsResult.success ? friendsResult.friends || [] : [];
+      value = {
+        friends_count: friends.length,
+        friends_preview: friends.slice(0, 6),
+        friendship: friendshipResult.success
+          ? friendshipResult.friendship || null
+          : null,
+      };
+    } else {
+      value = (data || {}) as ProfileSocialContext;
+    }
+    const normalized = {
+      friends_count: Number(value.friends_count) || 0,
+      friends_preview: Array.isArray(value.friends_preview)
+        ? value.friends_preview
+        : [],
+      friendship: value.friendship || null,
+    };
+    socialContextCache.set(key, {
+      value: normalized,
+      expiresAt: Date.now() + 30_000,
+    });
+    return normalized;
+  })().finally(() => socialContextRequests.delete(key));
+  socialContextRequests.set(key, request);
+  return request;
+};
 
 interface UserProfileState {
   // Data
@@ -46,36 +117,29 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
 
   // Load user profile
   loadProfile: async (userId: string) => {
-    console.log("🔄 loadProfile called for user:", userId);
     set({ loading: true, error: null });
 
     try {
-      const profile = await userService.getProfile(userId);
-      console.log("🔄 Profile loaded:", profile);
+      const { useAuthStore } = await import("./useAuthStore-v2");
+      const viewerId = useAuthStore.getState().user?.id;
+      const [profile, social] = await Promise.all([
+        userService.getProfile(userId),
+        viewerId
+          ? getProfileSocialContext(viewerId, userId)
+          : Promise.resolve<ProfileSocialContext>({
+              friends_count: 0,
+              friends_preview: [],
+              friendship: null,
+            }),
+      ]);
 
       if (profile) {
-        // Get friends count
-        const { friendsService } =
-          await import("@/middleware/services/service-factory");
-        console.log("🔄 Getting friends count for user:", userId);
-        const friendsResponse = await friendsService.getFriends(userId);
-        console.log("🔄 Friends response:", friendsResponse);
-
-        const friends = friendsResponse.success
-          ? friendsResponse.friends || []
-          : [];
-        const friendsCount = friends.length;
-        console.log("🔄 Friends list:", friends);
-        console.log("🔄 Friends count calculated:", friendsCount);
-
-        // Sync local `followersCount` from computed friends count. We used
-        // to also write this back to the viewed user's Firestore doc, but
-        // that fails under ownership rules when viewing someone else's
-        // profile (you can only update your own doc). Keep the fix local.
-        const firestoreProfile = profile as any;
+        const friends = social.friends_preview;
+        const friendsCount = social.friends_count;
+        const databaseProfile = profile as any;
         if (
-          firestoreProfile &&
-          friendsCount !== (firestoreProfile.followersCount || 0)
+          databaseProfile &&
+          friendsCount !== (databaseProfile.followersCount || 0)
         ) {
           (profile as any).followersCount = friendsCount;
         }
@@ -84,18 +148,15 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
           profile,
           friends,
           friendsCount,
+          isFriend: social.friendship?.status === "accepted",
+          friendshipStatus: social.friendship?.status || "none",
           loading: false,
         });
-        console.log("✅ Profile and friends count updated in store");
-
-        // Check friendship status
-        await get().checkFriendshipStatus(userId);
       } else {
-        console.log("❌ Profile not found");
         set({ loading: false, error: "Profile not found" });
       }
     } catch (error) {
-      console.error("❌ Error loading profile:", error);
+      console.error("âŒ Error loading profile:", error);
       set({ loading: false, error: (error as Error).message });
       const errorMessage =
         error instanceof Error ? error.message : "Failed to load profile";
@@ -141,12 +202,12 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
       }
 
       // Send friend request
-      console.log("🔄 Sending friend request...");
+      console.log("ðŸ”„ Sending friend request...");
       const friendshipResponse = await friendsService.sendFriendRequest(
         currentUser.id,
         targetUserId,
       );
-      console.log("🔄 Friend request response:", friendshipResponse);
+      console.log("ðŸ”„ Friend request response:", friendshipResponse);
 
       if (!friendshipResponse.success || !friendshipResponse.friendship) {
         throw new Error(
@@ -156,51 +217,9 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
 
       // Immediately update friendship status in store
       set({ friendshipStatus: "pending" });
-
-      // Create alert with the actual friendship ID
-      const alertRequest = {
-        userId: targetUserId,
-        type: "FRIEND_REQUEST" as AlertType,
-        entityId: friendshipResponse.friendship.id, // Use actual friendship ID
-        actorId: currentUser.id,
-        actorName: currentUser.displayName || "Someone",
-        actorUsername: currentUser.username || "someone",
-        actorAvatar: currentUser.avatar || "", // Add actor avatar
-      };
-
-      console.log("🔄 About to create alert for user:", targetUserId);
-
-      // Create alert for the recipient
-      const { alertService } =
-        await import("@/middleware/services/service-factory");
-
-      const alertResult = await alertService.createAlert(alertRequest);
-
-      console.log("🔄 Alert creation result:", alertResult);
-
-      if (!alertResult.success) {
-        console.warn(
-          "⚠️ Alert service failed for friend request, using direct Firestore fallback:",
-          alertResult.error,
-        );
-
-        await addDoc(collection(db, "alerts"), {
-          userId: targetUserId,
-          type: "FRIEND_REQUEST",
-          entityId: friendshipResponse.friendship.id,
-          actorId: currentUser.id,
-          message: "sent you a friend request",
-          metadata: {
-            actorName: currentUser.displayName || "Someone",
-            actorUsername: currentUser.username || "someone",
-            actorAvatar: currentUser.avatar || "",
-          },
-          isRead: false,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-        });
-      }
-
+      invalidateSocialContext(currentUser.id, targetUserId);
+      // `/api/friends/request` atomically creates the request and recipient
+      // alert. Creating a second client-side alert duplicates notifications.
       return true;
     } catch (error) {
       const errorMessage =
@@ -223,7 +242,7 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
         return false;
       }
 
-      console.log("🔄 About to cancel friend request for user:", targetUserId);
+      console.log("ðŸ”„ About to cancel friend request for user:", targetUserId);
 
       const { friendsService } =
         await import("@/middleware/services/service-factory");
@@ -265,18 +284,15 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
         );
       }
 
-      const alertsQuery = query(
-        collection(db, "alerts"),
-        where("userId", "==", targetUserId),
-        where("type", "==", "FRIEND_REQUEST"),
-        where("actorId", "==", currentUser.id),
+      const { error: alertDeleteError } = await getSupabaseBrowserClient().rpc(
+        "delete_sent_friend_request_alert",
+        { p_recipient_id: targetUserId, p_friendship_id: friendship.id },
       );
-
-      const alertsSnapshot = await getDocs(alertsQuery);
-      await Promise.all(alertsSnapshot.docs.map((doc) => deleteDoc(doc.ref)));
+      if (alertDeleteError) console.warn("Friend request alert cleanup failed:", alertDeleteError.message);
 
       set({ friendshipStatus: "none" });
-      console.log("✅ Friend request cancelled successfully");
+      invalidateSocialContext(currentUser.id, targetUserId);
+      console.log("âœ… Friend request cancelled successfully");
 
       return true;
     } catch (error) {
@@ -349,14 +365,14 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
   // Increment friends count (called when friend request is accepted)
   incrementFriendsCount: async (userId: string) => {
     try {
-      console.log("🔄 Incrementing friends count for user:", userId);
+      console.log("ðŸ”„ Incrementing friends count for user:", userId);
 
       // Get current friends count
       const currentCount = get().friendsCount;
       const newCount = currentCount + 1;
 
       console.log(
-        "🔄 Updating friends count from",
+        "ðŸ”„ Updating friends count from",
         currentCount,
         "to",
         newCount,
@@ -365,15 +381,11 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
       // Update local state
       set({ friendsCount: newCount });
 
-      // Update followersCount in Firestore
-      const { doc, updateDoc } = await import("firebase/firestore");
-      const { db: firestoreDb } = await import("@/backend/lib/firebase");
-      const userRef = doc(firestoreDb, "users", userId);
-      await updateDoc(userRef, { followersCount: newCount });
+      invalidateSocialContext(userId);
 
-      console.log("✅ Friends count incremented to:", newCount);
+      console.log("âœ… Friends count incremented to:", newCount);
     } catch (error) {
-      console.error("❌ Error incrementing friends count:", error);
+      console.error("âŒ Error incrementing friends count:", error);
     }
   },
 
@@ -392,7 +404,7 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
         throw new Error("You cannot unfriend yourself");
       }
 
-      console.log("🔄 Unfriending user:", targetUserId);
+      console.log("ðŸ”„ Unfriending user:", targetUserId);
 
       // Unfriend the user
       const { friendsService } =
@@ -403,6 +415,7 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
       );
 
       if (response.success) {
+        invalidateSocialContext(currentUser.id, targetUserId);
         // Update friendship status
         set({
           isFriend: false,
@@ -413,7 +426,7 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
         await get().decrementFriendsCount(currentUser.id);
         await get().decrementFriendsCount(targetUserId);
 
-        console.log("✅ Successfully unfriended user");
+        console.log("âœ… Successfully unfriended user");
         return true;
       } else {
         throw new Error(response.error || "Failed to unfriend user");
@@ -429,14 +442,14 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
   // Decrement friends count (called when user is unfriended)
   decrementFriendsCount: async (userId: string) => {
     try {
-      console.log("🔄 Decrementing friends count for user:", userId);
+      console.log("ðŸ”„ Decrementing friends count for user:", userId);
 
       // Get current friends count
       const currentCount = get().friendsCount;
       const newCount = Math.max(0, currentCount - 1);
 
       console.log(
-        "🔄 Updating friends count from",
+        "ðŸ”„ Updating friends count from",
         currentCount,
         "to",
         newCount,
@@ -445,15 +458,11 @@ export const useUserProfileStore = create<UserProfileState>((set, get) => ({
       // Update local state
       set({ friendsCount: newCount });
 
-      // Update followersCount in Firestore
-      const { doc, updateDoc } = await import("firebase/firestore");
-      const { db: firestoreDb } = await import("@/backend/lib/firebase");
-      const userRef = doc(firestoreDb, "users", userId);
-      await updateDoc(userRef, { followersCount: newCount });
+      invalidateSocialContext(userId);
 
-      console.log("✅ Friends count decremented to:", newCount);
+      console.log("âœ… Friends count decremented to:", newCount);
     } catch (error) {
-      console.error("❌ Error decrementing friends count:", error);
+      console.error("âŒ Error decrementing friends count:", error);
     }
   },
 }));

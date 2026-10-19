@@ -38,7 +38,6 @@ export interface DareWithUsers {
   accepted_at?: string | null;
   proof_submitted_at?: string | null;
   completed_at?: string | null;
-  ghost_mode_until?: string | null;
   proof_media_url?: string | null;
   proof_media_type?: "TEXT" | "PHOTO" | "VIDEO" | null;
   proof_thumbnail_url?: string | null;
@@ -67,7 +66,7 @@ export interface DareWithUsers {
 const dareRepository = new DareRepository();
 const userRepository = new UserRepository();
 
-function toCompatDare(dare: DareEntity): DareWithUsers {
+function toDareWithUsers(dare: DareEntity): DareWithUsers {
   return {
     id: dare.id,
     challenger_id: dare.challengerId,
@@ -79,7 +78,6 @@ function toCompatDare(dare: DareEntity): DareWithUsers {
     accepted_at: dare.acceptedAt,
     proof_submitted_at: dare.proofSubmittedAt,
     completed_at: dare.completedAt,
-    ghost_mode_until: dare.ghostModeUntil,
     proof_media_url: dare.proofMediaUrl,
     proof_media_type: dare.proofMediaType,
     proof_thumbnail_url: dare.proofThumbnailUrl,
@@ -111,11 +109,11 @@ async function withUsers(dare: DareWithUsers): Promise<DareWithUsers> {
   };
 }
 
-class DareServiceCompat {
+class DareService {
   async getDare(dareId: string): Promise<DareWithUsers | null> {
     const response = await dareServiceNew.getDareById(dareId);
     if (!response.success || !response.dare) return null;
-    return toCompatDare(response.dare);
+    return toDareWithUsers(response.dare);
   }
 
   async getDaresForUser(
@@ -125,7 +123,7 @@ class DareServiceCompat {
     const response = await dareServiceNew.getDaresForUser(userId);
     if (!response.success || !response.dares) return [];
 
-    let dares = response.dares.map(toCompatDare);
+    let dares = response.dares.map(toDareWithUsers);
     if (role === "challenger") {
       dares = dares.filter((d) => d.challenger_id === userId);
     } else if (role === "receiver") {
@@ -145,16 +143,17 @@ class DareServiceCompat {
     if (!response.success || !response.dare) {
       throw new Error(response.error || "Failed to create dare");
     }
-    return withUsers(toCompatDare(response.dare));
+    return withUsers(toDareWithUsers(response.dare));
   }
 
   async getDareWithUsers(
     dareId: string,
     _currentUserId?: string,
   ): Promise<DareWithUsers | null> {
+    void _currentUserId;
     const response = await dareServiceNew.getDareById(dareId);
     if (!response.success || !response.dare) return null;
-    return withUsers(toCompatDare(response.dare));
+    return withUsers(toDareWithUsers(response.dare));
   }
 
   async acceptDare(dareId: string, receiverId: string): Promise<void> {
@@ -232,8 +231,8 @@ class DareServiceCompat {
           d.state,
         ),
     );
-    return active ? withUsers(toCompatDare(DareEntity.create(active))) : null;
+    return active ? withUsers(toDareWithUsers(DareEntity.create(active))) : null;
   }
 }
 
-export const dareService = new DareServiceCompat();
+export const dareService = new DareService();

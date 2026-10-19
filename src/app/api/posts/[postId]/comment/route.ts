@@ -1,12 +1,15 @@
-/**
- * POST /api/posts/[postId]/comment — create a comment. The comments_count
+﻿/**
+ * POST /api/posts/[postId]/comment â€” create a comment. The comments_count
  * trigger handles aggregation. Body: { content: string }.
  */
 import "server-only";
 import { NextResponse } from "next/server";
+import { createUuid } from "@/utils/uuid";
 import { withSecurity } from "../../../_lib/withSecurity";
-import { adminDb, FieldValue } from "../../../_lib/admin";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { LIMITS } from "../../../_lib/rateLimit";
+import { redisCache } from "@/services/redisCache.server";
+import { bumpPostAudienceFeedCache } from "../../../_lib/socialCache";
 
 export const POST = withSecurity(
   { rateLimit: LIMITS.COMMENT },
@@ -34,32 +37,30 @@ export const POST = withSecurity(
         ? body.parent_id
         : null;
 
-    const postSnap = await adminDb.collection("posts").doc(postId).get();
-    if (!postSnap.exists) {
+    const { data: post, error: postError } = await (getSupabaseAdminClient() as any).from("posts").select("id").eq("id",postId).maybeSingle();
+    if (postError) throw postError;
+    if (!post) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
-    const postRef = adminDb.collection("posts").doc(postId);
-    const ref = adminDb.collection("post_comments").doc();
-    const commentData: Record<string, unknown> = {
-      post_id: postId,
-      user_id: ctx.uid,
-      content,
-      text: content,
-      likes: 0,
-      created_at: FieldValue.serverTimestamp(),
-      updated_at: FieldValue.serverTimestamp(),
-    };
-    if (parentId) commentData.parent_id = parentId;
+    const commentId = createUuid();
+    const { error } = await (getSupabaseAdminClient() as any).rpc(
+      "create_post_comment",
+      {
+        p_post_id: postId,
+        p_comment_id: commentId,
+        p_actor_id: ctx.uid,
+        p_content: content,
+        p_parent_id: parentId,
+      },
+    );
+    if (error) throw error;
 
-    await adminDb.runTransaction(async (tx) => {
-      tx.set(ref, commentData);
-      tx.update(postRef, {
-        comments_count: FieldValue.increment(1),
-        updated_at: FieldValue.serverTimestamp(),
-      });
-    });
+    await Promise.all([
+      bumpPostAudienceFeedCache(postId, ctx.uid),
+      redisCache.invalidatePattern(`engagement:${postId}:*`),
+    ]);
 
-    return NextResponse.json({ ok: true, id: ref.id });
+    return NextResponse.json({ ok: true, id: commentId });
   },
 );

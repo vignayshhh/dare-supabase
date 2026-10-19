@@ -248,7 +248,7 @@ export function ChallengeFriendTimelineScreen({
     <div className="screen-container challenge-timeline-screen bg-[radial-gradient(circle_at_50%_-12%,rgba(74,222,128,0.18),transparent_34%),radial-gradient(circle_at_12%_18%,rgba(14,165,233,0.12),transparent_28%),linear-gradient(180deg,#060806_0%,#0a0f0a_48%,#030403_100%)]">
       <style>{`
         .challenge-timeline-screen {
-          font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+          font-family: var(--font-ui);
         }
         @keyframes missionEnter {
           from { opacity: 0; transform: translateY(18px); filter: blur(8px); }
@@ -361,7 +361,6 @@ export function ChallengeFriendTimelineScreen({
                   size={64}
                   userId={meta.challengerId}
                   username={meta.challengerUsername}
-                  disableGhostMode
                 />
                 <p className="mt-2 truncate text-[11px] font-bold text-[#94a3b8]">
                   @{String(meta.challengerUsername || challengerName).replace(/^@/, "")}
@@ -380,7 +379,6 @@ export function ChallengeFriendTimelineScreen({
                   size={64}
                   userId={meta.receiverId}
                   username={meta.receiverUsername}
-                  disableGhostMode
                 />
                 <p className="mt-2 truncate text-[11px] font-bold text-[#94a3b8]">
                   @{String(meta.receiverUsername || receiverName).replace(/^@/, "")}

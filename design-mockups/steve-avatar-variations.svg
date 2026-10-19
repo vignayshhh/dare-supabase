@@ -1,0 +1,234 @@
+<svg width="1800" height="1160" viewBox="0 0 1800 1160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="pageGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(900 -80) rotate(90) scale(720 1180)">
+      <stop stop-color="#1ed76e" stop-opacity="0.24"/>
+      <stop offset="0.45" stop-color="#0ea5e9" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#020403" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#151b17"/>
+      <stop offset="1" stop-color="#070a08"/>
+    </linearGradient>
+    <linearGradient id="avatarGlass" x1="0" y1="0" x2="0" y2="260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1f2b25"/>
+      <stop offset="0.55" stop-color="#0c1110"/>
+      <stop offset="1" stop-color="#050706"/>
+    </linearGradient>
+    <linearGradient id="skinA" x1="0" y1="0" x2="0" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d8b19a"/>
+      <stop offset="1" stop-color="#8a5145"/>
+    </linearGradient>
+    <linearGradient id="skinB" x1="0" y1="0" x2="0" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f0c9a8"/>
+      <stop offset="1" stop-color="#9b604a"/>
+    </linearGradient>
+    <linearGradient id="skinC" x1="0" y1="0" x2="0" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#b9856f"/>
+      <stop offset="1" stop-color="#5c352f"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="22" stdDeviation="18" flood-color="#000000" flood-opacity="0.48"/>
+    </filter>
+    <filter id="greenGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#4ade80" flood-opacity="0.55"/>
+    </filter>
+    <clipPath id="avatarClip">
+      <circle cx="150" cy="150" r="116"/>
+    </clipPath>
+    <style>
+      .title { font: 900 54px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .sub { font: 600 19px Inter, SF Pro Display, Arial, sans-serif; fill: #94a3b8; letter-spacing: 0; }
+      .label { font: 850 24px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .note { font: 650 15px Inter, SF Pro Display, Arial, sans-serif; fill: #94a3b8; letter-spacing: 0; }
+      .tag { font: 850 12px Inter, SF Pro Display, Arial, sans-serif; fill: #86efac; letter-spacing: 1.8px; }
+      .tiny { font: 850 11px Inter, SF Pro Display, Arial, sans-serif; fill: #030705; letter-spacing: 1.2px; }
+      .faceLine { stroke: #20100e; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.72; }
+      .scan { stroke: #67e8f9; stroke-width: 1.5; opacity: 0.34; }
+      .ring { stroke: #4ade80; stroke-width: 4; opacity: 0.76; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1160" fill="#020403"/>
+  <rect width="1800" height="1160" fill="url(#pageGlow)"/>
+  <path d="M0 820 C300 760 530 900 800 810 C1120 705 1390 790 1800 710 L1800 1160 L0 1160 Z" fill="#061009" opacity="0.78"/>
+
+  <text x="80" y="104" class="title">Steve Avatar Variations</text>
+  <text x="80" y="142" class="sub">Human, premium, social, slightly dangerous. Steve should feel like a person who lives inside Dare, not a robot mascot.</text>
+
+  <!-- Card component positions: x 80/620/1160, y 210/650 -->
+
+  <g transform="translate(80 210)" filter="url(#softShadow)">
+    <rect width="460" height="430" rx="34" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.09"/>
+    <path d="M44 1 H416" stroke="url(#greenLine1)" opacity="0.8"/>
+    <text x="34" y="58" class="label">1. Midnight Steve</text>
+    <text x="34" y="84" class="note">Best default. Warm, awake, knows too much.</text>
+    <g transform="translate(80 116)">
+      <circle cx="150" cy="150" r="126" fill="#06100b" stroke="#1f5134" stroke-width="2"/>
+      <circle cx="150" cy="150" r="116" fill="url(#avatarGlass)"/>
+      <g clip-path="url(#avatarClip)">
+        <rect x="34" y="34" width="232" height="232" rx="116" fill="url(#avatarGlass)"/>
+        <path d="M38 240 C76 194 110 181 150 181 C190 181 229 195 264 240 L264 300 H38 Z" fill="#111827"/>
+        <path d="M70 257 C92 211 121 195 151 195 C185 195 216 214 238 257" stroke="#202a24" stroke-width="22" stroke-linecap="round"/>
+        <path d="M84 124 C78 78 104 46 150 43 C200 40 228 78 221 126 C212 94 188 78 150 79 C112 80 94 96 84 124 Z" fill="#111111"/>
+        <ellipse cx="150" cy="136" rx="57" ry="71" fill="url(#skinA)"/>
+        <path d="M95 124 C111 96 130 86 161 87 C192 88 212 103 224 129 C218 81 188 58 147 59 C108 60 87 83 95 124 Z" fill="#121212"/>
+        <path d="M109 134 C119 129 130 129 139 135" class="faceLine"/>
+        <path d="M162 135 C173 129 184 129 194 135" class="faceLine"/>
+        <circle cx="128" cy="144" r="4" fill="#07100b"/>
+        <circle cx="179" cy="144" r="4" fill="#07100b"/>
+        <path d="M148 143 C145 156 144 164 151 169" class="faceLine" opacity="0.36"/>
+        <path d="M127 190 C143 198 164 198 179 190" stroke="#2c1512" stroke-width="4" stroke-linecap="round" opacity="0.76"/>
+        <path d="M62 176 C93 163 119 160 150 160 C184 160 214 164 244 177" stroke="#4ade80" stroke-width="2" opacity="0.36"/>
+        <path d="M82 102 C118 72 184 73 221 104" stroke="#67e8f9" stroke-width="2" opacity="0.32"/>
+      </g>
+      <circle cx="150" cy="150" r="116" stroke="#4ade80" stroke-width="3" opacity="0.78"/>
+      <circle cx="232" cy="230" r="20" fill="#4ade80" filter="url(#greenGlow)"/>
+      <text x="224" y="235" class="tiny">S</text>
+    </g>
+    <text x="34" y="386" class="tag">DEFAULT PICK</text>
+  </g>
+
+  <g transform="translate(620 210)" filter="url(#softShadow)">
+    <rect width="460" height="430" rx="34" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.09"/>
+    <text x="34" y="58" class="label">2. Group Chat Steve</text>
+    <text x="34" y="84" class="note">More friend-like. Smirk, hoodie, phone glow.</text>
+    <g transform="translate(80 116)">
+      <circle cx="150" cy="150" r="126" fill="#06100b" stroke="#255944" stroke-width="2"/>
+      <g clip-path="url(#avatarClip)">
+        <rect x="34" y="34" width="232" height="232" rx="116" fill="#09100e"/>
+        <path d="M26 288 C58 212 94 176 150 176 C206 176 243 212 276 288 Z" fill="#0f1a17"/>
+        <path d="M57 260 C72 204 107 180 150 180 C194 180 230 204 244 260" stroke="#17251f" stroke-width="31" stroke-linecap="round"/>
+        <path d="M76 134 C69 78 103 43 152 43 C205 43 237 85 226 139 C213 108 194 96 151 96 C111 96 91 110 76 134 Z" fill="#171717"/>
+        <ellipse cx="151" cy="141" rx="59" ry="73" fill="url(#skinB)"/>
+        <path d="M89 118 C114 91 143 80 179 89 C197 94 211 104 225 122 C217 72 183 52 146 55 C105 58 83 86 89 118 Z" fill="#141414"/>
+        <path d="M111 137 C123 130 135 131 144 138" class="faceLine"/>
+        <path d="M166 138 C177 132 188 132 198 139" class="faceLine"/>
+        <circle cx="133" cy="148" r="4" fill="#07100b"/>
+        <circle cx="183" cy="149" r="4" fill="#07100b"/>
+        <path d="M147 174 C153 177 160 177 166 173" stroke="#371b17" stroke-width="4" stroke-linecap="round" opacity="0.45"/>
+        <path d="M132 194 C148 204 170 202 184 190" stroke="#321711" stroke-width="4" stroke-linecap="round"/>
+        <rect x="190" y="166" width="42" height="64" rx="12" fill="#08120d" stroke="#4ade80" stroke-opacity="0.48" stroke-width="2"/>
+        <path d="M197 182 H225 M197 197 H219 M197 212 H225" stroke="#4ade80" stroke-width="2" opacity="0.8"/>
+        <path d="M52 162 H254" class="scan"/>
+      </g>
+      <circle cx="150" cy="150" r="116" stroke="#67e8f9" stroke-width="3" opacity="0.66"/>
+      <circle cx="88" cy="229" r="11" fill="#4ade80" filter="url(#greenGlow)"/>
+    </g>
+    <text x="34" y="386" class="tag">MOST HUMAN</text>
+  </g>
+
+  <g transform="translate(1160 210)" filter="url(#softShadow)">
+    <rect width="460" height="430" rx="34" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.09"/>
+    <text x="34" y="58" class="label">3. Referee Steve</text>
+    <text x="34" y="84" class="note">Sharper, rule-enforcing, still rooting for you.</text>
+    <g transform="translate(80 116)">
+      <circle cx="150" cy="150" r="126" fill="#06100b" stroke="#315e3f" stroke-width="2"/>
+      <g clip-path="url(#avatarClip)">
+        <rect x="34" y="34" width="232" height="232" rx="116" fill="#080c0a"/>
+        <path d="M48 290 C69 216 104 177 150 177 C197 177 233 216 255 290 Z" fill="#101816"/>
+        <path d="M84 239 L114 188 H186 L218 239 Z" fill="#07100b" stroke="#22372b" stroke-width="8"/>
+        <ellipse cx="151" cy="137" rx="55" ry="69" fill="url(#skinC)"/>
+        <path d="M92 112 C100 75 124 56 154 56 C190 56 213 82 217 115 C189 96 119 96 92 112 Z" fill="#0c0c0c"/>
+        <path d="M103 132 C121 125 135 126 146 136" class="faceLine"/>
+        <path d="M162 136 C174 126 190 125 203 132" class="faceLine"/>
+        <circle cx="132" cy="145" r="4" fill="#07100b"/>
+        <circle cx="181" cy="145" r="4" fill="#07100b"/>
+        <path d="M135 190 C148 196 164 196 178 190" stroke="#2b1512" stroke-width="4" stroke-linecap="round"/>
+        <path d="M114 88 C137 74 173 73 198 89" stroke="#4ade80" stroke-width="2" opacity="0.55"/>
+        <path d="M73 154 L254 124" stroke="#67e8f9" stroke-width="2" opacity="0.28"/>
+        <path d="M75 173 L252 143" stroke="#67e8f9" stroke-width="2" opacity="0.18"/>
+      </g>
+      <circle cx="150" cy="150" r="116" stroke="#4ade80" stroke-width="3" opacity="0.72"/>
+      <path d="M101 232 H199 L184 254 H116 Z" fill="#4ade80" opacity="0.9"/>
+      <text x="126" y="248" class="tiny">DARE</text>
+    </g>
+    <text x="34" y="386" class="tag">MOST AUTHORITATIVE</text>
+  </g>
+
+  <g transform="translate(80 650)" filter="url(#softShadow)">
+    <rect width="460" height="430" rx="34" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.09"/>
+    <text x="34" y="58" class="label">4. Soft Menace Steve</text>
+    <text x="34" y="84" class="note">Kinder expression, but the eyes still clock everything.</text>
+    <g transform="translate(80 116)">
+      <circle cx="150" cy="150" r="126" fill="#06100b" stroke="#214f35" stroke-width="2"/>
+      <g clip-path="url(#avatarClip)">
+        <rect x="34" y="34" width="232" height="232" rx="116" fill="#0c1110"/>
+        <path d="M40 292 C65 211 105 184 151 184 C199 184 238 212 262 292 Z" fill="#111827"/>
+        <path d="M80 252 C91 205 118 185 151 185 C187 185 217 206 229 252" stroke="#1d2930" stroke-width="28" stroke-linecap="round"/>
+        <ellipse cx="150" cy="142" rx="58" ry="72" fill="url(#skinB)"/>
+        <path d="M89 121 C93 79 122 55 154 56 C194 57 219 83 221 126 C204 101 181 92 150 93 C118 94 101 102 89 121 Z" fill="#191715"/>
+        <path d="M109 138 C121 133 133 134 143 141" class="faceLine"/>
+        <path d="M165 141 C175 134 187 133 198 138" class="faceLine"/>
+        <circle cx="132" cy="149" r="4" fill="#07100b"/>
+        <circle cx="181" cy="149" r="4" fill="#07100b"/>
+        <path d="M132 192 C148 206 171 204 185 190" stroke="#321711" stroke-width="4" stroke-linecap="round"/>
+        <path d="M63 102 C94 70 122 52 150 50 C190 47 223 71 242 105" stroke="#4ade80" stroke-width="2" opacity="0.28"/>
+      </g>
+      <circle cx="150" cy="150" r="116" stroke="#4ade80" stroke-width="3" opacity="0.66"/>
+      <circle cx="235" cy="94" r="10" fill="#67e8f9" filter="url(#greenGlow)"/>
+    </g>
+    <text x="34" y="386" class="tag">WARMEST</text>
+  </g>
+
+  <g transform="translate(620 650)" filter="url(#softShadow)">
+    <rect width="460" height="430" rx="34" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.09"/>
+    <text x="34" y="58" class="label">5. Party Room Steve</text>
+    <text x="34" y="84" class="note">More social, fun, and meme-able. Less mysterious.</text>
+    <g transform="translate(80 116)">
+      <circle cx="150" cy="150" r="126" fill="#06100b" stroke="#1d5d46" stroke-width="2"/>
+      <g clip-path="url(#avatarClip)">
+        <rect x="34" y="34" width="232" height="232" rx="116" fill="#08120e"/>
+        <path d="M34 224 C58 193 91 177 150 177 C209 177 242 193 266 224 L266 300 H34 Z" fill="#0c1714"/>
+        <path d="M91 248 C97 209 121 188 151 188 C183 188 207 209 215 248" stroke="#1b2a23" stroke-width="28" stroke-linecap="round"/>
+        <ellipse cx="151" cy="142" rx="58" ry="72" fill="url(#skinA)"/>
+        <path d="M84 112 C101 66 134 50 165 55 C199 61 219 84 224 117 C193 94 125 91 84 112 Z" fill="#101010"/>
+        <path d="M108 137 C120 131 133 132 144 139" class="faceLine"/>
+        <path d="M165 139 C176 132 190 131 201 137" class="faceLine"/>
+        <circle cx="132" cy="148" r="4" fill="#07100b"/>
+        <circle cx="184" cy="148" r="4" fill="#07100b"/>
+        <path d="M132 190 C148 204 174 202 189 187" stroke="#321711" stroke-width="4" stroke-linecap="round"/>
+        <path d="M111 69 L151 25 L192 69" fill="#facc15" opacity="0.96"/>
+        <circle cx="151" cy="24" r="9" fill="#4ade80"/>
+        <path d="M72 176 C112 154 188 154 229 176" stroke="#67e8f9" stroke-width="2" opacity="0.38"/>
+      </g>
+      <circle cx="150" cy="150" r="116" stroke="#67e8f9" stroke-width="3" opacity="0.64"/>
+      <path d="M214 228 C226 214 245 214 257 228 C245 242 226 242 214 228 Z" fill="#4ade80"/>
+    </g>
+    <text x="34" y="386" class="tag">MOST SOCIAL</text>
+  </g>
+
+  <g transform="translate(1160 650)" filter="url(#softShadow)">
+    <rect width="460" height="430" rx="34" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.09"/>
+    <text x="34" y="58" class="label">6. Anonymous Steve</text>
+    <text x="34" y="84" class="note">Human, but more mythic. Good if Steve should feel rare.</text>
+    <g transform="translate(80 116)">
+      <circle cx="150" cy="150" r="126" fill="#06100b" stroke="#1f5134" stroke-width="2"/>
+      <g clip-path="url(#avatarClip)">
+        <rect x="34" y="34" width="232" height="232" rx="116" fill="#050706"/>
+        <path d="M35 294 C54 188 91 126 151 126 C211 126 248 188 267 294 Z" fill="#0d1412"/>
+        <path d="M62 238 C72 147 105 79 151 75 C197 79 230 147 240 238" stroke="#131f1a" stroke-width="34" stroke-linecap="round"/>
+        <ellipse cx="151" cy="145" rx="54" ry="68" fill="url(#skinC)" opacity="0.86"/>
+        <path d="M75 117 C88 69 121 43 151 43 C189 43 223 75 231 119 C190 92 116 92 75 117 Z" fill="#090909"/>
+        <rect x="72" y="116" width="184" height="88" fill="#050706" opacity="0.54"/>
+        <path d="M104 138 C122 129 137 130 149 139" stroke="#4ade80" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+        <path d="M161 139 C174 130 191 129 206 138" stroke="#4ade80" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+        <circle cx="132" cy="150" r="4" fill="#86efac" filter="url(#greenGlow)"/>
+        <circle cx="184" cy="150" r="4" fill="#86efac" filter="url(#greenGlow)"/>
+        <path d="M118 195 C143 209 174 207 194 192" stroke="#111" stroke-width="5" stroke-linecap="round" opacity="0.5"/>
+        <path d="M51 146 H260" stroke="#67e8f9" stroke-width="2" opacity="0.42"/>
+        <path d="M51 164 H260" stroke="#67e8f9" stroke-width="2" opacity="0.2"/>
+      </g>
+      <circle cx="150" cy="150" r="116" stroke="#4ade80" stroke-width="3" opacity="0.74"/>
+      <path d="M150 33 A117 117 0 0 1 267 150" stroke="#67e8f9" stroke-width="5" stroke-linecap="round" opacity="0.7"/>
+    </g>
+    <text x="34" y="386" class="tag">MOST MYSTERIOUS</text>
+  </g>
+
+  <defs>
+    <linearGradient id="greenLine1" x1="44" y1="0" x2="416" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4ade80" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#4ade80" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>

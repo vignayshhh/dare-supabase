@@ -5,6 +5,8 @@ export type AlertType =
   | "DARE_RECEIVED"
   | "DARE_ACCEPTED"
   | "DARE_COMPLETED"
+  | "DARE_PROOF_SUBMITTED"
+  | "DARE_POSTED"
   | "DARE_REFUSED"
   | "DARE_APPROVED"
   | "DARE_REJECTED"
@@ -16,28 +18,16 @@ export type AlertType =
   | "TRUTH_FRIEND_ACTIVITY"
   | "FRIEND_REQUEST"
   | "FRIEND_ACCEPTED"
+  | "FRIENDSHIP_ESTABLISHED"
   | "MESSAGE_RECEIVED"
   | "POST_LIKED"
-  | "PROFILE_VIEW"
   | "SYSTEM_NOTIFICATION"
-  | "SUS_REPEATED_LIKES"
-  | "SUS_PROFILE_VIEWING"
-  | "SUS_PHOTO_VIEWS"
-  | "SUS_MENTION_TALKING"
-  | "SUS_CLOSE_FRIEND_ACTIVITY"
   | "COMMENT_RECEIVED"
   | "COMMENT_REPLY"
   | "STORY_REACTION"
-  | "STORY_REPLY";
-
-const SUS_ALERT_TYPES: Set<AlertType> = new Set([
-  "SUS_REPEATED_LIKES",
-  "SUS_PROFILE_VIEWING",
-  "SUS_PHOTO_VIEWS",
-  "SUS_MENTION_TALKING",
-  "SUS_CLOSE_FRIEND_ACTIVITY",
-  "PROFILE_VIEW",
-]);
+  | "STORY_REPLY"
+  | "IMPERSONATION_REQUEST"
+  | "IMPERSONATION_ENDED";
 
 export class AlertEntity {
   constructor(
@@ -93,11 +83,7 @@ export class AlertEntity {
   }
 
   isSocialAlert(): boolean {
-    return !this.isSystemAlert() && !this.isSusAlert();
-  }
-
-  isSusAlert(): boolean {
-    return SUS_ALERT_TYPES.has(this.type);
+    return !this.isSystemAlert() || typeof this.metadata?.interactionKind === "string";
   }
 
   isDareRelated(): boolean {

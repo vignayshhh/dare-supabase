@@ -47,7 +47,8 @@ export function FriendsInviteAlertsScreen({
     setBusyInviteId(invite.id);
     try {
       if (response === "accept") {
-        await chatInviteService.acceptInvite(invite.id, user.id);
+        const accepted = await chatInviteService.acceptInvite(invite.id, user.id);
+        setInvites((current) => current.map((item) => item.id === accepted.id ? accepted : item));
       } else {
         await chatInviteService.rejectInvite(invite.id, user.id);
       }
@@ -66,7 +67,7 @@ export function FriendsInviteAlertsScreen({
         background: "#000",
         color: "#fff",
         fontFamily:
-          "'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
+          "var(--font-ui)",
         paddingBottom: "calc(20px + var(--safe-area-bottom))",
       }}
     >

@@ -40,13 +40,29 @@ const mergeStoryAudience = (
   previous: StoryAudienceDTO | undefined,
   incoming: StoryAudienceDTO,
   scope: StoryAudienceScope,
+  append = false,
 ): StoryAudienceDTO => {
   if (scope === "all") return incoming;
 
   return {
-    viewers: scope === "views" ? incoming.viewers : previous?.viewers ?? [],
+    viewers:
+      scope === "views"
+        ? append
+          ? [...(previous?.viewers ?? []), ...incoming.viewers]
+          : incoming.viewers
+        : previous?.viewers ?? [],
     likes: scope === "likes" ? incoming.likes : previous?.likes ?? [],
     hates: scope === "hates" ? incoming.hates : previous?.hates ?? [],
+    viewersNextCursor: scope === "views" ? incoming.viewersNextCursor : previous?.viewersNextCursor,
+    viewersHasMore: scope === "views" ? incoming.viewersHasMore : previous?.viewersHasMore,
+    reactionsNextCursor:
+      scope === "likes" || scope === "hates"
+        ? incoming.reactionsNextCursor
+        : previous?.reactionsNextCursor,
+    reactionsHasMore:
+      scope === "likes" || scope === "hates"
+        ? incoming.reactionsHasMore
+        : previous?.reactionsHasMore,
   };
 };
 
@@ -131,6 +147,7 @@ export function StoryViewer({
   const [showOwnerOptions, setShowOwnerOptions] = useState(false);
 
   const replyInputRef = useRef<HTMLInputElement | null>(null);
+  const reactionMutationVersionRef = useRef<Record<string, number>>({});
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const imageProgressRef = useRef<{
@@ -304,6 +321,10 @@ export function StoryViewer({
 
   useEffect(() => {
     let cancelled = false;
+    const storyIds = storyIdsKey ? storyIdsKey.split("|") : [];
+    const versionsAtRequest = Object.fromEntries(
+      storyIds.map((storyId) => [storyId, reactionMutationVersionRef.current[storyId] ?? 0]),
+    );
 
     storyReactionService.getUserReactions(currentUserId).then((reactions) => {
       if (cancelled) return;
@@ -315,7 +336,15 @@ export function StoryViewer({
           nextMap[storyId] = existingReaction;
         }
       }
-      setReactionMap(nextMap);
+      setReactionMap((previous) => {
+        const merged = { ...previous };
+        for (const storyId of storyIds) {
+          if ((reactionMutationVersionRef.current[storyId] ?? 0) !== versionsAtRequest[storyId]) continue;
+          if (nextMap[storyId]) merged[storyId] = nextMap[storyId];
+          else delete merged[storyId];
+        }
+        return merged;
+      });
     });
 
     return () => {
@@ -561,6 +590,8 @@ export function StoryViewer({
 
       const previousReaction = reaction;
       const optimisticReaction = previousReaction === type ? null : type;
+      reactionMutationVersionRef.current[story.id] =
+        (reactionMutationVersionRef.current[story.id] ?? 0) + 1;
 
       setReactionMap((prev) => ({
         ...prev,
@@ -628,15 +659,15 @@ export function StoryViewer({
   }, [onReply, replyText, sendingReply, story]);
 
   const loadAudienceForTab = useCallback(
-    async (tab: AudienceTab = "views") => {
+    async (tab: AudienceTab = "views", cursor?: string) => {
       if (!story) return;
 
       setAudienceLoading(true);
       try {
-        const audience = await storyService.getStoryAudience(story.id, tab);
+        const audience = await storyService.getStoryAudience(story.id, tab, cursor ? { cursor } : undefined);
         setAudienceByStoryId((prev) => ({
           ...prev,
-          [story.id]: mergeStoryAudience(prev[story.id], audience, tab),
+          [story.id]: mergeStoryAudience(prev[story.id], audience, tab, Boolean(cursor)),
         }));
       } finally {
         setAudienceLoading(false);
@@ -660,7 +691,7 @@ export function StoryViewer({
 
   const isVideo = story.media.type === "video";
   const audienceCounts = {
-    views: storyAudience?.viewers.length ?? story.viewCount,
+    views: story.viewCount,
     likes: storyAudience?.likes.length ?? 0,
     hates: storyAudience?.hates.length ?? 0,
   };
@@ -865,14 +896,22 @@ export function StoryViewer({
               style={{
                 left: `${story.storyText.xPct ?? 50}%`,
                 top: `${story.storyText.yPct ?? 50}%`,
-                transform: "translate(-50%, -50%)",
+                transform: `translate(-50%, -50%) rotate(${story.storyText.rotation ?? 0}deg)`,
               }}
             >
               <span
-                className="inline-block max-w-full break-words rounded-2xl bg-black/24 px-4 py-2.5 font-black leading-tight shadow-[0_10px_28px_rgba(0,0,0,0.4)] backdrop-blur-sm"
+                className="inline-block max-w-full break-words rounded-2xl px-4 py-2.5 font-black leading-tight shadow-[0_10px_28px_rgba(0,0,0,0.4)] backdrop-blur-sm"
                 style={{
                   color: story.storyText.color || "#ffffff",
                   fontSize: `${story.storyText.fontSize ?? 26}px`,
+                  background: story.storyText.background === false ? "transparent" : "rgba(0,0,0,0.24)",
+                  textAlign: story.storyText.align ?? "center",
+                  fontFamily:
+                    story.storyText.font === "Typewriter"
+                      ? "ui-monospace, SFMono-Regular, monospace"
+                      : story.storyText.font === "Classic"
+                        ? "Georgia, serif"
+                        : "inherit",
                   textShadow: "0 2px 14px rgba(0,0,0,0.82)",
                 }}
               >
@@ -880,6 +919,29 @@ export function StoryViewer({
               </span>
             </div>
           )}
+
+          {story.storyDrawPaths?.length ? (
+            <svg
+              data-story-drawing="true"
+              className="pointer-events-none absolute inset-0 z-[24] h-full w-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              {story.storyDrawPaths.map((path) => (
+                <path
+                  key={path.id}
+                  d={path.d}
+                  fill="none"
+                  stroke={path.color}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={path.brush === "Marker" ? path.width * 1.35 : path.brush === "Chalk" ? path.width * 0.9 : path.width}
+                  opacity={path.brush === "Chalk" ? 0.72 : 1}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </svg>
+          ) : null}
 
           <div
             className="pointer-events-none absolute inset-0 z-20"
@@ -991,6 +1053,7 @@ export function StoryViewer({
             {(isVideo || hasStoryMusic) && (
               <button
                 type="button"
+                aria-label={isMuted ? "Unmute story" : "Mute story"}
                 onClick={(event) => {
                   event.stopPropagation();
                   setIsMuted((value) => !value);
@@ -1050,6 +1113,7 @@ export function StoryViewer({
             >
               <button
                 type="button"
+                aria-label={reaction === "like" ? "Remove story like" : "Like story"}
                 onClick={(event) => {
                   event.stopPropagation();
                   void handleReact("like");
@@ -1113,6 +1177,7 @@ export function StoryViewer({
                   <input
                     ref={replyInputRef}
                     type="text"
+                    aria-label="Reply to story"
                     value={replyText}
                     onChange={(event) => {
                       setReplySendStatus("idle");
@@ -1135,6 +1200,7 @@ export function StoryViewer({
                 {replyText.trim() && replySendStatus === "idle" && (
                   <button
                     type="button"
+                    aria-label="Send story reply"
                     onClick={(event) => {
                       event.stopPropagation();
                       void handleSendReply();
@@ -1155,6 +1221,7 @@ export function StoryViewer({
 
               <button
                 type="button"
+                aria-label={reaction === "hate" ? "Remove story dislike" : "Dislike story"}
                 onClick={(event) => {
                   event.stopPropagation();
                   void handleReact("hate");
@@ -1344,6 +1411,24 @@ export function StoryViewer({
                           )}
                         </div>
                       ))}
+                      {storyAudience?.[audienceTab === "views" ? "viewersHasMore" : "reactionsHasMore"] &&
+                        storyAudience[audienceTab === "views" ? "viewersNextCursor" : "reactionsNextCursor"] && (
+                        <button
+                          type="button"
+                          disabled={audienceLoading}
+                          onClick={() =>
+                            void loadAudienceForTab(
+                              audienceTab,
+                              audienceTab === "views"
+                                ? storyAudience.viewersNextCursor
+                                : storyAudience.reactionsNextCursor,
+                            )
+                          }
+                          className="w-full rounded-[22px] border border-[#4ade80]/20 bg-[#4ade80]/10 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-[#86efac] disabled:opacity-50"
+                        >
+                          {audienceLoading ? "Loading..." : "Load more " + audienceTab}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

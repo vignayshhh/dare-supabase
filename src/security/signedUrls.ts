@@ -1,213 +1,96 @@
-import { db, storage } from "@/backend/lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  serverTimestamp,
-  deleteDoc,
-} from "firebase/firestore";
-import { ref, getDownloadURL } from "firebase/storage";
-import crypto from "crypto";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-interface SignedUrlToken {
-  token: string;
-  resourcePath: string;
-  userId: string;
-  createdAt: number;
-  expiresAt: number;
-  userAgent?: string;
-}
+type CachedUrl = { url: string; expiresAt: number };
 
-/**
- * Signed URL Service
- *
- * ⚠️ SECURITY NOTICE (§2.7): This is NOT a real signed-URL service.
- * The previous implementation appended a random `?token=...` to the
- * Firebase Storage download URL, stored the token in Firestore, and
- * returned it to the caller. Firebase Storage does NOT validate this
- * custom token — the URL is accessible to anyone with the underlying
- * Storage access token, with or without the query string. That made the
- * API security theater.
- *
- * A correct signed-URL pipeline requires either:
- *   - Cloud Functions using Admin SDK `getSignedUrl()` (GCS), or
- *   - A Next.js API route acting as a proxy that validates the custom
- *     token before streaming the object bytes back to the client.
- *
- * Neither is available on the free plan this app targets. Until a proxy
- * exists, this service:
- *   - Still returns the plain Firebase download URL (so calling code
- *     continues to work — images render, etc.).
- *   - Does NOT append a fake token (removes the misleading illusion of
- *     security).
- *   - `validateToken` always returns `{ valid: false }` because there is
- *     no trusted verifier.
- */
+const SIGN_PATH = "/storage/v1/object/sign/";
+
+const parseSignedReference = (value: string) => {
+  try {
+    const parsed = new URL(value);
+    const marker = parsed.pathname.indexOf(SIGN_PATH);
+    if (marker < 0) return null;
+    const reference = parsed.pathname.slice(marker + SIGN_PATH.length);
+    const separator = reference.indexOf("/");
+    if (separator <= 0 || separator >= reference.length - 1) return null;
+    return {
+      url: parsed,
+      bucket: decodeURIComponent(reference.slice(0, separator)),
+      path: decodeURIComponent(reference.slice(separator + 1)),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const expiresSoon = (url: URL) => {
+  const token = url.searchParams.get("token");
+  if (!token) return true;
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return true;
+    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as { exp?: unknown };
+    return typeof decoded.exp !== "number" || decoded.exp <= Math.floor(Date.now() / 1000) + 300;
+  } catch {
+    return true;
+  }
+};
+
+/** Real Supabase Storage signed URL helper with bounded reuse cache. */
 class SignedUrlService {
-  private readonly COLLECTION = "signed_url_tokens";
-  private readonly TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
-  private readonly TOKEN_LENGTH = 32;
+  private readonly signedUrlCache = new Map<string, CachedUrl>();
 
-  /**
-   * Generate a secure random token
-   */
-  private generateToken(): string {
-    const randomBytes = crypto.getRandomValues(
-      new Uint8Array(this.TOKEN_LENGTH),
-    );
-    return Array.from(randomBytes)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-  }
-
-  /**
-   * Create a signed URL token for a storage resource
-   */
-  async createSignedToken(
-    resourcePath: string,
-    userId: string,
-    durationMs: number = this.TOKEN_EXPIRY_MS,
-  ): Promise<string> {
+  async refreshStoredMediaUrl(value: string): Promise<string> {
+    if (!value) return value;
+    const reference = parseSignedReference(value);
+    if (!reference || !expiresSoon(reference.url)) return value;
+    const cacheKey = `stored:${value}`;
+    const cached = this.signedUrlCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.url;
     try {
-      const token = this.generateToken();
-      const now = Date.now();
-      const expiresAt = now + durationMs;
-
-      const tokenData: SignedUrlToken = {
-        token,
-        resourcePath,
-        userId,
-        createdAt: now,
-        expiresAt,
-        userAgent:
-          typeof navigator !== "undefined"
-            ? navigator.userAgent
-            : "server-side",
-      };
-
-      const tokenRef = doc(db, this.COLLECTION, token);
-      await setDoc(tokenRef, tokenData);
-
-      console.log(
-        `🔑 Created signed token for ${resourcePath} (expires in ${durationMs / 1000}s)`,
-      );
-
-      return token;
-    } catch (error) {
-      console.error("Error creating signed token:", error);
-      throw new Error("Failed to create signed token");
+      const { data, error } = await getSupabaseBrowserClient()
+        .storage.from(reference.bucket)
+        .createSignedUrl(reference.path, 60 * 60);
+      if (error || !data?.signedUrl) return value;
+      this.signedUrlCache.set(cacheKey, {
+        url: data.signedUrl,
+        expiresAt: Date.now() + 55 * 60 * 1000,
+      });
+      return data.signedUrl;
+    } catch {
+      return value;
     }
   }
 
-  /**
-   * Validate a signed URL token
-   */
-  async validateToken(
-    _token: string,
-    _userId: string,
-  ): Promise<{ valid: boolean; resourcePath?: string }> {
-    // SECURITY FIX (§2.7): No server-side verifier exists, so a positive
-    // return would be a lie. Always fail closed; callers must not rely on
-    // this for authorization.
-    return { valid: false };
-  }
+  async getSignedDownloadURL(resourcePath: string, userId: string): Promise<string> {
+    const cacheKey = `${userId}:${resourcePath}`;
+    const cached = this.signedUrlCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.url;
 
-  /**
-   * Get a signed download URL for a storage resource
-   */
-  async getSignedDownloadURL(
-    resourcePath: string,
-    _userId: string,
-  ): Promise<string> {
-    try {
-      // SECURITY FIX (§2.7): Return the plain Firebase Storage download URL.
-      // Appending a random `?token=` was misleading because Firebase does
-      // not validate custom tokens. Access control comes entirely from the
-      // Storage rules in `storage.rules`.
-      const storageRef = ref(storage, resourcePath);
-      return await getDownloadURL(storageRef);
-    } catch (error) {
-      console.error("Error getting download URL:", error);
-      throw new Error("Failed to get download URL");
+    const bucket = resourcePath.startsWith("avatars/")
+      ? "avatars"
+      : resourcePath.startsWith("stories/")
+        ? "story-media"
+        : resourcePath.startsWith("messages/")
+          ? "chat-media"
+          : resourcePath.startsWith("dare-proofs/")
+            ? "dare-proofs"
+            : "post-media";
+    const { data, error } = await getSupabaseBrowserClient()
+      .storage.from(bucket).createSignedUrl(resourcePath, 60 * 60);
+    if (error || !data?.signedUrl) {
+      throw error ?? new Error("Could not create signed URL");
     }
-  }
 
-  /**
-   * Revoke a signed token
-   */
-  async revokeToken(token: string): Promise<void> {
-    try {
-      const tokenRef = doc(db, this.COLLECTION, token);
-      await deleteDoc(tokenRef);
-      console.log(`🗑️ Revoked signed token: ${token}`);
-    } catch (error) {
-      console.error("Error revoking token:", error);
+    this.signedUrlCache.set(cacheKey, {
+      url: data.signedUrl,
+      expiresAt: Date.now() + 55 * 60 * 1000,
+    });
+    if (this.signedUrlCache.size > 500) {
+      const oldestKey = this.signedUrlCache.keys().next().value;
+      if (typeof oldestKey === "string") this.signedUrlCache.delete(oldestKey);
     }
-  }
-
-  /**
-   * Revoke all tokens for a user
-   */
-  async revokeAllUserTokens(userId: string): Promise<void> {
-    try {
-      // This would require a Cloud Function or batch delete in production
-      // For now, we'll log it
-      console.log(`🗑️ Revoking all tokens for user: ${userId}`);
-      // Note: Implementing full cleanup would require a Cloud Function
-      // or client-side query with batch delete
-    } catch (error) {
-      console.error("Error revoking user tokens:", error);
-    }
-  }
-
-  /**
-   * Clean up expired tokens
-   */
-  async cleanupExpiredTokens(): Promise<void> {
-    try {
-      // This would require a Cloud Function for efficiency
-      // For now, we'll log it
-      console.log(
-        `🧹 Cleanup expired tokens (requires Cloud Function for efficiency)`,
-      );
-    } catch (error) {
-      console.error("Error cleaning up expired tokens:", error);
-    }
-  }
-
-  /**
-   * Check if a storage path is accessible to a user
-   * This is a helper function that checks Firestore rules logic
-   */
-  async canAccessResource(
-    resourcePath: string,
-    userId: string,
-  ): Promise<boolean> {
-    try {
-      // Parse the resource path to determine ownership
-      // Paths are typically: avatars/{userId}/{filename}, feed-media/{userId}/{filename}, etc.
-      const pathParts = resourcePath.split("/");
-
-      // Check if user owns the resource
-      if (pathParts.includes(userId)) {
-        return true;
-      }
-
-      // Check if it's public content (feed, etc.)
-      // This would need additional logic based on your data model
-      const publicFolders = ["feed-media", "stories"];
-      if (publicFolders.some((folder) => pathParts.includes(folder))) {
-        return true; // Public content
-      }
-
-      return false;
-    } catch (error) {
-      console.error("Error checking resource access:", error);
-      return false;
-    }
+    return data.signedUrl;
   }
 }
 
-// Singleton instance
 export const signedUrlService = new SignedUrlService();

@@ -26,5 +26,4 @@ export interface SignInRequest {
 export interface UpdateProfileRequest {
   displayName?: string;
   visibility?: "PUBLIC" | "PRIVATE";
-  ghostModeActive?: boolean;
 }

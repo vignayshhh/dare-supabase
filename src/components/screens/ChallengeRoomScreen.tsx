@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
@@ -11,7 +11,6 @@ import {
   Flame,
   ImagePlus,
   Loader2,
-  Medal,
   MessageCircle,
   MoreHorizontal,
   Play,
@@ -23,17 +22,9 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import {
-  collection,
-  doc,
-  limit,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-} from "firebase/firestore";
-import { db } from "@/backend/lib/firebase";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createUuid } from "@/utils/uuid";
+import { scheduleRefresh } from "@/lib/realtime/scheduleRefresh";
 import { useAuthStore } from "../../stores/useAuthStore-v2";
 import { challengeRoomService } from "../../middleware/services/challenge-room.service";
 import {
@@ -71,6 +62,7 @@ export type JoinedChallengeRun = {
   countdown?: string;
   lifecycleStatus?: "active" | "submitted" | "completed" | "eliminated";
   proofDueAtMs?: number | null;
+  joinedAtMs?: number | null;
   eliminatedAtMs?: number | null;
   completedAtMs?: number | null;
   eliminationReason?: string;
@@ -171,8 +163,14 @@ function formatCountdownFromMs(ms: number) {
     .join(":");
 }
 
-function getProofDocId(challengeId: string, userId: string, day: number) {
-  return `${challengeId}_${userId}_day_${day}`.replace(/[^\w.-]/g, "_");
+function getProofDocId(
+  challengeId: string,
+  userId: string,
+  day: number,
+  runStartedAtMs?: number | null,
+) {
+  const runKey = runStartedAtMs ? `_run_${Math.floor(runStartedAtMs)}` : "";
+  return `${challengeId}_${userId}_day_${day}${runKey}`.replace(/[^\w.-]/g, "_");
 }
 
 function normalizeProofDoc(id: string, data: any): ChallengeProofPost | null {
@@ -201,8 +199,8 @@ function normalizeProofDoc(id: string, data: any): ChallengeProofPost | null {
     username,
     displayName,
     avatarUrl:
-      typeof data.submitter_avatar === "string" && data.submitter_avatar
-        ? data.submitter_avatar
+      typeof (data.submitter_avatar_url || data.submitter_avatar) === "string" && (data.submitter_avatar_url || data.submitter_avatar)
+        ? (data.submitter_avatar_url || data.submitter_avatar)
         : makeMockAvatar(
             displayName,
             MOCK_ACCENTS[id.length % MOCK_ACCENTS.length],
@@ -215,7 +213,7 @@ function normalizeProofDoc(id: string, data: any): ChallengeProofPost | null {
         .slice(0, 180) || "Proof submitted for today's community dare.",
     realVotes: Math.max(0, Number(data.real_votes || 0)),
     fakeVotes: Math.max(0, Number(data.fake_votes || 0)),
-    comments: Math.max(0, Number(data.comments || 0)),
+    comments: Math.max(0, Number(data.comments_count ?? data.comments ?? 0)),
     media: {
       type: mediaType,
       url: mediaUrl,
@@ -271,6 +269,15 @@ function RoomStyles() {
         0%, 100% { opacity: 0.62; transform: scale(1); }
         50% { opacity: 1; transform: scale(1.05); }
       }
+      @keyframes leaderboardTrace {
+        0% { background-position: 0% 50%; opacity: 0.62; }
+        48% { opacity: 1; }
+        100% { background-position: 220% 50%; opacity: 0.62; }
+      }
+      @keyframes leaderboardPulse {
+        0%, 100% { opacity: 0.48; transform: scale(1); }
+        50% { opacity: 0.9; transform: scale(1.04); }
+      }
       .challenge-room-panel {
         animation: roomFadeUp 0.46s cubic-bezier(0.16, 1, 0.3, 1) both;
       }
@@ -284,6 +291,23 @@ function RoomStyles() {
       }
       .challenge-room-glyph {
         animation: roomGlow 3.9s ease-in-out infinite;
+      }
+      .leaderboard-trace::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1px;
+        background: linear-gradient(115deg, rgba(255,255,255,0.04), rgba(94,234,212,0.64), rgba(56,189,248,0.5), rgba(187,247,208,0.5), rgba(125,211,252,0.2), rgba(255,255,255,0.04));
+        background-size: 240% 100%;
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        animation: leaderboardTrace 5.2s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .leaderboard-orb {
+        animation: leaderboardPulse 4.2s ease-in-out infinite;
       }
     `}</style>
   );
@@ -466,6 +490,7 @@ function ProofCard({
   onMediaTap,
   currentUserId,
   onOpenComments,
+  onReport,
 }: {
   proof: ChallengeProofPost;
   vote: ProofVote;
@@ -473,11 +498,13 @@ function ProofCard({
   onMediaTap: () => void;
   currentUserId?: string;
   onOpenComments: (proof: ChallengeProofPost) => void;
+  onReport: (proof: ChallengeProofPost) => void;
 }) {
   const realVotes = proof.realVotes;
   const fakeVotes = proof.fakeVotes;
   const isOwn = proof.userId === currentUserId;
   const canVote = Boolean(currentUserId) && proof.media.type !== "mock";
+  const canReport = !isOwn && proof.media.type !== "mock" && /^[0-9a-f-]{36}$/i.test(proof.id);
 
   return (
     <article
@@ -490,7 +517,6 @@ function ProofCard({
             alt={proof.displayName}
             fallbackText={proof.displayName.charAt(0)}
             size={46}
-            disableGhostMode
             style={{ border: "1.5px solid rgba(74,222,128,0.18)" }}
           />
         </div>
@@ -602,6 +628,16 @@ function ProofCard({
               <span className="text-[10px] font-semibold text-[#64748b]">
                 {proof.timePosted}
               </span>
+              {canReport ? (
+                <button
+                  type="button"
+                  onClick={() => onReport(proof)}
+                  className="app-pressable rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#64748b]"
+                  aria-label="Report proof"
+                >
+                  Report
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -962,7 +998,13 @@ function ChallengeRoomGroupChat({
       content: nextMessage,
     });
 
-    if (!result.success) {
+    if (result.success && result.message) {
+      setMessages((current) =>
+        current.some((message) => message.id === result.message!.id)
+          ? current
+          : [...current, result.message!],
+      );
+    } else {
       setDraft(nextMessage);
       setChatError(result.error || "Could not send message. Try again.");
     }
@@ -1035,7 +1077,6 @@ function ChallengeRoomGroupChat({
                         alt={message.displayName}
                         fallbackText={message.displayName.charAt(0)}
                         size={36}
-                        disableGhostMode
                         style={{ border: "1.5px solid rgba(74,222,128,0.18)" }}
                       />
                     ) : null}
@@ -1155,13 +1196,8 @@ function normalizeLeaderboardMember(data: any): LeaderboardMember | null {
 function buildLeaderboardEntries(
   members: LeaderboardMember[],
   proofs: ChallengeProofPost[],
-  votes: Array<{ proofId: string; vote: "real" | "fake" }>,
-  comments: Array<{ proofId: string }>,
 ): LeaderboardEntry[] {
   const entries = new Map<string, LeaderboardEntry>();
-  const proofOwner = new Map<string, string>();
-  const realVotesByProof = new Map<string, number>();
-  const commentsByProof = new Map<string, number>();
   const proofsByDay = new Map<number, ChallengeProofPost[]>();
   const earlyPointsByProof = new Map<string, number>();
 
@@ -1179,7 +1215,6 @@ function buildLeaderboardEntries(
   });
 
   proofs.forEach((proof) => {
-    proofOwner.set(proof.id, proof.userId);
     if (!entries.has(proof.userId)) {
       entries.set(proof.userId, {
         userId: proof.userId,
@@ -1201,15 +1236,6 @@ function buildLeaderboardEntries(
     proofsByDay.set(proof.proofDay, dayProofs);
   });
 
-  votes.forEach((vote) => {
-    if (vote.vote !== "real") return;
-    realVotesByProof.set(vote.proofId, (realVotesByProof.get(vote.proofId) || 0) + 1);
-  });
-
-  comments.forEach((comment) => {
-    commentsByProof.set(comment.proofId, (commentsByProof.get(comment.proofId) || 0) + 1);
-  });
-
   proofsByDay.forEach((dayProofs) => {
     [...dayProofs]
       .sort((a, b) => a.submittedAtMs - b.submittedAtMs)
@@ -1221,8 +1247,8 @@ function buildLeaderboardEntries(
   proofs.forEach((proof) => {
     const entry = entries.get(proof.userId);
     if (!entry) return;
-    const realVotes = realVotesByProof.get(proof.id) || 0;
-    const appreciationComments = commentsByProof.get(proof.id) || 0;
+    const realVotes = proof.realVotes;
+    const appreciationComments = proof.comments;
     const earlyPoints = earlyPointsByProof.get(proof.id) || 0;
 
     entry.proofCount += 1;
@@ -1256,20 +1282,24 @@ function buildLeaderboardEntries(
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  const isTop = rank <= 3;
+  const isTopRank = rank <= 3;
+  const rankClass =
+    rank === 1
+      ? "border-[#5eead4]/48 bg-[#5eead4]/12 text-[#ccfbf1] shadow-[0_0_24px_rgba(45,212,191,0.18)]"
+      : rank === 2
+        ? "border-[#7dd3fc]/38 bg-[#38bdf8]/12 text-[#bae6fd] shadow-[0_0_20px_rgba(56,189,248,0.14)]"
+        : rank === 3
+          ? "border-[#86efac]/34 bg-[#4ade80]/10 text-[#bbf7d0] shadow-[0_0_18px_rgba(74,222,128,0.12)]"
+          : "border-white/8 bg-white/[0.045] text-[#94a3b8]";
+
   return (
     <div
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-black ${
-        rank === 1
-          ? "border-[#facc15]/36 bg-[#facc15]/16 text-[#fde68a]"
-          : rank === 2
-            ? "border-[#cbd5e1]/28 bg-white/[0.08] text-[#e2e8f0]"
-            : rank === 3
-              ? "border-[#fb923c]/28 bg-[#fb923c]/12 text-[#fed7aa]"
-              : "border-white/8 bg-white/[0.045] text-[#94a3b8]"
-      }`}
+      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-[15px] font-black ${rankClass}`}
     >
-      {isTop ? <Medal size={18} strokeWidth={2.4} /> : rank}
+      {isTopRank ? (
+        <span className="pointer-events-none absolute inset-1 rounded-full border border-white/10" />
+      ) : null}
+      {rank}
     </div>
   );
 }
@@ -1283,312 +1313,363 @@ function ChallengeRoomLeaderboard({
 }) {
   const [members, setMembers] = useState<LeaderboardMember[]>([]);
   const [proofs, setProofs] = useState<ChallengeProofPost[]>([]);
-  const [votes, setVotes] = useState<Array<{ proofId: string; vote: "real" | "fake" }>>([]);
-  const [comments, setComments] = useState<Array<{ proofId: string }>>([]);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
 
-  const proofIdsKey = useMemo(
-    () => proofs.map((proof) => proof.id).join("|"),
-    [proofs],
-  );
-
   useEffect(() => {
-    const membersQuery = query(
-      collection(db, "community_challenge_joins"),
-      where("challenge_id", "==", challenge.id),
-      limit(200),
-    );
-
-    return onSnapshot(
-      membersQuery,
-      (snapshot) => {
-        setMembers(
-          snapshot.docs
-            .map((memberDoc) =>
-              normalizeLeaderboardMember(memberDoc.data()),
-            )
+    let active = true;
+    const load = async () => {
+      const { data, error } = await getSupabaseBrowserClient().from("community_challenge_joins").select("id,challenge_id,user_id,username,display_name,avatar_url,status,current_day,total_days,proof_due_at,proof_window_hours,last_proof_day,last_proof_at,eliminated_at,completed_at,elimination_reason,official_dare,created_at,updated_at").eq("challenge_id", challenge.id).limit(200);
+      if (!active) return;
+      if (error) { setLeaderboardError("Leaderboard members are unavailable right now."); return; }
+      setMembers(
+        (data ?? [])
+            .map((member) => normalizeLeaderboardMember(member))
             .filter((member): member is LeaderboardMember => member !== null),
-        );
-        setLeaderboardError(null);
-      },
-      (error) => {
-        console.warn("Community leaderboard members unavailable:", error);
-        setLeaderboardError("Leaderboard members are unavailable right now.");
-      },
-    );
+      );
+      setLeaderboardError(null);
+    };
+    const refresh = scheduleRefresh(() => { void load(); });
+    void load();
+    const channel = getSupabaseBrowserClient().channel("challenge-leaderboard-members:" + challenge.id).on("postgres_changes", { event: "*", schema: "public", table: "community_challenge_joins", filter: "challenge_id=eq." + challenge.id }, refresh.schedule).subscribe();
+    return () => { active = false; refresh.cancel(); void getSupabaseBrowserClient().removeChannel(channel); };
   }, [challenge.id]);
 
   useEffect(() => {
-    const proofsQuery = query(
-      collection(db, "challenge_room_proofs"),
-      where("challenge_id", "==", challenge.id),
-      limit(240),
-    );
-
-    return onSnapshot(
-      proofsQuery,
-      (snapshot) => {
-        setProofs(
-          snapshot.docs
-            .map((proofDoc) => normalizeProofDoc(proofDoc.id, proofDoc.data()))
+    let active = true;
+    const load = async () => {
+      const { data, error } = await getSupabaseBrowserClient().from("challenge_room_proofs").select("id,challenge_id,submitter_id,submitter_username,submitter_name,submitter_avatar_url,day,media_url,media_type,caption,real_votes,fake_votes,comments_count,created_at,updated_at").eq("challenge_id", challenge.id).order("created_at", { ascending: false }).limit(240);
+      if (!active) return;
+      if (error) { setLeaderboardError("Leaderboard proof stats are unavailable right now."); return; }
+      setProofs(
+          (data ?? [])
+            .map((proof) => normalizeProofDoc(String(proof.id), proof))
             .filter((proof): proof is ChallengeProofPost => Boolean(proof)),
-        );
-      },
-      (error) => {
-        console.warn("Community leaderboard proofs unavailable:", error);
-        setLeaderboardError("Leaderboard proof stats are unavailable right now.");
-      },
-    );
+      );
+    };
+    const refresh = scheduleRefresh(() => { void load(); });
+    void load();
+    const channel = getSupabaseBrowserClient().channel("challenge-leaderboard-proofs:" + challenge.id).on("postgres_changes", { event: "*", schema: "public", table: "challenge_room_proofs", filter: "challenge_id=eq." + challenge.id }, refresh.schedule).subscribe();
+    return () => { active = false; refresh.cancel(); void getSupabaseBrowserClient().removeChannel(channel); };
   }, [challenge.id]);
-
-  useEffect(() => {
-    const proofIds = proofIdsKey ? proofIdsKey.split("|").filter(Boolean) : [];
-    return challengeRoomService.subscribeToProofVotesByProofIds(
-      proofIds,
-      (proofVotes) => {
-        setVotes(
-          proofVotes.map((vote) => ({
-            proofId: vote.proofId,
-            vote: vote.vote,
-          })),
-        );
-      },
-    );
-  }, [proofIdsKey]);
-
-  useEffect(() => {
-    const proofIds = proofIdsKey ? proofIdsKey.split("|").filter(Boolean) : [];
-    return challengeRoomService.subscribeToProofCommentsByProofIds(
-      proofIds,
-      (proofComments) => {
-        setComments(proofComments.map((comment) => ({ proofId: comment.proofId })));
-      },
-    );
-  }, [proofIdsKey]);
 
   const entries = useMemo(
-    () => buildLeaderboardEntries(members, proofs, votes, comments),
-    [comments, members, proofs, votes],
+    () => buildLeaderboardEntries(members, proofs),
+    [members, proofs],
   );
-  const podium = entries.slice(0, 3);
-  const rest = entries.slice(3);
-  const totalScore = entries.reduce((sum, entry) => sum + entry.score, 0);
-  const topScore = entries[0]?.score || 0;
+  const topEntries = entries.slice(0, 3);
+  const remainingEntries = entries.slice(3);
+  const leader = entries[0] || null;
+  const maxScore = Math.max(1, leader?.score || 1);
+  const topGridClass =
+    topEntries.length === 1
+      ? "flex justify-center"
+      : topEntries.length === 2
+        ? "grid grid-cols-2 items-end gap-2"
+        : "grid grid-cols-3 items-end gap-2";
+  const activeMemberCount = members.filter(
+    (member) => member.status !== "eliminated",
+  ).length;
+  const totalRealVotes = entries.reduce((total, entry) => total + entry.realVotes, 0);
+  const totalProofCount = proofs.length;
+
+  const statCards = [
+    {
+      label: "Alive",
+      value: activeMemberCount || challenge.survivors,
+      detail: "still in",
+      Icon: Users,
+    },
+    {
+      label: "Proofs",
+      value: totalProofCount,
+      detail: "uploaded",
+      Icon: CheckCircle2,
+    },
+    {
+      label: "Real votes",
+      value: totalRealVotes,
+      detail: "trusted",
+      Icon: Star,
+    },
+  ];
 
   return (
     <div className="fixed inset-0 z-[2700] bg-[#030403] text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-14%,rgba(250,204,21,0.18),transparent_30%),radial-gradient(circle_at_14%_20%,rgba(74,222,128,0.16),transparent_30%),radial-gradient(circle_at_90%_24%,rgba(14,165,233,0.12),transparent_30%),linear-gradient(180deg,#060806_0%,#0a0f0a_48%,#030403_100%)]" />
+      <RoomStyles />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-14%,rgba(94,234,212,0.18),transparent_32%),radial-gradient(circle_at_12%_18%,rgba(74,222,128,0.13),transparent_28%),radial-gradient(circle_at_88%_12%,rgba(56,189,248,0.16),transparent_30%),linear-gradient(180deg,#060806_0%,#0a0f0a_48%,#030403_100%)]" />
+      <div className="pointer-events-none absolute -right-24 top-20 h-64 w-64 rounded-full bg-[#38bdf8]/10 blur-3xl" />
+      <div className="pointer-events-none absolute -left-24 top-44 h-56 w-56 rounded-full bg-[#4ade80]/10 blur-3xl" />
+
       <div className="relative z-10 flex h-full min-h-0 flex-col">
         <header className="shrink-0 px-4 pb-3 pt-[calc(var(--safe-area-top)+10px)]">
-          <div className="flex items-center gap-3">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={onClose}
               aria-label="Back to room"
-              className="app-pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] border border-white/8 bg-white/[0.045] text-[#cbd5e1] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
+              className="app-pressable flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] border border-white/8 bg-white/[0.045] text-[#cbd5e1] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
             >
               <ArrowLeft size={21} />
             </button>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#fde68a]">
-                Room leaderboard
-              </p>
-              <h2 className="mt-1 truncate text-[23px] font-black leading-none text-white">
-                {challenge.title}
-              </h2>
+            <div className="flex min-w-0 flex-1 items-center justify-center">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#5eead4]/20 bg-[#5eead4]/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#ccfbf1]">
+                <span className="leaderboard-orb h-2 w-2 rounded-full bg-[#5eead4] shadow-[0_0_14px_rgba(94,234,212,0.72)]" />
+                Leaderboard room
+              </div>
             </div>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] border border-[#facc15]/24 bg-[#facc15]/12 text-[#fde68a]">
-              <Crown size={22} strokeWidth={2.35} />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] border border-[#38bdf8]/24 bg-[#38bdf8]/10 text-[#bae6fd] shadow-[0_16px_38px_rgba(0,0,0,0.3)]">
+              <Trophy size={23} strokeWidth={2.35} />
             </div>
           </div>
+
+          <section className="challenge-room-panel leaderboard-trace relative overflow-hidden rounded-[32px] border border-white/8 bg-[radial-gradient(circle_at_18%_-12%,rgba(94,234,212,0.18),transparent_36%),radial-gradient(circle_at_92%_4%,rgba(56,189,248,0.16),transparent_34%),linear-gradient(180deg,rgba(17,25,22,0.96),rgba(6,10,9,0.99))] p-4 shadow-[0_24px_76px_rgba(0,0,0,0.48),inset_0_1px_0_rgba(255,255,255,0.07)]">
+            <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(94,234,212,0.74),rgba(56,189,248,0.52),transparent)]" />
+            <div className="relative z-10 flex items-start gap-3">
+              <RoomGlyph icon={challenge.icon} accent={challenge.accent} size="small" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#94a3b8]">
+                  Dare challenge
+                </p>
+                <h1 className="mt-1 break-words text-[24px] font-black leading-[1.03] text-white">
+                  {challenge.title}
+                </h1>
+              </div>
+            </div>
+
+            <div className="relative z-10 mt-4 grid grid-cols-3 gap-2">
+              {statCards.map((stat) => {
+                const Icon = stat.Icon;
+                return (
+                  <div
+                    key={stat.label}
+                    className="rounded-[20px] border border-white/8 bg-black/20 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                  >
+                    <div className="mb-2 flex items-center gap-1.5 text-[#86efac]">
+                      <Icon size={14} strokeWidth={2.35} />
+                      <span className="text-[9.5px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">
+                        {stat.label}
+                      </span>
+                    </div>
+                    <div className="text-[20px] font-black leading-none text-white">
+                      {stat.value}
+                    </div>
+                    <div className="mt-1 text-[10px] font-bold text-[#64748b]">
+                      {stat.detail}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(var(--safe-area-bottom)+24px)] pt-2">
-          <section className="challenge-room-panel challenge-room-shine relative overflow-hidden rounded-[34px] border border-[#facc15]/16 bg-[radial-gradient(circle_at_50%_-30%,rgba(250,204,21,0.2),transparent_44%),linear-gradient(180deg,rgba(21,23,15,0.96),rgba(7,10,8,0.99))] p-4 shadow-[0_24px_76px_rgba(0,0,0,0.46),inset_0_1px_0_rgba(255,255,255,0.07)]">
-            <div className="relative z-10 flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Flame size={18} className="text-[#facc15]" />
-                  <span className="text-[11px] font-black uppercase tracking-[0.18em] text-[#fde68a]">
-                    Live heat
-                  </span>
-                </div>
-                <h3 className="mt-2 text-[34px] font-black leading-none text-white">
-                  {topScore}
-                </h3>
-                <p className="mt-1 text-xs font-bold text-[#94a3b8]">
-                  top score right now
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-right">
-                <div className="rounded-[18px] border border-white/8 bg-white/[0.045] px-3 py-2">
-                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-[#64748b]">
-                    Ranked
-                  </div>
-                  <div className="mt-1 text-lg font-black text-white">
-                    {entries.length}
-                  </div>
-                </div>
-                <div className="rounded-[18px] border border-white/8 bg-white/[0.045] px-3 py-2">
-                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-[#64748b]">
-                    Heat
-                  </div>
-                  <div className="mt-1 text-lg font-black text-[#facc15]">
-                    {totalScore}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
           {leaderboardError ? (
-            <div className="mt-4 rounded-[20px] border border-[#facc15]/18 bg-[#facc15]/10 px-4 py-3 text-xs font-bold text-[#fde68a]">
+            <div className="rounded-[20px] border border-[#38bdf8]/18 bg-[#38bdf8]/10 px-4 py-3 text-xs font-bold text-[#bae6fd]">
               {leaderboardError}
             </div>
           ) : null}
 
-          {podium.length > 0 ? (
-            <section className="mt-5 grid grid-cols-3 items-end gap-2">
-              {podium.map((entry, index) => {
-                const heightClass =
-                  entry.rank === 1 ? "min-h-[172px]" : "min-h-[142px]";
-                return (
-                  <article
-                    key={entry.userId}
-                    className={`challenge-room-panel relative overflow-hidden rounded-[28px] border p-3 text-center shadow-[0_18px_54px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.06)] ${heightClass} ${
-                      entry.rank === 1
-                        ? "border-[#facc15]/26 bg-[#facc15]/10"
-                        : "border-white/8 bg-white/[0.045]"
-                    }`}
-                    style={{ order: index === 0 ? 2 : index === 1 ? 1 : 3 }}
-                  >
-                    <div className="mx-auto mb-2 flex justify-center">
-                      <RankBadge rank={entry.rank} />
+          {entries.length > 0 ? (
+            <>
+              <section className="challenge-room-panel challenge-room-shine relative mt-3 overflow-hidden rounded-[30px] border border-[#5eead4]/14 bg-[linear-gradient(180deg,rgba(13,22,20,0.94),rgba(5,8,8,0.99))] p-4 shadow-[0_22px_68px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.055)]">
+                <div className="relative z-10 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-[#ccfbf1]">
+                      <Crown size={17} strokeWidth={2.35} />
+                      <span className="text-[11px] font-black uppercase tracking-[0.16em]">
+                        Current lead
+                      </span>
                     </div>
-                    <Avatar
-                      src={entry.avatarUrl}
-                      alt={entry.displayName}
-                      fallbackText={entry.displayName.charAt(0)}
-                      size={48}
-                      disableGhostMode
-                      style={{
-                        border:
-                          entry.rank === 1
-                            ? "2px solid rgba(250,204,21,0.42)"
-                            : "2px solid rgba(255,255,255,0.12)",
-                      }}
-                    />
-                    <div className="mt-2 truncate text-[13px] font-black text-white">
-                      {entry.displayName}
-                    </div>
-                    <div className="mt-1 text-[24px] font-black leading-none text-[#facc15]">
-                      {entry.score}
-                    </div>
-                    <div className="mt-1 text-[10px] font-black uppercase tracking-[0.1em] text-[#94a3b8]">
-                      points
-                    </div>
-                  </article>
-                );
-              })}
-            </section>
-          ) : null}
-
-          {rest.length > 0 ? (
-            <section className="mt-5 flex flex-col gap-3">
-              {rest.map((entry) => (
-                <article
-                  key={entry.userId}
-                  className="challenge-room-panel relative overflow-hidden rounded-[26px] border border-white/8 bg-white/[0.045] p-3 shadow-[0_16px_46px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.045)]"
-                >
-                <div className="flex items-center gap-3">
-                  <RankBadge rank={entry.rank} />
-                  <Avatar
-                    src={entry.avatarUrl}
-                    alt={entry.displayName}
-                    fallbackText={entry.displayName.charAt(0)}
-                    size={44}
-                    disableGhostMode
-                    style={{ border: "1.5px solid rgba(74,222,128,0.18)" }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-black text-white">
-                      {entry.displayName}
-                    </div>
-                    <div className="truncate text-xs font-semibold text-[#64748b]">
-                      @{entry.username}
-                    </div>
+                    <h2 className="mt-2 text-[26px] font-black leading-none text-white">
+                      {leader?.displayName}
+                    </h2>
+                    <p className="mt-1 text-xs font-bold text-[#94a3b8]">
+                      @{leader?.username} - {leader?.proofCount} proofs locked
+                    </p>
                   </div>
-                  <div className="text-right">
-                    <div className="text-[22px] font-black leading-none text-white">
-                      {entry.score}
+                  <div className="rounded-[22px] border border-[#5eead4]/18 bg-[#5eead4]/10 px-4 py-3 text-right">
+                    <div className="text-[30px] font-black leading-none text-[#ccfbf1]">
+                      {leader?.score}
                     </div>
-                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-[#94a3b8]">
-                      pts
+                    <div className="mt-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">
+                      score
                     </div>
                   </div>
                 </div>
+              </section>
 
-                <div className="mt-3 grid grid-cols-4 gap-2">
-                  {[
-                    {
-                      label: "Real",
-                      value: entry.realVotes,
-                      Icon: CheckCircle2,
-                      color: "#86efac",
-                    },
-                    {
-                      label: "Love",
-                      value: entry.appreciationComments,
-                      Icon: MessageCircle,
-                      color: "#bae6fd",
-                    },
-                    {
-                      label: "Early",
-                      value: entry.earlyPoints,
-                      Icon: Star,
-                      color: "#fde68a",
-                    },
-                    {
-                      label: "Proofs",
-                      value: entry.proofCount,
-                      Icon: Upload,
-                      color: "#cbd5e1",
-                    },
-                  ].map(({ label, value, Icon, color }) => {
-                    const StatIcon = Icon;
+              <section className="mt-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-[12px] font-black uppercase tracking-[0.18em] text-[#bbf7d0]">
+                    Top challengers
+                  </h3>
+                  <span className="rounded-full border border-[#38bdf8]/16 bg-[#38bdf8]/10 px-3 py-1 text-[10px] font-black text-[#bae6fd]">
+                    Live ranking
+                  </span>
+                </div>
+
+                <div className={topGridClass}>
+                  {topEntries.map((entry) => {
+                    const isChampion = entry.rank === 1;
+                    const columnPadding = isChampion ? "pb-0 pt-4" : "pb-0 pt-8";
+
                     return (
-                      <div
-                        key={label}
-                        className="rounded-[16px] border border-white/8 bg-black/16 px-2 py-2"
+                      <article
+                        key={entry.userId}
+                        className={`challenge-room-panel relative w-full max-w-[150px] overflow-hidden rounded-[26px] border px-2.5 ${columnPadding} text-center shadow-[0_18px_52px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.05)] ${
+                          isChampion
+                            ? "border-[#5eead4]/28 bg-[radial-gradient(circle_at_50%_-18%,rgba(94,234,212,0.2),transparent_42%),linear-gradient(180deg,rgba(17,32,29,0.94),rgba(6,10,9,0.99))]"
+                            : entry.rank === 2
+                              ? "border-[#38bdf8]/20 bg-[#38bdf8]/[0.065]"
+                              : "border-[#4ade80]/18 bg-[#4ade80]/[0.055]"
+                        }`}
                       >
-                        <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#64748b]">
-                          <StatIcon size={12} style={{ color }} />
-                          {label}
+                        <div className="relative z-10 mx-auto mb-2 w-fit">
+                          <Avatar
+                            src={entry.avatarUrl}
+                            alt={entry.displayName}
+                            fallbackText={entry.displayName.charAt(0)}
+                            size={isChampion ? 58 : 48}
+                            style={{
+                              border: isChampion
+                                ? "2px solid rgba(94,234,212,0.52)"
+                                : "1.5px solid rgba(125,211,252,0.28)",
+                            }}
+                          />
+                          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2">
+                            <RankBadge rank={entry.rank} />
+                          </div>
                         </div>
-                        <div className="mt-1 text-center text-sm font-black text-white">
-                          {value}
+                        <div className="relative z-10 mt-5 truncate text-[13px] font-black text-white">
+                          {entry.displayName}
                         </div>
-                      </div>
+                        <div className="relative z-10 mt-1 text-[18px] font-black leading-none text-[#ccfbf1]">
+                          {entry.score}
+                        </div>
+                        <div className="relative z-10 mt-1 pb-3 text-[9px] font-black uppercase tracking-[0.1em] text-[#64748b]">
+                          points
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
-                </article>
-              ))}
-            </section>
+              </section>
+
+              <section className="mt-5 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[12px] font-black uppercase tracking-[0.18em] text-[#bbf7d0]">
+                    Full board
+                  </h3>
+                  <span className="text-[11px] font-bold text-[#64748b]">
+                    Real x4 - comments x3 - early bonus
+                  </span>
+                </div>
+
+                {[...topEntries, ...remainingEntries].map((entry) => {
+                  const isChampion = entry.rank === 1;
+                  const progressWidth = Math.max(
+                    8,
+                    Math.min(100, (entry.score / maxScore) * 100),
+                  );
+
+                  return (
+                    <article
+                      key={entry.userId}
+                      className={`challenge-room-panel relative overflow-hidden rounded-[26px] border px-3.5 py-3.5 shadow-[0_16px_48px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.045)] ${
+                        isChampion
+                          ? "leaderboard-trace border-[#5eead4]/24 bg-[linear-gradient(135deg,rgba(94,234,212,0.12),rgba(56,189,248,0.06),rgba(255,255,255,0.035))]"
+                          : "border-white/8 bg-white/[0.04]"
+                      }`}
+                    >
+                      <div className="relative z-10 flex min-w-0 items-center gap-3">
+                        <RankBadge rank={entry.rank} />
+                        <Avatar
+                          src={entry.avatarUrl}
+                          alt={entry.displayName}
+                          fallbackText={entry.displayName.charAt(0)}
+                          size={48}
+                          style={{
+                            border: isChampion
+                              ? "1.5px solid rgba(94,234,212,0.46)"
+                              : "1.5px solid rgba(74,222,128,0.18)",
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="truncate text-[15.5px] font-black text-white">
+                              {entry.displayName}
+                            </div>
+                            {isChampion ? (
+                              <Crown
+                                size={15}
+                                className="shrink-0 text-[#5eead4]"
+                                strokeWidth={2.4}
+                              />
+                            ) : null}
+                          </div>
+                          <div className="mt-1 truncate text-[11px] font-bold text-[#64748b]">
+                            @{entry.username}
+                          </div>
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                            <div
+                              className="h-full rounded-full bg-[linear-gradient(90deg,#5eead4,#38bdf8,#86efac)] shadow-[0_0_18px_rgba(56,189,248,0.22)]"
+                              style={{ width: `${progressWidth}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-[21px] font-black leading-none text-[#ccfbf1]">
+                            {entry.score}
+                          </div>
+                          <div className="mt-1 text-[9px] font-black uppercase tracking-[0.1em] text-[#64748b]">
+                            points
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 mt-3 grid grid-cols-4 gap-1.5">
+                        {[
+                          { label: "Proof", value: entry.proofCount, color: "#ccfbf1" },
+                          { label: "Real", value: entry.realVotes, color: "#86efac" },
+                          { label: "Chat", value: entry.appreciationComments, color: "#bae6fd" },
+                          { label: "Early", value: entry.earlyPoints, color: "#5eead4" },
+                        ].map((stat) => (
+                          <div
+                            key={stat.label}
+                            className="rounded-[15px] border border-white/8 bg-black/18 px-2 py-2 text-center"
+                          >
+                            <div
+                              className="text-[13px] font-black leading-none"
+                              style={{ color: stat.color }}
+                            >
+                              {stat.value}
+                            </div>
+                            <div className="mt-1 text-[8.5px] font-black uppercase tracking-[0.08em] text-[#64748b]">
+                              {stat.label}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  );
+                })}
+              </section>
+            </>
           ) : null}
 
           {entries.length === 0 ? (
             <div className="flex min-h-[38vh] items-center justify-center">
-              <div className="max-w-[310px] text-center">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] border border-[#facc15]/18 bg-[#facc15]/10 text-[#fde68a]">
+              <div className="challenge-room-panel leaderboard-trace relative max-w-[320px] overflow-hidden rounded-[32px] border border-[#5eead4]/16 bg-[linear-gradient(180deg,rgba(16,24,22,0.95),rgba(6,9,8,0.99))] px-5 py-7 text-center shadow-[0_24px_76px_rgba(0,0,0,0.44),inset_0_1px_0_rgba(255,255,255,0.06)]">
+                <div className="relative z-10 mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] border border-[#38bdf8]/20 bg-[#38bdf8]/10 text-[#bae6fd]">
                   <Trophy size={30} />
                 </div>
-                <h3 className="mt-4 text-[20px] font-black text-white">
+                <h3 className="relative z-10 mt-4 text-[20px] font-black text-white">
                   No rankings yet
                 </h3>
-                <p className="mt-2 text-sm font-semibold leading-relaxed text-[#94a3b8]">
-                  The board lights up after members upload proof and the room
-                  starts voting.
+                <p className="relative z-10 mt-2 text-sm font-semibold leading-relaxed text-[#94a3b8]">
+                  The board wakes up when proof lands, friends vote real, and
+                  early uploads start separating the room.
                 </p>
               </div>
             </div>
@@ -1610,20 +1691,14 @@ function ChallengeRoomMembersScreen({
   const [membersError, setMembersError] = useState<string | null>(null);
 
   useEffect(() => {
-    const membersQuery = query(
-      collection(db, "community_challenge_joins"),
-      where("challenge_id", "==", challenge.id),
-      limit(300),
-    );
-
-    return onSnapshot(
-      membersQuery,
-      (snapshot) => {
-        setMembers(
-          snapshot.docs
-            .map((memberDoc) =>
-              normalizeLeaderboardMember(memberDoc.data()),
-            )
+    let active = true;
+    const load = async () => {
+      const { data, error } = await getSupabaseBrowserClient().from("community_challenge_joins").select("id,challenge_id,user_id,username,display_name,avatar_url,status,current_day,total_days,proof_due_at,proof_window_hours,last_proof_day,last_proof_at,eliminated_at,completed_at,elimination_reason,official_dare,created_at,updated_at").eq("challenge_id", challenge.id).limit(300);
+      if (!active) return;
+      if (error) { setMembersError("Members are unavailable right now."); return; }
+      setMembers(
+        (data ?? [])
+            .map((member) => normalizeLeaderboardMember(member))
             .filter((member): member is LeaderboardMember => member !== null)
             .sort((a, b) => {
               if (a.status === "eliminated" && b.status !== "eliminated") {
@@ -1634,14 +1709,13 @@ function ChallengeRoomMembersScreen({
               }
               return a.displayName.localeCompare(b.displayName);
             }),
-        );
-        setMembersError(null);
-      },
-      (error) => {
-        console.warn("Community room members unavailable:", error);
-        setMembersError("Members are unavailable right now.");
-      },
-    );
+      );
+      setMembersError(null);
+    };
+    const refresh = scheduleRefresh(() => { void load(); });
+    void load();
+    const channel = getSupabaseBrowserClient().channel("challenge-room-members:" + challenge.id).on("postgres_changes", { event: "*", schema: "public", table: "community_challenge_joins", filter: "challenge_id=eq." + challenge.id }, refresh.schedule).subscribe();
+    return () => { active = false; refresh.cancel(); void getSupabaseBrowserClient().removeChannel(channel); };
   }, [challenge.id]);
 
   const presentMembers = members.filter(
@@ -1666,7 +1740,6 @@ function ChallengeRoomMembersScreen({
           alt={member.displayName}
           fallbackText={member.displayName.charAt(0)}
           size={48}
-          disableGhostMode
           style={{
             border: eliminated
               ? "1.5px solid rgba(248,113,113,0.24)"
@@ -1918,47 +1991,51 @@ function ProofSubmissionScreen({
         }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          <header className="shrink-0 px-4 pt-[calc(var(--safe-area-top)+10px)]">
-            <div className="flex items-center justify-between gap-3">
+          <header className="shrink-0 px-4 pb-1 pt-[calc(var(--safe-area-top)+10px)]">
+            <div className="flex items-start gap-3">
               <button
                 type="button"
                 onClick={onClose}
                 aria-label="Back"
-                className="app-pressable flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/8 bg-white/[0.045] text-[#cbd5e1] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
+                className="app-pressable mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] border border-white/8 bg-white/[0.045] text-[#cbd5e1] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
               >
                 <ArrowLeft size={21} />
               </button>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#86efac]">
+              <div className="min-w-0 flex-1 pr-1">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#5eead4]/20 bg-[#5eead4]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#ccfbf1]">
+                  <Upload size={13} strokeWidth={2.5} />
                   Submit proof
-                </p>
-                <h1 className="mt-1 truncate text-[23px] font-black leading-none text-white">
+                </div>
+                <h1 className="break-words text-[25px] font-black leading-[1.04] text-white">
                   {challenge.title}
                 </h1>
+                <p className="mt-2 text-[12px] font-bold leading-relaxed text-[#94a3b8]">
+                  Upload a clear photo or video before the room window closes.
+                </p>
               </div>
             </div>
 
-            <div className="challenge-room-panel challenge-room-shine relative mt-4 overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(21,27,21,0.94),rgba(10,14,10,0.98))] p-4 shadow-[0_20px_58px_rgba(0,0,0,0.38),inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.82),rgba(14,165,233,0.4),rgba(74,222,128,0))]" />
-              <div className="relative z-10 flex items-start gap-4">
-                <RoomGlyph icon={challenge.icon} accent={challenge.accent} />
+            <div className="challenge-room-panel challenge-room-shine leaderboard-trace relative mt-4 overflow-hidden rounded-[32px] border border-[#5eead4]/14 bg-[radial-gradient(circle_at_20%_-20%,rgba(94,234,212,0.18),transparent_38%),radial-gradient(circle_at_92%_8%,rgba(56,189,248,0.16),transparent_34%),linear-gradient(180deg,rgba(17,25,22,0.96),rgba(6,10,9,0.99))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.44),inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(94,234,212,0),rgba(94,234,212,0.78),rgba(56,189,248,0.48),rgba(94,234,212,0))]" />
+              <div className="relative z-10 flex items-center gap-3">
+                <RoomGlyph icon={challenge.icon} accent={challenge.accent} size="small" />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-[12px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#94a3b8]">
                         Upload proof in
                       </div>
-                      <div className="mt-1 flex items-end gap-2">
-                        <span className="text-[30px] font-black leading-none text-[#4ade80] drop-shadow-[0_0_22px_rgba(74,222,128,0.24)]">
-                          {countdown}
-                        </span>
-                        <span className="pb-1 text-xs font-black uppercase text-[#94a3b8]">
-                          left
-                        </span>
+                      <div className="mt-1 text-[30px] font-black leading-none text-[#ccfbf1] drop-shadow-[0_0_22px_rgba(94,234,212,0.24)]">
+                        {countdown}
                       </div>
                     </div>
-                    <div className="rounded-full border border-white/8 bg-white/[0.045] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-[#cbd5e1]">
-                      Day {challenge.day}
+                    <div className="shrink-0 rounded-[18px] border border-[#38bdf8]/18 bg-[#38bdf8]/10 px-3 py-2 text-center">
+                      <div className="text-[10px] font-black uppercase tracking-[0.1em] text-[#bae6fd]">
+                        Day
+                      </div>
+                      <div className="mt-0.5 text-[18px] font-black leading-none text-white">
+                        {challenge.day}
+                      </div>
                     </div>
                   </div>
 
@@ -1982,12 +2059,12 @@ function ProofSubmissionScreen({
                     </div>
                   </div>
 
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.055]">
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
                     <div
-                      className="h-full rounded-full shadow-[0_0_18px_rgba(74,222,128,0.28)]"
+                      className="h-full rounded-full shadow-[0_0_18px_rgba(56,189,248,0.25)]"
                       style={{
                         width: `${progress}%`,
-                        background: `linear-gradient(90deg, ${challenge.accent}, #4ade80)`,
+                        background: `linear-gradient(90deg, ${challenge.accent}, #5eead4, #38bdf8)`,
                       }}
                     />
                   </div>
@@ -2037,7 +2114,6 @@ function FullscreenProofViewer({
               alt={proof.displayName}
               size={42}
               fallbackText={proof.displayName.charAt(0)}
-              disableGhostMode
               style={{ border: "2px solid rgba(74,222,128,0.24)" }}
             />
             <div className="min-w-0">
@@ -2104,17 +2180,13 @@ export function ChallengeRoomScreen({
   const [showMembers, setShowMembers] = useState(false);
   const [showSubmissionScreen, setShowSubmissionScreen] = useState(false);
   const [proofVotes, setProofVotes] = useState<Record<string, ProofVote>>({});
-  const [proofVoteCounts, setProofVoteCounts] = useState<
-    Record<string, { real: number; fake: number }>
-  >({});
-  const [proofCommentCounts, setProofCommentCounts] = useState<
-    Record<string, number>
-  >({});
   const [votingInProgress, setVotingInProgress] = useState<
     Record<string, boolean>
   >({});
   const [remoteProofs, setRemoteProofs] = useState<ChallengeProofPost[]>([]);
   const [proofLoadError, setProofLoadError] = useState<string | null>(null);
+  const [reportedProofIds, setReportedProofIds] = useState<Set<string>>(() => new Set());
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedPreview, setSelectedPreview] =
     useState<LocalMediaPreview | null>(null);
@@ -2152,6 +2224,7 @@ export function ChallengeRoomScreen({
       totalDays: liveJoin.totalDays,
       lifecycleStatus,
       proofDueAtMs: liveJoin.proofDueAtMs,
+      joinedAtMs: liveJoin.joinedAtMs,
       eliminatedAtMs: liveJoin.eliminatedAtMs,
       completedAtMs: liveJoin.completedAtMs,
       eliminationReason: liveJoin.eliminationReason,
@@ -2165,6 +2238,17 @@ export function ChallengeRoomScreen({
     100,
     (effectiveChallenge.day / effectiveChallenge.totalDays) * 100,
   );
+  const currentRunStartedAtMs =
+    effectiveChallenge.joinedAtMs ??
+    (typeof effectiveChallenge.proofDueAtMs === "number"
+      ? effectiveChallenge.proofDueAtMs - 24 * 60 * 60 * 1000
+      : null);
+  const proofRunStartGraceMs = 2 * 60 * 1000;
+  const isProofForCurrentRun = (proof: ChallengeProofPost) => {
+    if (proof.challengeId !== challenge.id) return false;
+    if (!currentRunStartedAtMs) return true;
+    return proof.submittedAtMs >= currentRunStartedAtMs - proofRunStartGraceMs;
+  };
   const remainingMs =
     typeof effectiveChallenge.proofDueAtMs === "number"
       ? effectiveChallenge.proofDueAtMs - nowMs
@@ -2185,6 +2269,8 @@ export function ChallengeRoomScreen({
     const bottomNavMotion = document.querySelector(
       ".app-bottom-nav-motion",
     ) as HTMLElement;
+    const previousBottomNavDisplay = bottomNav?.style.display ?? "";
+    const previousBottomNavMotionDisplay = bottomNavMotion?.style.display ?? "";
 
     if (bottomNav) {
       bottomNav.style.display = "none";
@@ -2194,12 +2280,12 @@ export function ChallengeRoomScreen({
     }
 
     return () => {
-      // Restore bottom navigation
+      // Restore the state owned by the screen underneath this room.
       if (bottomNav) {
-        bottomNav.style.display = "";
+        bottomNav.style.display = previousBottomNavDisplay;
       }
       if (bottomNavMotion) {
-        bottomNavMotion.style.display = "";
+        bottomNavMotion.style.display = previousBottomNavMotionDisplay;
       }
     };
   }, []);
@@ -2222,9 +2308,10 @@ export function ChallengeRoomScreen({
       remoteProofs.some(
         (proof) =>
           proof.userId === user?.id &&
-          proof.proofDay === effectiveChallenge.day,
+          proof.proofDay === effectiveChallenge.day &&
+          isProofForCurrentRun(proof),
       ),
-    [effectiveChallenge.day, remoteProofs, user?.id],
+    [effectiveChallenge.day, remoteProofs, user?.id, currentRunStartedAtMs],
   );
   const proofUploadedForDay =
     submittedToday || localSubmittedDay === effectiveChallenge.day;
@@ -2235,10 +2322,10 @@ export function ChallengeRoomScreen({
   );
   const proofs = useMemo(
     () =>
-      [...mockProofs, ...remoteProofs].sort(
+      [...mockProofs, ...remoteProofs.filter(isProofForCurrentRun)].sort(
         (a, b) => a.submittedAtMs - b.submittedAtMs,
       ),
-    [mockProofs, remoteProofs],
+    [mockProofs, remoteProofs, currentRunStartedAtMs],
   );
   const proofTimelineKey = useMemo(
     () => proofs.map((proof) => `${proof.id}:${proof.submittedAtMs}`).join("|"),
@@ -2250,30 +2337,23 @@ export function ChallengeRoomScreen({
   );
 
   useEffect(() => {
-    if (!db) return;
-
-    const proofsQuery = query(
-      collection(db, "challenge_room_proofs"),
-      where("challenge_id", "==", challenge.id),
-      limit(24),
-    );
-
-    return onSnapshot(
-      proofsQuery,
-      (snapshot) => {
-        setRemoteProofs(
-          snapshot.docs
-            .map((proofDoc) => normalizeProofDoc(proofDoc.id, proofDoc.data()))
+    let active = true;
+    const load = async () => {
+      const { data, error } = await getSupabaseBrowserClient().from("challenge_room_proofs").select("id,challenge_id,submitter_id,submitter_username,submitter_name,submitter_avatar_url,day,media_url,media_type,caption,real_votes,fake_votes,comments_count,created_at,updated_at").eq("challenge_id", challenge.id).order("created_at", { ascending: true }).limit(24);
+      if (!active) return;
+      if (error) { setProofLoadError("Live proof feed is unavailable right now."); return; }
+      setRemoteProofs(
+          (data ?? [])
+            .map((proof) => normalizeProofDoc(String(proof.id), proof))
             .filter((proof): proof is ChallengeProofPost => Boolean(proof))
             .sort((a, b) => a.submittedAtMs - b.submittedAtMs),
-        );
-        setProofLoadError(null);
-      },
-      (error) => {
-        console.warn("Challenge room proofs could not be loaded:", error);
-        setProofLoadError("Live proof feed is unavailable right now.");
-      },
-    );
+      );
+      setProofLoadError(null);
+    };
+    const refresh = scheduleRefresh(() => { void load(); });
+    void load();
+    const channel = getSupabaseBrowserClient().channel("challenge-room-proofs:" + challenge.id).on("postgres_changes", { event: "*", schema: "public", table: "challenge_room_proofs", filter: "challenge_id=eq." + challenge.id }, refresh.schedule).subscribe();
+    return () => { active = false; refresh.cancel(); void getSupabaseBrowserClient().removeChannel(channel); };
   }, [challenge.id]);
 
   useEffect(() => {
@@ -2281,57 +2361,20 @@ export function ChallengeRoomScreen({
       ? liveProofIdsKey.split("|").filter(Boolean)
       : [];
 
-    return challengeRoomService.subscribeToProofVotesByProofIds(
+    return challengeRoomService.subscribeToCurrentUserProofVotesByProofIds(
       liveProofIds,
+      user?.id,
       (votes) => {
-        const nextCounts: Record<string, { real: number; fake: number }> = {};
         const nextUserVotes: Record<string, ProofVote> = {};
 
-        liveProofIds.forEach((proofId) => {
-          nextCounts[proofId] = { real: 0, fake: 0 };
-        });
-
         votes.forEach((vote) => {
-          if (!nextCounts[vote.proofId]) {
-            nextCounts[vote.proofId] = { real: 0, fake: 0 };
-          }
-
-          if (vote.vote === "real") {
-            nextCounts[vote.proofId].real += 1;
-          } else if (vote.vote === "fake") {
-            nextCounts[vote.proofId].fake += 1;
-          }
-
-          if (user?.id && vote.userId === user.id) {
-            nextUserVotes[vote.proofId] = vote.vote;
-          }
+          nextUserVotes[vote.proofId] = vote.vote;
         });
 
-        setProofVoteCounts(nextCounts);
         setProofVotes(nextUserVotes);
       },
     );
   }, [liveProofIdsKey, user?.id]);
-
-  useEffect(() => {
-    const liveProofIds = liveProofIdsKey
-      ? liveProofIdsKey.split("|").filter(Boolean)
-      : [];
-
-    return challengeRoomService.subscribeToProofCommentsByProofIds(
-      liveProofIds,
-      (comments) => {
-        const nextCounts: Record<string, number> = {};
-        liveProofIds.forEach((proofId) => {
-          nextCounts[proofId] = 0;
-        });
-        comments.forEach((comment) => {
-          nextCounts[comment.proofId] = (nextCounts[comment.proofId] || 0) + 1;
-        });
-        setProofCommentCounts(nextCounts);
-      },
-    );
-  }, [liveProofIdsKey]);
 
   useEffect(() => {
     return () => {
@@ -2359,8 +2402,8 @@ export function ChallengeRoomScreen({
   }, [proofTimelineKey, proofUploadedForDay]);
 
   useEffect(() => {
-    if (submittedToday && !showUploadConfirmation) {
-      setHideUploadDock(true);
+    if (!showUploadConfirmation) {
+      setHideUploadDock(false);
     }
   }, [showUploadConfirmation, submittedToday]);
 
@@ -2430,10 +2473,6 @@ export function ChallengeRoomScreen({
       setUploadError("Please log in before submitting proof.");
       return;
     }
-    if (!db) {
-      setUploadError("Challenge room backend is not configured.");
-      return;
-    }
     if (isEliminated || (remainingMs !== null && remainingMs <= 0)) {
       setUploadError("The 24-hour proof window has closed.");
       return;
@@ -2471,40 +2510,35 @@ export function ChallengeRoomScreen({
       const proofMediaType =
         uploadedMedia.mediaKind === "video" ? "video" : "image";
       const now = Date.now();
-      const proofDocRef = doc(
-        db,
-        "challenge_room_proofs",
-        getProofDocId(challenge.id, user.id, effectiveChallenge.day),
-      );
-
       const proofPayload = {
+        id: createUuid(),
         challenge_id: challenge.id,
-        challenge_title: effectiveChallenge.title,
         submitter_id: user.id,
         submitter_username: user.username || "dareuser",
         submitter_name: user.displayName || user.username || "Dare User",
-        submitter_avatar: user.avatar || "",
+        submitter_avatar_url: user.avatar || "",
         day: effectiveChallenge.day,
-        total_days: effectiveChallenge.totalDays,
         media_url: uploadedMedia.url,
         media_type: proofMediaType,
-        thumbnail_url:
-          uploadedMedia.thumbnail ||
-          (proofMediaType === "image" ? uploadedMedia.url : ""),
         caption:
           caption.trim() ||
           `Submitted day ${effectiveChallenge.day} proof for ${effectiveChallenge.title}.`,
         real_votes: 0,
         fake_votes: 0,
-        comments: 0,
-        client_created_at: now,
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
+        comments_count: 0,
       };
 
-      await setDoc(proofDocRef, proofPayload, { merge: true });
+      const { error: proofError } = await getSupabaseBrowserClient().from("challenge_room_proofs").upsert(proofPayload, { onConflict: "id" });
+      if (proofError) throw proofError;
+      if (uploadResult.assetId) {
+        await getSupabaseBrowserClient().rpc("attach_media_asset", {
+          p_asset_id: uploadResult.assetId,
+          p_reference_type: "challenge_room_proof",
+          p_reference_id: proofPayload.id,
+        });
+      }
 
-      const optimisticProof = normalizeProofDoc(proofDocRef.id, proofPayload);
+      const optimisticProof = normalizeProofDoc(proofPayload.id, proofPayload);
       if (optimisticProof) {
         setRemoteProofs((currentProofs) =>
           [
@@ -2557,6 +2591,24 @@ export function ChallengeRoomScreen({
     lastMediaTapRef.current = { id: proof.id, time: now };
   };
 
+  const handleReportProof = async (proof: ChallengeProofPost) => {
+    if (!user?.id || reportedProofIds.has(proof.id)) return;
+    const { error } = await getSupabaseBrowserClient().from("reports").insert({
+      reporter_id: user.id,
+      subject_type: "community_proof",
+      subject_id: proof.id,
+      reason: "Community proof",
+      detail: `Reported from community dare ${proof.challengeId}`,
+    });
+    if (error) {
+      setReportNotice("Could not send report.");
+      return;
+    }
+    setReportedProofIds((current) => new Set(current).add(proof.id));
+    setReportNotice("Report sent.");
+    window.setTimeout(() => setReportNotice(null), 2200);
+  };
+
   const getOptimisticVoteCounts = (
     currentCounts: { real: number; fake: number },
     previousVote: ProofVote,
@@ -2578,6 +2630,19 @@ export function ChallengeRoomScreen({
     return nextCounts;
   };
 
+  const patchRemoteProofVoteCounts = (
+    proofId: string,
+    counts: { real: number; fake: number },
+  ) => {
+    setRemoteProofs((current) =>
+      current.map((proof) =>
+        proof.id === proofId
+          ? { ...proof, realVotes: counts.real, fakeVotes: counts.fake }
+          : proof,
+      ),
+    );
+  };
+
   const handleVote = async (
     proofId: string,
     vote: ProofVote,
@@ -2588,7 +2653,7 @@ export function ChallengeRoomScreen({
 
     setVotingInProgress((prev) => ({ ...prev, [proofId]: true }));
     const previousVote = proofVotes[proofId] ?? null;
-    const previousCounts = proofVoteCounts[proofId] ?? currentCounts;
+    const previousCounts = currentCounts;
     const nextCounts = getOptimisticVoteCounts(
       previousCounts,
       previousVote,
@@ -2596,7 +2661,7 @@ export function ChallengeRoomScreen({
     );
 
     setProofVotes((prev) => ({ ...prev, [proofId]: vote }));
-    setProofVoteCounts((prev) => ({ ...prev, [proofId]: nextCounts }));
+    patchRemoteProofVoteCounts(proofId, nextCounts);
 
     try {
       if (vote === null) {
@@ -2624,7 +2689,7 @@ export function ChallengeRoomScreen({
     } catch (error) {
       console.warn("Error voting:", error);
       setProofVotes((prev) => ({ ...prev, [proofId]: previousVote }));
-      setProofVoteCounts((prev) => ({ ...prev, [proofId]: previousCounts }));
+      patchRemoteProofVoteCounts(proofId, previousCounts);
     } finally {
       setVotingInProgress((prev) => ({ ...prev, [proofId]: false }));
     }
@@ -2633,6 +2698,99 @@ export function ChallengeRoomScreen({
   const handleOpenComments = (proof: ChallengeProofPost) => {
     setCommentsProof(proof);
   };
+
+  const uploadProofTimelineCard =
+    !isEliminated && (!proofUploadedForDay || showUploadConfirmation) ? (
+      <div
+        className={`challenge-room-panel relative mt-4 overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(6,8,6,0.98),rgba(3,4,3,0.99))] px-4 py-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.46)] transition-all duration-700 ease-out ${
+          showUploadConfirmation && hideUploadDock
+            ? "pointer-events-none translate-y-4 opacity-0"
+            : "translate-y-0 opacity-100"
+        } ${showUploadConfirmation ? "pointer-events-none" : ""}`}
+      >
+        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.82),rgba(14,165,233,0.4),rgba(74,222,128,0))]" />
+        {showUploadConfirmation ? (
+          <div className="relative z-10 flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#4ade80]/24 bg-[#4ade80]/12 text-[#86efac]">
+              <CheckCircle2 size={22} strokeWidth={2.4} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">
+                Day {effectiveChallenge.day} proof
+              </div>
+              <div className="mt-0.5 text-[22px] font-black leading-none text-[#4ade80]">
+                Uploaded
+              </div>
+            </div>
+            <div className="rounded-full border border-white/8 bg-white/[0.045] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-[#cbd5e1]">
+              Day {effectiveChallenge.day}
+            </div>
+          </div>
+        ) : (
+          <div className="relative z-10 flex items-start gap-3">
+            <RoomGlyph
+              icon={effectiveChallenge.icon}
+              accent={effectiveChallenge.accent}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[12px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">
+                    Upload proof in
+                  </div>
+                  <div className="mt-1 flex items-end gap-2">
+                    <span className="text-[24px] font-black leading-none text-[#4ade80] drop-shadow-[0_0_22px_rgba(74,222,128,0.24)]">
+                      {countdown}
+                    </span>
+                    <span className="pb-1 text-xs font-black uppercase text-[#94a3b8]">
+                      left
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSubmissionScreen(true)}
+                  className="app-pressable flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#4ade80,#22c55e)] text-[#061006] shadow-[0_12px_34px_rgba(74,222,128,0.34),0_4px_12px_rgba(0,0,0,0.34)] transition-transform active:scale-95"
+                  aria-label="Submit proof"
+                >
+                  <Upload size={22} strokeWidth={2.55} />
+                </button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 pr-1">
+                <div className="rounded-[18px] border border-white/8 bg-white/[0.04] px-3 py-2">
+                  <div className="text-[10px] font-black uppercase tracking-[0.11em] text-[#64748b]">
+                    Progress
+                  </div>
+                  <div className="mt-1 text-sm font-black text-white">
+                    {effectiveChallenge.day} / {effectiveChallenge.totalDays} days
+                  </div>
+                </div>
+                <div className="rounded-[18px] border border-white/8 bg-white/[0.04] px-3 py-2">
+                  <div className="text-[10px] font-black uppercase tracking-[0.11em] text-[#64748b]">
+                    Alive
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 text-sm font-black text-white">
+                    <Users size={15} className="text-[#86efac]" />
+                    {effectiveChallenge.survivors}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.055]">
+                <div
+                  className="h-full rounded-full shadow-[0_0_18px_rgba(74,222,128,0.28)]"
+                  style={{
+                    width: `${progress}%`,
+                    background: `linear-gradient(90deg, ${effectiveChallenge.accent}, #4ade80)`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    ) : null;
 
   return (
     <div className="fixed inset-0 z-[2100] overflow-hidden bg-[#030403]">
@@ -2645,49 +2803,46 @@ export function ChallengeRoomScreen({
         }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
+          <div
+            className="shrink-0 px-4 pb-4 pt-[calc(var(--safe-area-top)+10px)]"
+            style={{
+              background:
+                "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.18), transparent 34%), radial-gradient(circle at 12% 18%, rgba(14,165,233,0.12), transparent 28%), linear-gradient(180deg,#060806 0%,#0a0f0a 100%)",
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={onBack}
+                aria-label="Back"
+                className="app-pressable flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/8 bg-white/[0.045] text-[#cbd5e1] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
+              >
+                <ArrowLeft size={21} />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#86efac]">
+                  Community room
+                </p>
+                <h1 className="mt-1 truncate text-[23px] font-black leading-none text-white">
+                  {effectiveChallenge.title}
+                </h1>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOptions(true)}
+                aria-label="Open room options"
+                className="app-pressable flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/8 bg-white/[0.045] text-[#cbd5e1] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
+              >
+                <MoreHorizontal size={22} />
+              </button>
+            </div>
+          </div>
+
           <main
             ref={feedScrollRef}
-            className={`min-h-0 flex-1 overflow-y-auto px-4 pt-4 transition-[padding-bottom] duration-700 ${
-              isEliminated
-                ? "pb-[calc(var(--safe-area-bottom)+28px)]"
-                : proofUploadedForDay && showUploadConfirmation
-                ? "pb-[calc(var(--safe-area-bottom)+104px)]"
-                : proofUploadedForDay
-                ? "pb-[calc(var(--safe-area-bottom)+28px)]"
-                : "pb-[calc(var(--safe-area-bottom)+216px)]"
-            }`}
+            className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(var(--safe-area-bottom)+28px)] pt-4"
             style={{ overscrollBehaviorY: "contain" }}
           >
-            {/* Scrollable header content */}
-            <div className="mb-4 pt-[calc(var(--safe-area-top)+10px)]">
-              <div className="flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={onBack}
-                  aria-label="Back"
-                  className="app-pressable flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/8 bg-white/[0.045] text-[#cbd5e1] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
-                >
-                  <ArrowLeft size={21} />
-                </button>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#86efac]">
-                    Community room
-                  </p>
-                  <h1 className="mt-1 truncate text-[23px] font-black leading-none text-white">
-                    {effectiveChallenge.title}
-                  </h1>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowOptions(true)}
-                  aria-label="Open room options"
-                  className="app-pressable flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/8 bg-white/[0.045] text-[#cbd5e1] shadow-[0_16px_38px_rgba(0,0,0,0.3)]"
-                >
-                  <MoreHorizontal size={22} />
-                </button>
-              </div>
-            </div>
-
             <input
               ref={fileInputRef}
               type="file"
@@ -2731,140 +2886,38 @@ export function ChallengeRoomScreen({
                         />
                       )}
                       {(() => {
-                        const voteCounts = proofVoteCounts[proof.id];
-                        const commentCount = proofCommentCounts[proof.id];
-                        const liveProof = {
-                          ...proof,
-                          realVotes: voteCounts?.real ?? proof.realVotes,
-                          fakeVotes: voteCounts?.fake ?? proof.fakeVotes,
-                          comments: commentCount ?? proof.comments,
-                        };
-
                         return (
                           <ProofCard
-                            proof={liveProof}
+                            proof={proof}
                             vote={proofVotes[proof.id] ?? null}
                             onVote={(vote) =>
                               handleVote(proof.id, vote, proof.challengeId, {
-                                real: liveProof.realVotes,
-                                fake: liveProof.fakeVotes,
+                                real: proof.realVotes,
+                                fake: proof.fakeVotes,
                               })
                             }
                             onMediaTap={() => handleMediaTap(proof)}
                             currentUserId={user?.id}
                             onOpenComments={handleOpenComments}
+                            onReport={handleReportProof}
                           />
                         );
                       })()}
                     </div>
                   );
                 })}
+                {uploadProofTimelineCard}
               </section>
             )}
           </main>
-
-          {!isEliminated && !proofUploadedForDay && (
-            <button
-              type="button"
-              onClick={() => setShowSubmissionScreen(true)}
-              className="absolute bottom-[calc(var(--safe-area-bottom)+20px)] right-5 z-[2200] flex h-16 w-16 items-center justify-center rounded-full bg-[linear-gradient(135deg,#4ade80,#22c55e)] shadow-[0_12px_42px_rgba(74,222,128,0.42),0_4px_12px_rgba(0,0,0,0.38)] transition-transform active:scale-95"
-              aria-label="Submit proof"
-            >
-              <Upload size={26} strokeWidth={2.5} className="text-[#061006]" />
-            </button>
-          )}
-
-          {/* Fixed Upload Proof Card at Bottom */}
-          {!isEliminated && (!proofUploadedForDay || showUploadConfirmation) && (
-            <div
-              className={`absolute bottom-0 left-0 right-0 z-[2100] border-t border-white/8 bg-[linear-gradient(180deg,rgba(6,8,6,0.98),rgba(3,4,3,0.99))] shadow-[0_-12px_36px_rgba(0,0,0,0.42)] transition-all duration-700 ease-out ${
-                hideUploadDock
-                  ? "pointer-events-none translate-y-4 opacity-0"
-                  : "translate-y-0 opacity-100"
-              } ${showUploadConfirmation ? "pointer-events-none" : ""}`}
-            >
-              <div className="challenge-room-panel relative overflow-hidden p-4">
-                <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.82),rgba(14,165,233,0.4),rgba(74,222,128,0))]" />
-                {showUploadConfirmation ? (
-                  <div className="relative z-10 flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#4ade80]/24 bg-[#4ade80]/12 text-[#86efac]">
-                      <CheckCircle2 size={22} strokeWidth={2.4} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">
-                        Day {effectiveChallenge.day} proof
-                      </div>
-                      <div className="mt-0.5 text-[22px] font-black leading-none text-[#4ade80]">
-                        Uploaded
-                      </div>
-                    </div>
-                    <div className="rounded-full border border-white/8 bg-white/[0.045] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-[#cbd5e1]">
-                      Day {effectiveChallenge.day}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative z-10 flex items-start gap-4">
-                    <RoomGlyph
-                      icon={effectiveChallenge.icon}
-                      accent={effectiveChallenge.accent}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-[12px] font-black uppercase tracking-[0.12em] text-[#94a3b8]">
-                            Upload proof in
-                          </div>
-                          <div className="mt-1 flex items-end gap-2">
-                            <span className="text-[24px] font-black leading-none text-[#4ade80] drop-shadow-[0_0_22px_rgba(74,222,128,0.24)]">
-                              {countdown}
-                            </span>
-                            <span className="pb-1 text-xs font-black uppercase text-[#94a3b8]">
-                              left
-                            </span>
-                          </div>
-                        </div>
-                        <div className="rounded-full border border-white/8 bg-white/[0.045] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-[#cbd5e1]">
-                          Day {effectiveChallenge.day}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <div className="rounded-[18px] border border-white/8 bg-white/[0.04] px-3 py-2">
-                          <div className="text-[10px] font-black uppercase tracking-[0.11em] text-[#64748b]">
-                            Progress
-                          </div>
-                          <div className="mt-1 text-sm font-black text-white">
-                            {effectiveChallenge.day} / {effectiveChallenge.totalDays} days
-                          </div>
-                        </div>
-                        <div className="rounded-[18px] border border-white/8 bg-white/[0.04] px-3 py-2">
-                          <div className="text-[10px] font-black uppercase tracking-[0.11em] text-[#64748b]">
-                            Alive
-                          </div>
-                          <div className="mt-1 flex items-center gap-1.5 text-sm font-black text-white">
-                            <Users size={15} className="text-[#86efac]" />
-                            {effectiveChallenge.survivors}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.055]">
-                        <div
-                          className="h-full rounded-full shadow-[0_0_18px_rgba(74,222,128,0.28)]"
-                          style={{
-                            width: `${progress}%`,
-                            background: `linear-gradient(90deg, ${effectiveChallenge.accent}, #4ade80)`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-            </div>
-          </div>
-          )}
         </div>
       </div>
+
+      {reportNotice ? (
+        <div className="fixed inset-x-4 bottom-[calc(var(--safe-area-bottom)+18px)] z-[2800] rounded-full border border-[#4ade80]/22 bg-[#071008]/95 px-4 py-3 text-center text-xs font-black text-[#bbf7d0] shadow-[0_16px_44px_rgba(0,0,0,0.45)]">
+          {reportNotice}
+        </div>
+      ) : null}
 
       {showOptions ? (
         <OptionsMenu

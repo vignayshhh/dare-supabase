@@ -1,18 +1,5 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  deleteDoc,
-  onSnapshot,
-  Unsubscribe,
-  increment,
-} from "firebase/firestore";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { scheduleRefresh } from "@/lib/realtime/scheduleRefresh";
 
 export interface StoryReaction {
   storyId: string;
@@ -27,248 +14,123 @@ export interface StoryReactionStats {
   hateCount: number;
 }
 
+export interface StoryReactionPageOptions {
+  cursor?: string;
+  limit?: number;
+  type?: "like" | "hate";
+}
+
+export interface StoryReactionPage {
+  reactions: StoryReaction[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+export const encodeStoryReactionCursor = (value: { createdAt: string; userId: string }) =>
+  btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+export const decodeStoryReactionCursor = (value?: string): { createdAt: string; userId: string } | undefined => {
+  if (!value) return undefined;
+  try { return JSON.parse(atob(value.replace(/-/g, "+").replace(/_/g, "/"))); } catch { return undefined; }
+};
+
 class StoryReactionService {
-  private readonly reactionsCollection = "story_reactions";
-  private readonly statsCollection = "story_reaction_stats";
-
-  private isPermissionDenied(error: unknown): boolean {
-    if (!error || typeof error !== "object") return false;
-
-    const code = "code" in error ? String((error as { code?: unknown }).code) : "";
-    const message =
-      "message" in error ? String((error as { message?: unknown }).message) : "";
-
-    return code.includes("permission-denied") || message.includes("Missing or insufficient permissions");
-  }
-
-  /**
-   * Add or update a reaction to a story
-   * If the user already reacted with the same type, remove it (toggle)
-   * If the user reacted with a different type, replace it
-   */
-  async toggleReaction(
-    storyId: string,
-    userId: string,
-    type: "like" | "hate",
-  ): Promise<{ success: boolean; currentReaction: "like" | "hate" | null }> {
-    try {
-      const reactionRef = doc(
-        db,
-        this.reactionsCollection,
-        `${storyId}_${userId}`,
-      );
-      const reactionDoc = await getDoc(reactionRef);
-
-      if (reactionDoc.exists()) {
-        const existingReaction = reactionDoc.data() as StoryReaction;
-        
-        if (existingReaction.type === type) {
-          // Remove reaction (toggle off)
-          await deleteDoc(reactionRef);
-          await this.updateStats(storyId, type, -1);
-          return { success: true, currentReaction: null };
-        } else {
-          // Change reaction type
-          await updateDoc(reactionRef, {
-            type,
-            createdAt: new Date().toISOString(),
-          });
-          await this.updateStats(storyId, existingReaction.type, -1);
-          await this.updateStats(storyId, type, 1);
-          return { success: true, currentReaction: type };
-        }
-      } else {
-        // Add new reaction
-        await setDoc(reactionRef, {
-          storyId,
-          userId,
-          type,
-          createdAt: new Date().toISOString(),
-        });
-        await this.updateStats(storyId, type, 1);
-        return { success: true, currentReaction: type };
-      }
-    } catch (error) {
-      if (this.isPermissionDenied(error)) {
-        console.error(
-          "Error toggling story reaction: Firestore rules for story reactions are not live yet.",
-          error,
-        );
-      } else {
-        console.error("Error toggling story reaction:", error);
-      }
+  async toggleReaction(storyId: string, _userId: string, type: "like" | "hate") {
+    const { data, error } = await getSupabaseBrowserClient().rpc(
+      "toggle_story_reaction",
+      { p_story_id: storyId, p_reaction: type },
+    );
+    if (error) {
+      console.error("Error toggling story reaction:", error);
       return { success: false, currentReaction: null };
     }
+    const current = data?.currentReaction;
+    return {
+      success: true,
+      currentReaction: current === "like" || current === "hate" ? current : null,
+    } as { success: boolean; currentReaction: "like" | "hate" | null };
   }
 
-  /**
-   * Get a user's reaction to a specific story
-   */
-  async getUserReaction(
-    storyId: string,
-    userId: string,
-  ): Promise<"like" | "hate" | null> {
-    try {
-      const reactionRef = doc(
-        db,
-        this.reactionsCollection,
-        `${storyId}_${userId}`,
-      );
-      const reactionDoc = await getDoc(reactionRef);
-
-      if (reactionDoc.exists()) {
-        const reaction = reactionDoc.data() as StoryReaction;
-        return reaction.type;
-      }
-      return null;
-    } catch (error) {
-      if (!this.isPermissionDenied(error)) {
-        console.error("Error getting user reaction:", error);
-      }
-      return null;
-    }
+  async getUserReaction(storyId: string, userId: string): Promise<"like" | "hate" | null> {
+    const { data, error } = await getSupabaseBrowserClient()
+      .from("story_reactions").select("reaction")
+      .eq("story_id", storyId).eq("user_id", userId).maybeSingle();
+    if (error) return null;
+    return data?.reaction === "like" || data?.reaction === "hate" ? data.reaction : null;
   }
 
-  /**
-   * Get all reactions for a story
-   */
   async getStoryReactions(storyId: string): Promise<StoryReaction[]> {
-    try {
-      const reactionsQuery = query(
-        collection(db, this.reactionsCollection),
-        where("storyId", "==", storyId),
-      );
-      const snapshot = await getDocs(reactionsQuery);
-      return snapshot.docs.map((doc) => doc.data() as StoryReaction);
-    } catch (error) {
-      if (!this.isPermissionDenied(error)) {
-        console.error("Error getting story reactions:", error);
-      }
-      return [];
-    }
+    return (await this.getStoryReactionPage(storyId, { limit: 500 })).reactions;
   }
 
-  /**
-   * Get reaction stats for a story
-   */
+  async getStoryReactionPage(storyId: string, options: StoryReactionPageOptions = {}): Promise<StoryReactionPage> {
+    const limit = Math.min(Math.max(options.limit ?? 100, 1), 200);
+    const cursor = decodeStoryReactionCursor(options.cursor);
+    let query = getSupabaseBrowserClient()
+      .from("story_reactions")
+      .select("story_id,user_id,reaction,created_at")
+      .eq("story_id", storyId)
+      .order("created_at", { ascending: false })
+      .order("user_id", { ascending: false })
+      .limit(limit + 1);
+    if (options.type) query = query.eq("reaction", options.type);
+    if (cursor) query = query.or("created_at.lt." + cursor.createdAt + ",and(created_at.eq." + cursor.createdAt + ",user_id.lt." + cursor.userId + ")");
+    const { data, error } = await query;
+    if (error) return { reactions: [], hasMore: false };
+    const rows = data ?? [];
+    const hasMore = rows.length > limit;
+    const visible = rows.slice(0, limit);
+    return {
+      hasMore,
+      nextCursor: hasMore && visible.length ? encodeStoryReactionCursor({ createdAt: visible[visible.length - 1].created_at, userId: visible[visible.length - 1].user_id }) : undefined,
+      reactions: visible.map((row) => ({
+      storyId: row.story_id,
+      userId: row.user_id,
+      type: row.reaction as "like" | "hate",
+      createdAt: row.created_at,
+      })),
+    };
+  }
+
   async getStoryStats(storyId: string): Promise<StoryReactionStats> {
-    try {
-      const statsRef = doc(db, this.statsCollection, storyId);
-      const statsDoc = await getDoc(statsRef);
-
-      if (statsDoc.exists()) {
-        return statsDoc.data() as StoryReactionStats;
-      }
-
-      // Initialize stats if they don't exist
-      const initialStats: StoryReactionStats = {
-        storyId,
-        likeCount: 0,
-        hateCount: 0,
-      };
-      await setDoc(statsRef, initialStats);
-      return initialStats;
-    } catch (error) {
-      if (!this.isPermissionDenied(error)) {
-        console.error("Error getting story stats:", error);
-      }
-      return { storyId, likeCount: 0, hateCount: 0 };
-    }
+    const client = getSupabaseBrowserClient();
+    const [likes, hates] = await Promise.all([
+      client.from("story_reactions").select("story_id", { count: "exact", head: true }).eq("story_id", storyId).eq("reaction", "like"),
+      client.from("story_reactions").select("story_id", { count: "exact", head: true }).eq("story_id", storyId).eq("reaction", "hate"),
+    ]);
+    return {
+      storyId,
+      likeCount: likes.error ? 0 : likes.count ?? 0,
+      hateCount: hates.error ? 0 : hates.count ?? 0,
+    };
   }
 
-  /**
-   * Subscribe to real-time reaction updates for a story
-   */
-  subscribeToStoryStats(
-    storyId: string,
-    callback: (stats: StoryReactionStats) => void,
-  ): Unsubscribe {
-    const statsRef = doc(db, this.statsCollection, storyId);
-    return onSnapshot(statsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        callback(snapshot.data() as StoryReactionStats);
-      } else {
-        callback({ storyId, likeCount: 0, hateCount: 0 });
-      }
-    });
+  subscribeToStoryStats(storyId: string, callback: (stats: StoryReactionStats) => void) {
+    const client = getSupabaseBrowserClient();
+    let active = true;
+    const refresh = async () => {
+      const stats = await this.getStoryStats(storyId);
+      if (active) callback(stats);
+    };
+    void refresh();
+    const scheduledRefresh = scheduleRefresh(() => { void refresh(); });
+    const channel = client.channel(`story-reactions:${storyId}`).on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "story_reactions", filter: `story_id=eq.${storyId}` },
+      scheduledRefresh.schedule,
+    ).subscribe();
+    return () => { active = false; scheduledRefresh.cancel(); void client.removeChannel(channel); };
   }
 
-  /**
-   * Get all reactions by a user across all stories
-   */
-  async getUserReactions(userId: string): Promise<
-    Map<string, "like" | "hate">
-  > {
-    try {
-      const reactionsQuery = query(
-        collection(db, this.reactionsCollection),
-        where("userId", "==", userId),
-      );
-      const snapshot = await getDocs(reactionsQuery);
-      
-      const reactionsMap = new Map<string, "like" | "hate">();
-      snapshot.docs.forEach((doc) => {
-        const reaction = doc.data() as StoryReaction;
-        reactionsMap.set(reaction.storyId, reaction.type);
-      });
-      
-      return reactionsMap;
-    } catch (error) {
-      if (!this.isPermissionDenied(error)) {
-        console.error("Error getting user reactions:", error);
-      }
-      return new Map();
-    }
+  async getUserReactions(userId: string): Promise<Map<string, "like" | "hate">> {
+    const { data, error } = await getSupabaseBrowserClient()
+      .from("story_reactions").select("story_id,reaction").eq("user_id", userId).limit(500);
+    if (error) return new Map();
+    return new Map((data ?? []).map((row) => [row.story_id, row.reaction as "like" | "hate"]));
   }
 
-  /**
-   * Update reaction stats atomically
-   */
-  private async updateStats(
-    storyId: string,
-    type: "like" | "hate",
-    delta: number,
-  ): Promise<void> {
-    try {
-      const statsRef = doc(db, this.statsCollection, storyId);
-      const field = type === "like" ? "likeCount" : "hateCount";
-
-      await setDoc(
-        statsRef,
-        {
-          storyId,
-          [field]: increment(delta),
-        },
-        { merge: true },
-      );
-    } catch (error) {
-      if (!this.isPermissionDenied(error)) {
-        console.error("Error updating reaction stats:", error);
-      }
-    }
-  }
-
-  /**
-   * Delete all reactions for a story (when story is deleted)
-   */
   async deleteStoryReactions(storyId: string): Promise<void> {
-    try {
-      const reactionsQuery = query(
-        collection(db, this.reactionsCollection),
-        where("storyId", "==", storyId),
-      );
-      const snapshot = await getDocs(reactionsQuery);
-      
-      const deletePromises = snapshot.docs.map((doc) => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
-      
-      // Also delete stats
-      await deleteDoc(doc(db, this.statsCollection, storyId));
-    } catch (error) {
-      if (!this.isPermissionDenied(error)) {
-        console.error("Error deleting story reactions:", error);
-      }
-    }
+    void storyId;
+    // Story deletion cascades reactions in PostgreSQL.
   }
 }
 

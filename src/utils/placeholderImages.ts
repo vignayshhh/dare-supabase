@@ -89,7 +89,7 @@ export function getDefaultAvatarUrl(
   displayName?: string,
   size: number = 100,
 ): string {
-  // Check if user has a custom avatar in Firebase Storage
+  // Check if user has a custom avatar in Supabase Storage
   // This would be fetched from the user profile
   // For now, generate a default avatar
   return generateDefaultAvatar(userId, displayName, size);

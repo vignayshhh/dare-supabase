@@ -6,6 +6,7 @@ import { useDareStore } from "../../stores/useDareStore";
 import { useAuthStore } from "../../stores/useAuthStore-v2";
 import { useUserSearchStore } from "../../stores/useUserSearchStore";
 import { Avatar } from "../ui/Avatar";
+import { DareSentCinematicScreen } from "./DareSentCinematicScreen";
 import {
   userService,
   UserProfile,
@@ -23,12 +24,19 @@ export function CreateDareScreen({ onBack }: CreateDareScreenProps) {
   const [dareDescription, setDareDescription] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showUserSearch, setShowUserSearch] = useState(false);
+  const [showDareSentCinematic, setShowDareSentCinematic] = useState(false);
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
 
   const { createDare, creatingDare } = useDareStore();
   const { user } = useAuthStore();
   const { searchUsers, searchResults, isSearching } = useUserSearchStore();
+
+  useEffect(() => {
+    if (!showDareSentCinematic) return;
+    const timeoutId = window.setTimeout(() => onBack(), 2800);
+    return () => window.clearTimeout(timeoutId);
+  }, [onBack, showDareSentCinematic]);
 
   // Debug logging for search results
   console.log(
@@ -132,15 +140,26 @@ export function CreateDareScreen({ onBack }: CreateDareScreenProps) {
         });
       }
 
-      // Success - go back
-      onBack();
+      setShowDareSentCinematic(true);
     } catch (error) {
       console.error("Failed to create dare:", error);
     }
   };
 
+  if (showDareSentCinematic) {
+    const recipient = [...availableUsers, ...searchResults].find(
+      (friend) => friend.user_id === selectedFriends[0] || friend.id === selectedFriends[0],
+    );
+
+    return (
+      <DareSentCinematicScreen
+        recipientLabel={recipient?.username || (selectedFriends[0] ? `@${selectedFriends[0]}` : undefined)}
+      />
+    );
+  }
+
   return (
-    <div className="screen-container">
+    <div className="screen-container create-dare-screen">
       {/* Header */}
       <div className="sticky top-0 bg-[#0a0f0a]/95 backdrop-blur-lg z-10 border-b border-[#2a2a2a]">
         <div className="p-4">

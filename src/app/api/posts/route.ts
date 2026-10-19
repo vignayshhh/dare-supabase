@@ -1,30 +1,31 @@
-/**
+﻿/**
  * POST /api/posts - create a feed post using the Admin SDK.
  *
- * Production can enforce Firestore App Check / stricter client rules without
- * blocking normal posting, because the browser only supplies a Firebase ID
+ * Production can enforce Postgres App Check / stricter client rules without
+ * blocking normal posting, because the browser only supplies a Supabase ID
  * token and the server owns the write.
  */
 import "server-only";
 import { NextResponse } from "next/server";
 import { withSecurity } from "../_lib/withSecurity";
-import { adminDb, FieldValue } from "../_lib/admin";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { LIMITS } from "../_lib/rateLimit";
+import { bumpFeedCacheVersionsForNetwork } from "../_lib/socialCache";
+import { enqueueFeedFanout } from "../_lib/feedFanout";
+import { validateSupabaseMediaUrl } from "../_lib/mediaUrl";
+import { createUuid } from "@/utils/uuid";
+import { attachMediaAssetsForUrls } from "../_lib/mediaAssets";
 
 type CreatePostBody = {
   content?: string;
   media_url?: string | null;
+  media_urls?: string[] | null;
   media_type?: "TEXT" | "PHOTO" | "VIDEO" | "AUDIO";
 };
 
 const MAX_CONTENT_LENGTH = 10_000;
-const MAX_MEDIA_URL_LENGTH = 2_000;
+const MAX_CAROUSEL_IMAGES = 10;
 const ALLOWED_MEDIA_TYPES = new Set(["TEXT", "PHOTO", "VIDEO", "AUDIO"]);
-const ALLOWED_MEDIA_HOSTS = [
-  "firebasestorage.googleapis.com",
-  "storage.googleapis.com",
-  "firebasestorage.app",
-];
 
 function sanitizeText(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -32,40 +33,6 @@ function sanitizeText(value: unknown): string {
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function validateMediaUrl(value: unknown): string | null {
-  if (value == null || value === "") return null;
-  if (typeof value !== "string") {
-    throw new Error("bad media url");
-  }
-
-  const mediaUrl = value.trim();
-  if (!mediaUrl) return null;
-  if (mediaUrl.length > MAX_MEDIA_URL_LENGTH) {
-    throw new Error("media url too long");
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(mediaUrl);
-  } catch {
-    throw new Error("bad media url");
-  }
-
-  if (parsed.protocol !== "https:") {
-    throw new Error("bad media url");
-  }
-
-  const hostname = parsed.hostname.toLowerCase();
-  const allowed = ALLOWED_MEDIA_HOSTS.some(
-    (host) => hostname === host || hostname.endsWith(`.${host}`),
-  );
-  if (!allowed) {
-    throw new Error("bad media url");
-  }
-
-  return mediaUrl;
 }
 
 export const POST = withSecurity(
@@ -80,10 +47,7 @@ export const POST = withSecurity(
 
     const content = sanitizeText(body.content);
     if (!content) {
-      return NextResponse.json(
-        { error: "caption required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "caption required" }, { status: 400 });
     }
     if (content.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json({ error: "content too long" }, { status: 400 });
@@ -91,27 +55,42 @@ export const POST = withSecurity(
 
     let mediaUrl: string | null;
     try {
-      mediaUrl = validateMediaUrl(body.media_url);
+      mediaUrl = validateSupabaseMediaUrl(body.media_url);
     } catch {
       return NextResponse.json({ error: "bad media url" }, { status: 400 });
     }
 
+    let mediaUrls: string[] | null = null;
+    if (Array.isArray(body.media_urls) && body.media_urls.length > 0) {
+      if (body.media_urls.length > MAX_CAROUSEL_IMAGES) {
+        return NextResponse.json({ error: "too many images" }, { status: 400 });
+      }
+      try {
+        mediaUrls = body.media_urls.map(
+          (u) => validateSupabaseMediaUrl(u) as string,
+        );
+      } catch {
+        return NextResponse.json(
+          { error: "bad media url in carousel" },
+          { status: 400 },
+        );
+      }
+    }
+
     const mediaType = ALLOWED_MEDIA_TYPES.has(body.media_type || "")
       ? body.media_type!
-      : mediaUrl
+      : mediaUrl || mediaUrls?.length
         ? "PHOTO"
         : "TEXT";
 
-    const userSnap = await adminDb.collection("users").doc(ctx.uid).get();
-    const user = userSnap.exists ? userSnap.data() || {} : {};
+    const { data: user } = await (getSupabaseAdminClient() as any).from("profiles").select("username,display_name,avatar_url").eq("id",ctx.uid).maybeSingle();
 
-    const postRef = adminDb.collection("posts").doc();
-    const eventRef = adminDb.collection("feed_events").doc();
-    const now = FieldValue.serverTimestamp();
+    const postId = createUuid();
+    const eventId = createUuid();
+    const now = new Date().toISOString();
     const postData = {
       author_id: ctx.uid,
-      author_username:
-        typeof user.username === "string" ? user.username : "",
+      author_username: typeof user.username === "string" ? user.username : "",
       author_display_name:
         typeof user.display_name === "string" ? user.display_name : "",
       author_avatar_url:
@@ -122,6 +101,7 @@ export const POST = withSecurity(
             : "",
       content,
       media_url: mediaUrl,
+      media_urls: mediaUrls,
       media_type: mediaType,
       view_count: 0,
       likes_count: 0,
@@ -130,23 +110,37 @@ export const POST = withSecurity(
       updated_at: now,
     };
 
-    await adminDb.runTransaction(async (tx) => {
-      tx.set(postRef, postData);
-      tx.set(eventRef, {
+    const { error } = await (getSupabaseAdminClient() as any).rpc(
+      "create_post_with_event",
+      {
+        p_post_id: postId,
+        p_post_data: postData,
+        p_event_id: eventId,
+        p_event_data: {
         user_id: ctx.uid,
         event_type: "POST_CREATED",
-        related_post_id: postRef.id,
+        related_post_id: postId,
         created_at: now,
-      });
-    });
+        },
+      },
+    );
+    if (error) throw error;
+    await attachMediaAssetsForUrls(getSupabaseAdminClient(), [mediaUrl, ...(mediaUrls || [])], "post", postId);
+
+    await enqueueFeedFanout({
+      kind: "post",
+      sourceId: postId,
+      actorId: ctx.uid,
+      createdAt: new Date().toISOString(),
+    }).catch(() => bumpFeedCacheVersionsForNetwork(ctx.uid, ["feed"]));
 
     return NextResponse.json({
       ok: true,
       post: {
         ...postData,
-        id: postRef.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        id: postId,
+        created_at: now,
+        updated_at: now,
       },
     });
   },

@@ -1,3 +1,5 @@
+import { getActiveCircleId } from "@/lib/circleContext";
+import { CircleRepository } from "@/backend/repositories/CircleRepository";
 import { IFriendshipRepository } from "@/backend/domain/interfaces/IFriendshipRepository";
 import { FriendshipRepository } from "@/backend/repositories/FriendshipRepository";
 import { IUserRepository } from "@/backend/domain/interfaces/IUserRepository";
@@ -45,6 +47,11 @@ class FriendsService {
     string,
     { data: any | null; expiresAt: number }
   >();
+  private inFlightFriendshipStatus = new Map<
+    string,
+    Promise<FriendshipResponse>
+  >();
+  private cacheGeneration = 0;
 
   private friendshipStatusCacheKey(a: string, b: string): string {
     return [a, b].sort().join(":");
@@ -57,6 +64,14 @@ class FriendsService {
     this.friendshipRepository =
       friendshipRepository || new FriendshipRepository();
     this.userRepository = userRepository || new UserRepository();
+  }
+
+  clearCache(): void {
+    this.cacheGeneration += 1;
+    this.friendsCache.clear();
+    this.inFlightFriendsRequests.clear();
+    this.friendshipStatusCache.clear();
+    this.inFlightFriendshipStatus.clear();
   }
 
   private getCachedFriends(userId: string): UserProfileEntity[] | null {
@@ -85,10 +100,12 @@ class FriendsService {
     const [a, b] = userIds.filter(Boolean) as string[];
     if (a && b) {
       this.friendshipStatusCache.delete(this.friendshipStatusCacheKey(a, b));
+      this.inFlightFriendshipStatus.delete(this.friendshipStatusCacheKey(a, b));
     } else if (a) {
       for (const key of this.friendshipStatusCache.keys()) {
         if (key.startsWith(`${a}:`) || key.endsWith(`:${a}`)) {
           this.friendshipStatusCache.delete(key);
+          this.inFlightFriendshipStatus.delete(key);
         }
       }
     }
@@ -104,6 +121,41 @@ class FriendsService {
           success: false,
           error: "You cannot send a friend request to yourself",
         };
+      }
+
+      // Friendship IDs are native UUIDs. The legacy repository generated a
+      // deterministic underscore-delimited ID and wrote it directly, which
+      // cannot satisfy the relational schema. Use the authenticated route so
+      // the server owns validation, ID generation, and authorization.
+      if (typeof window !== "undefined") {
+        const { apiFetch } = await import("@/lib/apiClient");
+        const response = await apiFetch<{
+          ok: boolean;
+          friendship: {
+            id: string;
+            requester_id: string;
+            addressee_id: string;
+            status: "pending" | "accepted" | "rejected";
+            created_at: string;
+            accepted_at: string | null;
+          };
+        }>("/api/friends/request", {
+          method: "POST",
+          body: JSON.stringify({ addresseeId }),
+        });
+        if (!response.ok || !response.friendship) {
+          return { success: false, error: "Failed to send friend request" };
+        }
+        const friendship = {
+          id: response.friendship.id,
+          requesterId: response.friendship.requester_id,
+          addresseeId: response.friendship.addressee_id,
+          status: response.friendship.status,
+          createdAt: response.friendship.created_at,
+          acceptedAt: response.friendship.accepted_at,
+        };
+        this.invalidateFriendsCache(requesterId, addresseeId);
+        return { success: true, friendship };
       }
 
       const existingFriendship =
@@ -144,6 +196,37 @@ class FriendsService {
     userId: string,
   ): Promise<FriendshipResponse> {
     try {
+      if (typeof window !== "undefined") {
+        const { apiFetch } = await import("@/lib/apiClient");
+        const response = await apiFetch<{
+          ok: boolean;
+          friendship?: {
+            id: string;
+            requester_id: string;
+            addressee_id: string;
+            status: "pending" | "accepted" | "rejected";
+            created_at: string;
+            accepted_at: string | null;
+          };
+        }>(`/api/friends/${encodeURIComponent(friendshipId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: "accepted" }),
+        });
+        if (!response.ok || !response.friendship) {
+          return { success: false, error: "Failed to accept friend request" };
+        }
+        const friendship = {
+          id: response.friendship.id,
+          requesterId: response.friendship.requester_id,
+          addresseeId: response.friendship.addressee_id,
+          status: response.friendship.status,
+          createdAt: response.friendship.created_at,
+          acceptedAt: response.friendship.accepted_at,
+        };
+        this.invalidateFriendsCache(friendship.requesterId, friendship.addresseeId);
+        return { success: true, friendship };
+      }
+
       console.log("🔄 acceptFriendRequest called with:", {
         friendshipId,
         userId,
@@ -243,6 +326,19 @@ class FriendsService {
     userId: string,
   ): Promise<FriendshipResponse> {
     try {
+      if (typeof window !== "undefined") {
+        const { apiFetch } = await import("@/lib/apiClient");
+        const response = await apiFetch<{ ok: boolean; error?: string }>(
+          `/api/friends/${encodeURIComponent(friendshipId)}`,
+          { method: "DELETE" },
+        );
+        if (!response.ok) {
+          return { success: false, error: response.error || "Failed to remove friendship" };
+        }
+        this.invalidateFriendsCache(userId);
+        return { success: true };
+      }
+
       const friendship =
         await this.friendshipRepository.getFriendshipById(friendshipId);
 
@@ -275,6 +371,22 @@ class FriendsService {
   }
 
   async getFriends(userId: string): Promise<FriendListResponse> {
+    const circleId = getActiveCircleId();
+    if (circleId) {
+      try {
+        const ids = await new CircleRepository().memberIds(circleId);
+        // One bounded profile read. The previous per-member Promise.all made the
+        // new-chat sheet wait on N independent requests and could leave it in a
+        // spinner when one request stalled.
+        const profiles = await this.userRepository.getProfilesByUserIds(
+          ids.filter((id) => id !== userId),
+        );
+        return {
+          success: true,
+          friends: profiles.map((profile) => UserProfileEntity.create(profile)),
+        };
+      } catch (e) { return { success: false, error: e instanceof Error ? e.message : 'Circle unavailable' }; }
+    }
     const cachedFriends = this.getCachedFriends(userId);
     if (cachedFriends) {
       return { success: true, friends: cachedFriends };
@@ -285,14 +397,18 @@ class FriendsService {
       return existingRequest;
     }
 
-    const request = this.fetchFriends(userId).finally(() => {
+    const generation = this.cacheGeneration;
+    const request = this.fetchFriends(userId, generation).finally(() => {
       this.inFlightFriendsRequests.delete(userId);
     });
     this.inFlightFriendsRequests.set(userId, request);
     return request;
   }
 
-  private async fetchFriends(userId: string): Promise<FriendListResponse> {
+  private async fetchFriends(
+    userId: string,
+    generation: number,
+  ): Promise<FriendListResponse> {
     try {
       console.log("🔄 getFriends called for user:", userId);
 
@@ -308,7 +424,7 @@ class FriendsService {
       console.log("🔄 Extracted friend IDs:", friendIds);
 
       if (friendIds.length === 0) {
-        this.setCachedFriends(userId, []);
+        if (generation === this.cacheGeneration) this.setCachedFriends(userId, []);
         console.log("⚠️ No friends found");
         return { success: true, friends: [] };
       }
@@ -351,8 +467,6 @@ class FriendsService {
               consentAccepted: raw.consentAccepted ?? false,
               daresCompleted: raw.daresCompleted ?? 0,
               daresRefused: raw.daresRefused ?? 0,
-              ghostModeActive: raw.ghostModeActive ?? false,
-              ghostModeExpiresAt: raw.ghostModeExpiresAt || null,
               createdAt: raw.createdAt || new Date().toISOString(),
               updatedAt: raw.updatedAt || new Date().toISOString(),
             } as any);
@@ -366,7 +480,7 @@ class FriendsService {
       });
 
       console.log("🔄 Final friends list:", friends);
-      this.setCachedFriends(userId, friends);
+      if (generation === this.cacheGeneration) this.setCachedFriends(userId, friends);
       return { success: true, friends };
     } catch (error) {
       const errorMessage =
@@ -457,23 +571,27 @@ class FriendsService {
       if (cached && cached.expiresAt > Date.now()) {
         return { success: true, friendship: cached.data };
       }
-
-      const friendship =
-        await this.friendshipRepository.getFriendshipBetweenUsers(
-          user1Id,
-          user2Id,
-        );
-
-      this.friendshipStatusCache.set(cacheKey, {
-        data: friendship ?? null,
-        expiresAt: Date.now() + this.friendshipStatusCacheTtlMs,
-      });
-
-      if (!friendship) {
-        return { success: true, friendship: null };
-      }
-
-      return { success: true, friendship };
+      const existing = this.inFlightFriendshipStatus.get(cacheKey);
+      if (existing) return existing;
+      const generation = this.cacheGeneration;
+      const request = this.friendshipRepository
+        .getFriendshipBetweenUsers(user1Id, user2Id)
+        .then((friendship) => {
+          if (generation === this.cacheGeneration) {
+            this.friendshipStatusCache.set(cacheKey, {
+              data: friendship ?? null,
+              expiresAt: Date.now() + this.friendshipStatusCacheTtlMs,
+            });
+          }
+          return { success: true, friendship: friendship ?? null };
+        })
+        .catch((error: unknown) => ({
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        }))
+        .finally(() => this.inFlightFriendshipStatus.delete(cacheKey));
+      this.inFlightFriendshipStatus.set(cacheKey, request);
+      return request;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";

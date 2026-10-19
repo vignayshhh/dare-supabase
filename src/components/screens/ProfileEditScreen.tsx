@@ -86,27 +86,27 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
         console.log("🔥 CURRENT USERNAME SET");
       }
 
-      // Priority: Firebase avatar > stored avatar > nothing
+      // Priority: Supabase avatar > stored avatar > nothing
       if (user?.avatar) {
         setGlobalAvatar(user.avatar);
         setUserAvatar(user.id, user.avatar);
-        console.log("🔥 GLOBAL AVATAR SET FROM FIREBASE");
-        console.log("💾 AVATAR STORED FOR USER FROM FIREBASE");
+        console.log("🔥 GLOBAL AVATAR SET FROM SUPABASE");
+        console.log("💾 AVATAR STORED FOR USER FROM SUPABASE");
       } else {
-        // User has no avatar in Firebase, check if we have one stored
+        // User has no avatar in Supabase, check if we have one stored
         const { getStoredAvatar } = useAvatarStore.getState();
         const storedAvatar = getStoredAvatar(user.id);
         if (storedAvatar) {
           setGlobalAvatar(storedAvatar);
           console.log("🔥 RESTORED AVATAR FROM LOCAL STORAGE");
 
-          // 🔥 FIREBASE SYNC: Sync stored avatar to Firebase so friends can see it
+          // 🔥 SUPABASE SYNC: Sync stored avatar to Supabase so friends can see it
           setTimeout(async () => {
-            console.log("🔥 SYNCING STORED AVATAR TO FIREBASE");
+            console.log("🔥 SYNCING STORED AVATAR TO SUPABASE");
             // Avatar sync handled by avatarSyncService
           }, 500);
         } else {
-          console.log("🔥 NO AVATAR FOUND IN FIREBASE OR STORAGE");
+          console.log("🔥 NO AVATAR FOUND IN SUPABASE OR STORAGE");
         }
       }
     }
@@ -173,8 +173,8 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
           (postsStore as any).clearCachedData();
         }
 
-        // 🔥 FIREBASE SYNC: Ensure avatar is synced to Firebase so friends can see it
-        console.log("🔥 SYNCING AVATAR TO FIREBASE FOR FRIENDS");
+        // 🔥 SUPABASE SYNC: Ensure avatar is synced to Supabase so friends can see it
+        console.log("🔥 SYNCING AVATAR TO SUPABASE FOR FRIENDS");
         setTimeout(async () => {
           // 🚀 NEW: Force refresh avatar in sync service to trigger real-time updates
           console.log("🚀 TRIGGERING REAL-TIME AVATAR SYNC SERVICE");
@@ -247,7 +247,8 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       const updates: { displayName?: string; username?: string; bio?: string } =
         {
           displayName: displayName.trim(),
-          bio: bio.trim() || undefined,
+          // Keep an intentional empty value so a user can clear an existing bio.
+          bio: bio.trim(),
         };
 
       // Include username if it changed
@@ -440,6 +441,24 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
               Your unique handle. Letters, numbers, and underscores only. 3-20
               characters.
             </p>
+          </div>
+
+          {/* Bio */}
+          <div className="space-y-3">
+            <label className="text-white font-medium flex items-center gap-2" htmlFor="profile-bio">
+              <User size={18} className="text-[#4ade80]" />
+              <span>Bio</span>
+            </label>
+            <textarea
+              id="profile-bio"
+              value={bio}
+              onChange={(event) => setBio(event.target.value)}
+              placeholder="Tell friends a little about yourself"
+              maxLength={500}
+              rows={4}
+              className="w-full resize-none rounded-xl border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3 text-white outline-none transition-colors placeholder:text-[#64748b] focus:border-[#4ade80]"
+            />
+            <p className="text-right text-xs text-[#64748b]">{bio.length}/500</p>
           </div>
 
           {/* Preview */}

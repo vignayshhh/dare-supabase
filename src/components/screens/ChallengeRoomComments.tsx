@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { Heart, MessageCircle, Send, X } from "lucide-react";
-import { Timestamp } from "firebase/firestore";
 import {
   challengeRoomService,
   type ChallengeProofComment,
@@ -19,7 +18,7 @@ interface ChallengeRoomCommentsProps {
 
 const getCommentTime = (timestamp: ChallengeProofComment["createdAt"]) => {
   if (!timestamp) return 0;
-  if (timestamp instanceof Timestamp) return timestamp.toMillis();
+  if (timestamp instanceof Date) return timestamp.getTime();
   const maybeTimestamp = timestamp as unknown as {
     toMillis?: () => number;
     toDate?: () => Date;
@@ -68,8 +67,11 @@ export function ChallengeRoomComments({
   const [newComment, setNewComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [commentLikes, setCommentLikes] = useState<
-    Record<string, { count: number; currentUserLiked: boolean }>
+  const [likedCommentIds, setLikedCommentIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [optimisticLikeCounts, setOptimisticLikeCounts] = useState<
+    Record<string, number>
   >({});
   const [likeInProgress, setLikeInProgress] = useState<
     Record<string, boolean>
@@ -77,25 +79,7 @@ export function ChallengeRoomComments({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadComments = async () => {
-      try {
-        setIsLoading(true);
-        const proofComments = await challengeRoomService.getProofComments(
-          proof.id,
-        );
-        setComments((currentComments) =>
-          mergeComments(proofComments, currentComments),
-        );
-      } catch (error) {
-        console.warn("Failed to load comments:", error);
-        setError("Could not load comments.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadComments();
-
+    setIsLoading(true);
     return challengeRoomService.subscribeToProofComments(
       proof.id,
       (updatedComments) => {
@@ -117,22 +101,10 @@ export function ChallengeRoomComments({
       ? commentIdsKey.split("|").filter(Boolean)
       : [];
 
-    return challengeRoomService.subscribeToCommentLikesByCommentIds(
+    return challengeRoomService.subscribeToCurrentUserCommentLikesByCommentIds(
       commentIds,
       currentUserId,
-      (summaries) => {
-        const nextLikes: Record<
-          string,
-          { count: number; currentUserLiked: boolean }
-        > = {};
-        summaries.forEach((summary) => {
-          nextLikes[summary.commentId] = {
-            count: summary.count,
-            currentUserLiked: summary.currentUserLiked,
-          };
-        });
-        setCommentLikes(nextLikes);
-      },
+      setLikedCommentIds,
     );
   }, [commentIdsKey, currentUserId]);
 
@@ -140,10 +112,10 @@ export function ChallengeRoomComments({
     () =>
       comments.map((comment) => ({
         ...comment,
-        likes: commentLikes[comment.id]?.count ?? comment.likes,
-        userLiked: commentLikes[comment.id]?.currentUserLiked ?? false,
+        likes: optimisticLikeCounts[comment.id] ?? comment.likes,
+        userLiked: likedCommentIds.has(comment.id),
       })),
-    [commentLikes, comments],
+    [comments, likedCommentIds, optimisticLikeCounts],
   );
 
   const handleSubmitComment = async (event: React.FormEvent) => {
@@ -165,7 +137,7 @@ export function ChallengeRoomComments({
       avatarUrl: currentAvatarUrl || "",
       content: trimmedComment,
       likes: 0,
-      createdAt: Timestamp.now(),
+      createdAt: new Date(),
       userLiked: false,
     };
 
@@ -220,21 +192,28 @@ export function ChallengeRoomComments({
   const handleLikeComment = async (commentId: string) => {
     if (!currentUserId || likeInProgress[commentId]) return;
 
-    const previousLike = commentLikes[commentId] || {
-      count: comments.find((comment) => comment.id === commentId)?.likes || 0,
-      currentUserLiked: false,
-    };
-    const nextLike = previousLike.currentUserLiked
-      ? {
-          count: Math.max(previousLike.count - 1, 0),
-          currentUserLiked: false,
-        }
-      : {
-          count: previousLike.count + 1,
-          currentUserLiked: true,
-        };
+    const previousLikedCommentIds = likedCommentIds;
+    const previousOptimisticCount = optimisticLikeCounts[commentId];
+    const baseCount =
+      previousOptimisticCount ??
+      comments.find((comment) => comment.id === commentId)?.likes ??
+      0;
+    const wasLiked = likedCommentIds.has(commentId);
+    const nextCount = wasLiked ? Math.max(baseCount - 1, 0) : baseCount + 1;
 
-    setCommentLikes((current) => ({ ...current, [commentId]: nextLike }));
+    setLikedCommentIds((current) => {
+      const next = new Set(current);
+      if (wasLiked) {
+        next.delete(commentId);
+      } else {
+        next.add(commentId);
+      }
+      return next;
+    });
+    setOptimisticLikeCounts((current) => ({
+      ...current,
+      [commentId]: nextCount,
+    }));
     setLikeInProgress((current) => ({ ...current, [commentId]: true }));
     setError(null);
     try {
@@ -244,18 +223,38 @@ export function ChallengeRoomComments({
         proof.challengeId,
       );
       if (!result.success) {
-        setCommentLikes((current) => ({
-          ...current,
-          [commentId]: previousLike,
-        }));
+        setLikedCommentIds(previousLikedCommentIds);
+        setOptimisticLikeCounts((current) => {
+          const next = { ...current };
+          if (typeof previousOptimisticCount === "number") {
+            next[commentId] = previousOptimisticCount;
+          } else {
+            delete next[commentId];
+          }
+          return next;
+        });
         setError(result.error || "Failed to update comment vote.");
+      } else {
+        window.setTimeout(() => {
+          setOptimisticLikeCounts((current) => {
+            const next = { ...current };
+            delete next[commentId];
+            return next;
+          });
+        }, 1500);
       }
     } catch (error) {
       console.warn("Error liking comment:", error);
-      setCommentLikes((current) => ({
-        ...current,
-        [commentId]: previousLike,
-      }));
+      setLikedCommentIds(previousLikedCommentIds);
+      setOptimisticLikeCounts((current) => {
+        const next = { ...current };
+        if (typeof previousOptimisticCount === "number") {
+          next[commentId] = previousOptimisticCount;
+        } else {
+          delete next[commentId];
+        }
+        return next;
+      });
       setError("Failed to update comment vote.");
     } finally {
       setLikeInProgress((current) => ({ ...current, [commentId]: false }));
@@ -303,7 +302,6 @@ export function ChallengeRoomComments({
                 alt={proof.displayName}
                 size={32}
                 fallbackText={proof.displayName.charAt(0)}
-                disableGhostMode
               />
               <div className="min-w-0">
                 <div className="truncate text-sm font-bold text-white">
@@ -351,7 +349,6 @@ export function ChallengeRoomComments({
                     alt={comment.displayName}
                     size={36}
                     fallbackText={comment.displayName.charAt(0)}
-                    disableGhostMode
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

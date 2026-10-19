@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="1480" viewBox="0 0 390 740">
+<defs>
+ <linearGradient id="card" x2=".7" y2="1"><stop stop-color="#171c20"/><stop offset="1" stop-color="#050608"/></linearGradient>
+ <linearGradient id="panel" x2="1" y2="1"><stop stop-color="#1c2324"/><stop offset="1" stop-color="#090c0d"/></linearGradient>
+ <linearGradient id="green"><stop stop-color="#4ade80"/><stop offset="1" stop-color="#86efac"/></linearGradient>
+ <linearGradient id="pink"><stop stop-color="#fb7185"/><stop offset="1" stop-color="#f97316"/></linearGradient>
+ <g id="figure" fill="none" stroke="#e8f1eb" stroke-opacity=".8" stroke-width="2" stroke-linecap="round"><path d="M0 16V38M0 24L-13 31M0 24L13 31M0 38L-10 52M0 38L10 52"/></g>
+</defs>
+<rect width="390" height="740" fill="#08090b" rx="28"/>
+<g font-family="Inter, Arial, sans-serif">
+ <rect x="16" y="16" width="358" height="708" rx="30" fill="url(#card)" stroke="#ffffff" stroke-opacity=".12"/>
+ <!-- Existing author / predicts / subject header -->
+ <rect x="32" y="32" width="326" height="124" rx="28" fill="url(#panel)" stroke="#ffffff" stroke-opacity=".10"/>
+ <path d="M75 33H310" stroke="#86efac" stroke-opacity=".25"/>
+ <circle cx="67" cy="67" r="21" fill="#293c32"/>
+ <text x="67" y="72" text-anchor="middle" fill="#ccebd5" font-size="13" font-weight="900">MI</text>
+ <text x="98" y="72" fill="white" font-size="14" font-weight="900">Mira</text>
+ <rect x="274" y="52" width="67" height="27" rx="14" fill="#ffffff" fill-opacity=".055" stroke="#86efac" stroke-opacity=".16"/>
+ <text x="307" y="70" text-anchor="middle" fill="#bbf7d0" font-size="10" font-weight="800">⌛ 3H 24M</text>
+ <text x="47" y="125" fill="#86efac" font-size="21" font-weight="900">PREDICTS</text>
+ <text x="164" y="124" fill="#ffffff" fill-opacity=".32" font-size="10" font-weight="800">ABOUT</text>
+ <text x="287" y="116" text-anchor="end" fill="white" font-size="15" font-weight="900">Rahul</text>
+ <text x="287" y="132" text-anchor="end" fill="#ffffff" fill-opacity=".34" font-size="9" letter-spacing="1">FRIEND</text>
+ <circle cx="321" cy="117" r="20" fill="#313044"/>
+ <text x="321" y="122" text-anchor="middle" fill="#ded7f4" font-size="12" font-weight="900">RA</text>
+ <!-- Existing centered statement surface -->
+ <rect x="32" y="172" width="326" height="184" rx="26" fill="#ffffff" fill-opacity=".025" stroke="#ffffff" stroke-opacity=".08"/>
+ <text x="195" y="237" text-anchor="middle" fill="white" font-size="25" font-weight="900" letter-spacing="-.5"><tspan x="195">Rahul will text his ex</tspan><tspan x="195" dy="29">before midnight.</tspan></text>
+ <!-- Existing subject response -->
+ <rect x="32" y="372" width="326" height="72" rx="22" fill="#4ade80" fill-opacity=".045" stroke="#4ade80" stroke-opacity=".20"/>
+ <circle cx="65" cy="408" r="19" fill="#313044"/>
+ <text x="65" y="412" text-anchor="middle" fill="#ded7f4" font-size="11" font-weight="900">RA</text>
+ <text x="95" y="401" fill="white" font-size="12" font-weight="900">Rahul's response</text>
+ <text x="95" y="422" fill="#c5cdc8" font-size="13" font-weight="700">“You lot need a hobby.”</text>
+ <text x="339" y="412" text-anchor="end" fill="#9ba69f" font-size="17">›</text>
+ <!-- Stickmen stand directly on the existing results bar. -->
+ <rect x="32" y="460" width="326" height="165" rx="26" fill="#000000" fill-opacity=".24" stroke="#ffffff" stroke-opacity=".08"/>
+ <text x="343" y="484" text-anchor="end" fill="#ffffff" fill-opacity=".34" font-size="9">12 VOTES</text>
+ <rect x="47" y="574" width="296" height="18" rx="9" fill="#ffffff" fill-opacity=".07" stroke="#ffffff" stroke-opacity=".08"/>
+ <rect x="49" y="576" width="194" height="14" rx="7" fill="url(#green)"/>
+ <rect x="247" y="576" width="94" height="14" rx="7" fill="url(#pink)"/>
+ <!-- Chatlist compact fallback face, scaled to 24px: same background,
+      accent ring, paired eyes and curved smile. Hands only; no body. -->
+ <defs>
+  <g id="compact-head">
+   <circle r="16" fill="#101611" stroke="currentColor" stroke-width="2"/>
+   <g fill="#e8f1eb"><circle cx="-4.5" cy="-1" r="1.5"/><circle cx="4.5" cy="-1" r="1.5"/></g>
+   <path d="M-3.5 4Q0 8 3.5 4" fill="none" stroke="#e8f1eb" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+  <g id="tiny-puller">
+   <use href="#compact-head" transform="scale(.75)"/>
+   <g fill="none" stroke="#e8f1eb" stroke-opacity=".8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 9L14 19L25 27M4 11L9 25L20 29"/>
+   </g>
+   <g fill="#e8f1eb"><circle cx="25" cy="27" r="2"/><circle cx="20" cy="29" r="2"/></g>
+  </g>
+ </defs>
+ <g color="#86efac"><use href="#tiny-puller" transform="translate(66 548)"/><use href="#tiny-puller" transform="translate(108 548)"/><use href="#tiny-puller" transform="translate(150 548)"/></g>
+ <g color="#fda4af"><use href="#tiny-puller" transform="translate(322 548) scale(-1 1)"/><use href="#tiny-puller" transform="translate(280 548) scale(-1 1)"/></g>
+ <text x="47" y="610" fill="#86efac" font-size="9" font-weight="900">HAPPENS  67%</text>
+ <text x="343" y="610" text-anchor="end" fill="#fda4af" font-size="9" font-weight="900">WON'T HAPPEN  33%</text>
+ <!-- Existing action styling -->
+ <rect x="32" y="641" width="157" height="54" rx="20" fill="url(#green)"/>
+ <text x="110" y="673" text-anchor="middle" fill="#061006" font-size="12" font-weight="900">✓ HAPPENS</text>
+ <rect x="201" y="641" width="157" height="54" rx="20" fill="#fb7185" fill-opacity=".09" stroke="#fb7185" stroke-opacity=".22"/>
+ <text x="279" y="673" text-anchor="middle" fill="#fda4af" font-size="12" font-weight="900">WON'T HAPPEN</text>
+</g>
+</svg>

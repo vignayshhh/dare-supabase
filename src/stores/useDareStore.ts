@@ -18,9 +18,6 @@ interface DareStore {
   error: string | null;
   creatingDare: boolean;
 
-  // Timer state
-  ghostModeDares: Map<string, number>; // dareId -> remaining minutes
-
   // Actions
   loadUserDares: (
     userId: string,
@@ -61,11 +58,6 @@ interface DareStore {
   clearCurrentDare: () => void;
   clearError: () => void;
 
-  // Timer actions
-  updateGhostModeTimers: () => void;
-  getGhostModeRemaining: (dareId: string) => number;
-  isInGhostMode: (dareId: string) => boolean;
-
   // Computed values
   activeDaresCount: number;
   pendingDaresCount: number;
@@ -80,7 +72,6 @@ export const useDareStore = create<DareStore>((set, get) => ({
   loading: false,
   error: null,
   creatingDare: false,
-  ghostModeDares: new Map(),
 
   // Computed values
   get activeDaresCount() {
@@ -251,16 +242,11 @@ export const useDareStore = create<DareStore>((set, get) => ({
                 ...dare,
                 state: "ACCEPTED",
                 accepted_at: new Date().toISOString(),
-                ghost_mode_until: new Date(
-                  Date.now() + 15 * 60 * 1000,
-                ).toISOString(), // 15 minutes
               }
             : dare,
         ),
       }));
 
-      // Update timers
-      get().updateGhostModeTimers();
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to accept dare";
@@ -299,10 +285,23 @@ export const useDareStore = create<DareStore>((set, get) => ({
           dare.id === dareId
             ? {
                 ...dare,
-                state: "PROOF_SUBMITTED",
+                state: "ACCEPTED_REAL",
                 proof_media_url: proof.media_url,
                 proof_media_type: proof.media_type,
                 proof_submitted_at: new Date().toISOString(),
+                completed_at: new Date().toISOString(),
+              }
+            : dare,
+        ),
+        sentDares: state.sentDares.map((dare) =>
+          dare.id === dareId
+            ? {
+                ...dare,
+                state: "ACCEPTED_REAL",
+                proof_media_url: proof.media_url,
+                proof_media_type: proof.media_type,
+                proof_submitted_at: new Date().toISOString(),
+                completed_at: new Date().toISOString(),
               }
             : dare,
         ),
@@ -524,35 +523,4 @@ export const useDareStore = create<DareStore>((set, get) => ({
     set({ error: null });
   },
 
-  // Timer methods
-  updateGhostModeTimers: () => {
-    const { sentDares, receivedDares } = get();
-    const allDares = [...sentDares, ...receivedDares];
-    const updatedTimers = new Map<string, number>();
-
-    allDares.forEach((dare) => {
-      if (dare.state === "ACCEPTED" && dare.ghost_mode_until) {
-        const now = new Date();
-        const expiry = new Date(dare.ghost_mode_until);
-        const remaining = Math.max(
-          0,
-          Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60)),
-        );
-        updatedTimers.set(dare.id, remaining);
-      }
-    });
-
-    set({ ghostModeDares: updatedTimers });
-  },
-
-  getGhostModeRemaining: (dareId: string) => {
-    const { ghostModeDares } = get();
-    return ghostModeDares.get(dareId) || 0;
-  },
-
-  isInGhostMode: (dareId: string) => {
-    const { ghostModeDares } = get();
-    const remaining = ghostModeDares.get(dareId);
-    return remaining !== undefined && remaining > 0;
-  },
 }));

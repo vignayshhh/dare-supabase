@@ -10,8 +10,8 @@ This document defines the permanent architectural separation between UI and back
 ┌─────────────────────────────────────────────────────────────┐
 │                    Frontend Layer                            │
 │  React Components, Hooks, Stores, Styles                    │
-│  - No Firebase calls                                        │
-│  - No Firestore queries                                     │
+│  - No direct database calls                                 │
+│  - No raw database queries                                  │
 │  - No business logic                                        │
 │  - Only middleware service calls                            │
 └─────────────────────────────────────────────────────────────┘
@@ -33,7 +33,7 @@ This document defines the permanent architectural separation between UI and back
 │  - Domain entities with behavior                            │
 │  - Repository interfaces                                   │
 │  - Business rules and validation                            │
-│  - Firebase and external services                          │
+│  - Supabase and external services                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,11 +41,11 @@ This document defines the permanent architectural separation between UI and back
 
 ### Frontend Layer Rules
 
-1. **NO FIREBASE CALLS** - UI components must never import or use Firebase
-2. **NO FIRESTORE QUERIES** - All database access must go through middleware services
+1. **NO DIRECT DATABASE CALLS** - UI components must use service boundaries
+2. **NO RAW DATABASE QUERIES** - Database access must go through middleware services
 3. **NO BUSINESS LOGIC** - UI must only handle presentation and user interaction
 4. **NO DATABASE SCHEMA KNOWLEDGE** - UI must not know collection names or field names
-5. **NO STORAGE PATHS** - UI must not know Firebase Storage paths
+5. **NO STORAGE PATHS** - UI must not know provider storage paths
 6. **ONLY MIDDLEWARE CALLS** - UI may only call middleware service methods with typed DTOs
 
 ### Middleware Layer Rules
@@ -61,7 +61,7 @@ This document defines the permanent architectural separation between UI and back
 1. **PURE BUSINESS LOGIC** - Domain layer has no external dependencies
 2. **ENTITY BEHAVIOR** - Domain entities contain business rules and validation
 3. **INTERFACE CONTRACTS** - Repository interfaces define data access contracts
-4. **INFRASTRUCTURE SEPARATION** - Repositories handle Firebase operations only
+4. **INFRASTRUCTURE SEPARATION** - Repositories handle Supabase operations only
 5. **NO UI COUPLING** - Backend must never import frontend modules
 
 ## Throwaway UI Principle
@@ -87,7 +87,7 @@ If the entire `/src/frontend` folder is deleted and rebuilt from scratch, **the 
 const response = await userService.getProfile(userId);
 
 // ❌ FORBIDDEN - UI directly accesses database
-const userDoc = await getDoc(doc(db, "users", userId));
+const { data: profile } = await supabase.from("profiles").select("id,username").eq("id", userId).single();
 ```
 
 ### Rule 2: DTOs Only
@@ -101,7 +101,7 @@ interface UserProfileResponse {
 }
 
 // ❌ FORBIDDEN - Service returns raw database object
-return userDoc.data(); // Exposes database schema
+return profile; // Exposes database schema
 ```
 
 ### Rule 3: No Database Knowledge
@@ -126,8 +126,8 @@ const dareRef = doc(db, "dares", dareId);
 
 ### Code Review Checklist
 
-- [ ] No Firebase imports in UI components
-- [ ] No Firestore queries in React components
+- [ ] No provider SDK imports in UI components
+- [ ] No raw database queries in React components
 - [ ] No business logic in UI layer
 - [ ] Services use repository interfaces only
 - [ ] DTOs are used for all service responses
@@ -138,7 +138,7 @@ const dareRef = doc(db, "dares", dareId);
 
 ### Examples of Violations
 
-1. **UI importing Firebase**: `import { db } from '@/lib/firebase'` in component
+1. **UI importing a provider client**: direct database client import in component
 2. **Service importing UI**: `import { ProfileScreen } from '@/components'` in service
 3. **Raw database objects**: Service returning `userDoc.data()` directly
 4. **Database knowledge**: UI knowing collection names like "users" or "dares"
@@ -165,13 +165,13 @@ This contract is **permanent and binding**:
 ### ✅ Completed
 
 - Domain layer with clean interfaces
-- Repository layer with Firebase implementations
+- Repository layer with Supabase implementations
 - Service layer with DTOs and orchestration
 - Complete UI-agnostic separation
 
 ### ✅ Verified
 
-- No Firebase calls in UI components
+- No direct database calls in UI components
 - No business logic in React components
 - Clean service interfaces
 - Typed DTOs for all responses

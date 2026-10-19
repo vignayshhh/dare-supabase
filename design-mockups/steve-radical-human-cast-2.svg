@@ -1,0 +1,247 @@
+<svg width="2200" height="1380" viewBox="0 0 2200 1380" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="2200" y2="1380" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#040504"/>
+      <stop offset="0.36" stop-color="#14110e"/>
+      <stop offset="0.72" stop-color="#071016"/>
+      <stop offset="1" stop-color="#030303"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1080 -60) rotate(90) scale(940 1500)">
+      <stop stop-color="#facc15" stop-opacity="0.18"/>
+      <stop offset="0.35" stop-color="#4ade80" stop-opacity="0.12"/>
+      <stop offset="0.66" stop-color="#38bdf8" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1a1b16"/>
+      <stop offset="1" stop-color="#070807"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="145%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="18" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="greenGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#4ade80" flood-opacity="0.55"/>
+    </filter>
+    <filter id="goldGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#facc15" flood-opacity="0.52"/>
+    </filter>
+    <filter id="blueGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#38bdf8" flood-opacity="0.5"/>
+    </filter>
+    <style>
+      .title { font: 950 62px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .sub { font: 650 20px Inter, SF Pro Display, Arial, sans-serif; fill: #a5adba; letter-spacing: 0; }
+      .name { font: 920 23px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .desc { font: 650 14px Inter, SF Pro Display, Arial, sans-serif; fill: #9ca3af; letter-spacing: 0; }
+      .tag { font: 900 11px Inter, SF Pro Display, Arial, sans-serif; fill: #86efac; letter-spacing: 1.6px; }
+      .darkLine { stroke: #111; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+      .heavyLine { stroke: #080808; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+      .thinLine { stroke: #111; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .green { stroke: #4ade80; stroke-width: 3; stroke-linecap: round; }
+      .blue { stroke: #38bdf8; stroke-width: 3; stroke-linecap: round; }
+      .gold { stroke: #facc15; stroke-width: 3; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <rect width="2200" height="1380" fill="url(#bg)"/>
+  <rect width="2200" height="1380" fill="url(#glow)"/>
+  <path d="M0 1050 C330 950 562 1100 880 980 C1230 848 1488 1038 2200 890 V1380 H0 Z" fill="#07100b"/>
+
+  <text x="78" y="104" class="title">Steve Casting Board: More Humans</text>
+  <text x="78" y="144" class="sub">Another set with new faces, hair, ages, clothes, and drawing languages. Different actor choices for Steve.</text>
+
+  <!-- 1 -->
+  <g transform="translate(70 210)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#card)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">1. Silver Fox Steve</text>
+    <text x="30" y="78" class="desc">Older, silver hair, precise, unnervingly calm.</text>
+    <g transform="translate(88 104)">
+      <ellipse cx="178" cy="340" rx="130" ry="18" fill="#000" opacity="0.28"/>
+      <path d="M65 340 C85 248 122 202 178 202 C235 202 274 248 294 340 Z" fill="#111827"/>
+      <path d="M122 340 L134 250 H163 L158 340 Z" fill="#111"/>
+      <path d="M212 340 L205 250 H236 L250 340 Z" fill="#111"/>
+      <path d="M117 123 C117 70 144 42 179 42 C214 42 242 70 242 123 C242 180 217 215 179 215 C141 215 117 180 117 123 Z" fill="#d0a184"/>
+      <path d="M105 104 C116 45 148 18 181 20 C221 22 249 54 254 108 C215 72 146 73 105 104 Z" fill="#d5d8dc"/>
+      <path d="M116 89 C138 55 208 54 247 90" stroke="#fff" stroke-opacity="0.64" stroke-width="10" stroke-linecap="round"/>
+      <path d="M127 130 C142 120 157 121 170 131" class="heavyLine"/>
+      <path d="M194 131 C207 121 224 120 239 130" class="heavyLine"/>
+      <circle cx="158" cy="144" r="4" fill="#050505"/>
+      <circle cx="224" cy="144" r="4" fill="#050505"/>
+      <path d="M183 145 L172 173 L187 178" class="thinLine"/>
+      <path d="M150 196 C172 209 217 207 239 193" stroke="#1c100d" stroke-width="4" stroke-linecap="round"/>
+      <rect x="252" y="142" width="40" height="58" rx="11" fill="#4ade80" filter="url(#greenGlow)"/>
+    </g>
+    <text x="30" y="455" class="tag">SILVER HAIR / OLDER / REALIST CARTOON</text>
+  </g>
+
+  <!-- 2 -->
+  <g transform="translate(600 210)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#card)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">2. Mullet Steve</text>
+    <text x="30" y="78" class="desc">Retro hair, mischievous face, party troublemaker.</text>
+    <g transform="translate(88 104)">
+      <ellipse cx="174" cy="340" rx="126" ry="18" fill="#000" opacity="0.26"/>
+      <path d="M78 340 C90 251 121 206 174 206 C228 206 260 251 273 340 Z" fill="#291a12"/>
+      <path d="M118 340 L128 250 H158 L154 340 Z" fill="#111"/>
+      <path d="M204 340 L200 250 H232 L245 340 Z" fill="#111"/>
+      <path d="M112 125 C112 76 138 48 174 48 C210 48 237 76 237 125 C237 178 212 211 174 211 C136 211 112 178 112 125 Z" fill="#e2a77b"/>
+      <path d="M91 110 C104 60 137 29 176 32 C219 35 252 76 251 124 C227 98 135 92 91 110 Z" fill="#3b2416"/>
+      <path d="M101 103 C96 154 94 209 84 278" stroke="#3b2416" stroke-width="19" stroke-linecap="round"/>
+      <path d="M242 101 C253 160 254 216 263 284" stroke="#3b2416" stroke-width="17" stroke-linecap="round"/>
+      <path d="M128 132 C143 124 158 125 169 134" class="darkLine"/>
+      <path d="M193 134 C206 125 222 124 236 132" class="darkLine"/>
+      <circle cx="157" cy="145" r="4" fill="#050505"/>
+      <circle cx="222" cy="145" r="4" fill="#050505"/>
+      <path d="M180 148 C173 164 174 174 188 178" class="thinLine"/>
+      <path d="M150 195 C171 212 222 208 242 185" stroke="#28130f" stroke-width="5" stroke-linecap="round"/>
+      <path d="M82 215 L44 170" class="gold"/>
+      <circle cx="44" cy="170" r="9" fill="#facc15" filter="url(#goldGlow)"/>
+    </g>
+    <text x="30" y="455" class="tag">MULLET / RETRO / MISCHIEF</text>
+  </g>
+
+  <!-- 3 -->
+  <g transform="translate(1130 210)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#card)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">3. South Bombay Steve</text>
+    <text x="30" y="78" class="desc">Clean hair, linen shirt, quiet rich-kid confidence.</text>
+    <g transform="translate(88 104)">
+      <ellipse cx="176" cy="340" rx="130" ry="18" fill="#000" opacity="0.28"/>
+      <path d="M70 340 C88 254 123 206 176 206 C230 206 266 254 284 340 Z" fill="#f6f0df"/>
+      <path d="M120 340 L133 252 H164 L160 340 Z" fill="#1f2937"/>
+      <path d="M212 340 L205 252 H237 L251 340 Z" fill="#1f2937"/>
+      <path d="M113 124 C113 76 139 48 176 48 C212 48 239 76 239 124 C239 177 213 211 176 211 C139 211 113 177 113 124 Z" fill="#c98760"/>
+      <path d="M100 101 C116 52 146 31 177 31 C217 31 244 62 248 105 C202 83 140 83 100 101 Z" fill="#0c0b0a"/>
+      <path d="M109 89 C141 66 202 65 242 88" stroke="#0c0b0a" stroke-width="12" stroke-linecap="round"/>
+      <path d="M127 132 C143 123 158 124 170 135" class="darkLine"/>
+      <path d="M193 135 C206 124 222 123 236 132" class="darkLine"/>
+      <circle cx="158" cy="146" r="4" fill="#050505"/>
+      <circle cx="222" cy="146" r="4" fill="#050505"/>
+      <path d="M181 148 L173 169 L185 174" class="thinLine"/>
+      <path d="M148 193 C171 204 218 204 240 192" stroke="#2a130f" stroke-width="4" stroke-linecap="round"/>
+      <path d="M92 238 H263" stroke="#4ade80" stroke-width="3" opacity="0.5"/>
+      <path d="M95 260 H260" stroke="#38bdf8" stroke-width="3" opacity="0.35"/>
+    </g>
+    <text x="30" y="455" class="tag">CLEAN CUT / LINEN / QUIET PREMIUM</text>
+  </g>
+
+  <!-- 4 -->
+  <g transform="translate(1660 210)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#card)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">4. Punk Steve</text>
+    <text x="30" y="78" class="desc">Undercut, eyebrow slit, sharper and louder.</text>
+    <g transform="translate(88 104)">
+      <ellipse cx="174" cy="340" rx="128" ry="18" fill="#000" opacity="0.28"/>
+      <path d="M70 340 C84 246 119 203 174 203 C229 203 264 246 279 340 Z" fill="#101010"/>
+      <path d="M100 224 L174 309 L250 224 L270 340 H80 Z" fill="#3f0e1f"/>
+      <path d="M115 122 C115 74 140 47 174 47 C209 47 235 74 235 122 C235 175 211 209 174 209 C137 209 115 175 115 122 Z" fill="#d89573"/>
+      <path d="M100 103 C113 55 139 31 173 31 C214 31 240 62 248 109 C219 81 142 81 100 103 Z" fill="#111"/>
+      <path d="M104 94 L154 36 L151 93 Z" fill="#fb7185" filter="url(#pinkGlow)"/>
+      <path d="M129 130 C145 119 160 121 172 132" class="heavyLine"/>
+      <path d="M194 132 C207 121 223 119 238 130" class="heavyLine"/>
+      <path d="M204 115 L231 110" stroke="#f8fafc" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="158" cy="144" r="4" fill="#050505"/>
+      <circle cx="223" cy="144" r="4" fill="#050505"/>
+      <path d="M181 147 L171 172 L186 176" class="thinLine"/>
+      <path d="M148 194 C172 207 221 205 242 190" stroke="#21100f" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="249" cy="160" r="6" fill="#38bdf8"/>
+    </g>
+    <text x="30" y="455" class="tag">UNDERCUT / PIERCING / PUNK POSTER</text>
+  </g>
+
+  <!-- 5 -->
+  <g transform="translate(70 760)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#card)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">5. Gentle Giant Steve</text>
+    <text x="30" y="78" class="desc">Big frame, kind eyes, says brutal things softly.</text>
+    <g transform="translate(88 104)">
+      <ellipse cx="176" cy="342" rx="145" ry="18" fill="#000" opacity="0.3"/>
+      <path d="M40 342 C62 240 106 196 176 196 C247 196 292 240 314 342 Z" fill="#1f2937"/>
+      <path d="M107 342 L122 248 H158 L153 342 Z" fill="#111"/>
+      <path d="M215 342 L209 248 H246 L263 342 Z" fill="#111"/>
+      <path d="M105 122 C105 68 136 39 176 39 C217 39 248 68 248 122 C248 181 219 218 176 218 C133 218 105 181 105 122 Z" fill="#8f5d46"/>
+      <path d="M91 103 C110 48 142 21 178 24 C223 27 255 65 259 109 C218 82 134 82 91 103 Z" fill="#20130d"/>
+      <path d="M124 131 C140 122 155 123 168 133" class="darkLine"/>
+      <path d="M195 133 C208 123 225 122 240 131" class="darkLine"/>
+      <circle cx="157" cy="146" r="4" fill="#050505"/>
+      <circle cx="226" cy="146" r="4" fill="#050505"/>
+      <path d="M181 149 C173 167 175 177 190 181" class="thinLine"/>
+      <path d="M145 196 C168 210 224 210 247 194" stroke="#160d0b" stroke-width="5" stroke-linecap="round"/>
+      <path d="M78 228 C34 219 18 181 40 145" stroke="#1f2937" stroke-width="30" stroke-linecap="round"/>
+      <path d="M294 228 C339 219 355 181 333 145" stroke="#1f2937" stroke-width="30" stroke-linecap="round"/>
+    </g>
+    <text x="30" y="455" class="tag">BROAD BODY / KIND EYES / DRAMA SERIES</text>
+  </g>
+
+  <!-- 6 -->
+  <g transform="translate(600 760)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#card)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">6. Collage Steve</text>
+    <text x="30" y="78" class="desc">Magazine-cutout face, surreal social-media style.</text>
+    <g transform="translate(88 104)">
+      <rect x="68" y="50" width="260" height="305" rx="18" fill="#f5f0e8"/>
+      <path d="M85 330 L120 225 L205 212 L288 238 L313 330 Z" fill="#111827"/>
+      <path d="M120 122 L178 54 L245 119 L232 212 L144 214 Z" fill="#d6a076"/>
+      <path d="M105 102 L176 42 L266 96 L240 122 C195 91 153 91 105 102 Z" fill="#0b0b0b"/>
+      <rect x="126" y="134" width="52" height="18" fill="#050505"/>
+      <circle cx="153" cy="151" r="5" fill="#4ade80" filter="url(#greenGlow)"/>
+      <rect x="204" y="125" width="67" height="27" fill="#050505"/>
+      <circle cx="236" cy="151" r="5" fill="#38bdf8" filter="url(#blueGlow)"/>
+      <path d="M180 153 L163 185 L194 190" fill="#bf7653"/>
+      <rect x="158" y="214" width="82" height="16" fill="#2b130f"/>
+      <path d="M76 77 L119 37" class="gold"/>
+      <path d="M296 196 L337 174" class="green"/>
+      <circle cx="337" cy="174" r="8" fill="#4ade80"/>
+    </g>
+    <text x="30" y="455" class="tag">COLLAGE / CUTOUT / SURREAL</text>
+  </g>
+
+  <!-- 7 -->
+  <g transform="translate(1130 760)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#card)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">7. Chibi Steve</text>
+    <text x="30" y="78" class="desc">Tiny body, massive attitude, very meme-able.</text>
+    <g transform="translate(88 104)">
+      <ellipse cx="176" cy="342" rx="112" ry="17" fill="#000" opacity="0.24"/>
+      <path d="M98 342 L113 246 H153 L148 342 Z" fill="#111"/>
+      <path d="M204 342 L200 246 H241 L258 342 Z" fill="#111"/>
+      <path d="M78 288 C80 220 118 181 176 181 C235 181 272 220 274 288 C238 318 113 318 78 288 Z" fill="#4ade80"/>
+      <circle cx="176" cy="126" r="86" fill="#f6c79f"/>
+      <path d="M91 114 C99 45 139 14 177 15 C228 17 263 55 268 120 C222 85 138 84 91 114 Z" fill="#15100c"/>
+      <circle cx="140" cy="134" r="10" fill="#111"/>
+      <circle cx="216" cy="134" r="10" fill="#111"/>
+      <circle cx="144" cy="130" r="3" fill="#fff"/>
+      <circle cx="220" cy="130" r="3" fill="#fff"/>
+      <path d="M176 142 C168 160 170 171 184 174" class="thinLine"/>
+      <path d="M141 188 C163 211 220 209 245 184" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+      <path d="M83 247 L48 220" stroke="#4ade80" stroke-width="24" stroke-linecap="round"/>
+      <path d="M269 247 L305 220" stroke="#4ade80" stroke-width="24" stroke-linecap="round"/>
+    </g>
+    <text x="30" y="455" class="tag">CHIBI / BIG HEAD / SMALL BODY</text>
+  </g>
+
+  <!-- 8 -->
+  <g transform="translate(1660 760)" filter="url(#shadow)">
+    <rect width="500" height="500" rx="34" fill="url(#card)" stroke="#fff" stroke-opacity="0.08"/>
+    <text x="30" y="54" class="name">8. Documentary Steve</text>
+    <text x="30" y="78" class="desc">Almost realistic portrait, tired eyes, real-person mood.</text>
+    <g transform="translate(88 104)">
+      <rect x="52" y="46" width="302" height="342" rx="34" fill="#121415"/>
+      <path d="M76 340 C96 250 138 205 204 205 C269 205 312 250 334 340 Z" fill="#1f1f1f"/>
+      <path d="M128 340 L146 250 H177 L170 340 Z" fill="#111"/>
+      <path d="M250 340 L242 250 H274 L291 340 Z" fill="#111"/>
+      <path d="M136 124 C136 72 163 42 204 42 C245 42 272 72 272 124 C272 181 245 215 204 215 C163 215 136 181 136 124 Z" fill="#c59074"/>
+      <path d="M123 103 C134 51 167 27 206 29 C249 31 279 66 286 108 C238 88 173 86 123 103 Z" fill="#19140f"/>
+      <path d="M144 128 C162 119 178 121 190 132" stroke="#2a1713" stroke-width="5" stroke-linecap="round"/>
+      <path d="M221 132 C233 121 249 119 267 128" stroke="#2a1713" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="177" cy="144" r="4" fill="#050505"/>
+      <circle cx="249" cy="144" r="4" fill="#050505"/>
+      <path d="M207 145 C197 165 199 178 216 182" stroke="#5b382b" stroke-width="4" stroke-linecap="round"/>
+      <path d="M170 198 C192 209 244 209 269 196" stroke="#2a1713" stroke-width="4" stroke-linecap="round"/>
+      <path d="M61 77 H337" stroke="#f8fafc" stroke-opacity="0.15" stroke-width="2"/>
+      <path d="M61 310 H337" stroke="#4ade80" stroke-opacity="0.22" stroke-width="2"/>
+      <circle cx="315" cy="73" r="9" fill="#f43f5e" filter="url(#goldGlow)"/>
+    </g>
+    <text x="30" y="455" class="tag">REALISTIC / TIRED EYES / STILL FRAME</text>
+  </g>
+</svg>

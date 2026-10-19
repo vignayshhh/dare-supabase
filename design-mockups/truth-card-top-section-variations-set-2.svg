@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1760" viewBox="0 0 1400 1760">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="0%" r="82%">
+      <stop offset="0%" stop-color="#143a28"/>
+      <stop offset="44%" stop-color="#07110d"/>
+      <stop offset="100%" stop-color="#020403"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#102019"/>
+      <stop offset="52%" stop-color="#07100c"/>
+      <stop offset="100%" stop-color="#020504"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.13"/>
+      <stop offset="42%" stop-color="#ffffff" stop-opacity="0.045"/>
+      <stop offset="100%" stop-color="#4ade80" stop-opacity="0.055"/>
+    </linearGradient>
+    <linearGradient id="smoke" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#17251e" stop-opacity="0.92"/>
+      <stop offset="100%" stop-color="#06100c" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4ade80" stop-opacity="0"/>
+      <stop offset="44%" stop-color="#4ade80" stop-opacity="0.86"/>
+      <stop offset="70%" stop-color="#38bdf8" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#4ade80" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="22" stdDeviation="20" flood-color="#000" flood-opacity="0.48"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="13" flood-color="#4ade80" flood-opacity="0.08"/>
+    </filter>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#4ade80" flood-opacity="0.62"/>
+    </filter>
+    <style>
+      .title { fill:#f8fafc; font:900 34px Inter,Arial,sans-serif; }
+      .sub { fill:#9fb3a8; font:650 17px Inter,Arial,sans-serif; }
+      .panel { fill:url(#card); stroke:rgba(255,255,255,0.09); stroke-width:1; filter:url(#shadow); }
+      .glass { fill:url(#glass); stroke:rgba(255,255,255,0.14); stroke-width:1; }
+      .smoke { fill:url(#smoke); stroke:rgba(255,255,255,0.11); stroke-width:1; }
+      .label { fill:#86efac; font:900 12px Inter,Arial,sans-serif; letter-spacing:2px; }
+      .name { fill:#f8fafc; font:850 18px Inter,Arial,sans-serif; }
+      .handle { fill:#95aa9e; font:650 13px Inter,Arial,sans-serif; }
+      .question { fill:#ffffff; font:900 24px Inter,Arial,sans-serif; }
+      .caption { fill:#d9fbe7; font:850 18px Inter,Arial,sans-serif; }
+      .note { fill:#9fb3a8; font:650 14px Inter,Arial,sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="1760" fill="url(#bg)"/>
+  <text x="70" y="82" class="title">Truth Card Top Section Variations - Set 2</text>
+  <text x="70" y="114" class="sub">More feed-facing treatments for “who asked who”, tuned to the app’s dark green/cyan glass scheme.</text>
+
+  <!-- 7. Match Receipt -->
+  <g transform="translate(70 165)">
+    <rect class="panel" width="590" height="410" rx="34"/>
+    <circle cx="72" cy="70" r="8" fill="#4ade80" filter="url(#glow)"/>
+    <text x="94" y="75" class="label">TRUTH RECEIPT</text>
+    <rect x="42" y="104" width="506" height="160" rx="30" class="glass"/>
+    <line x1="76" y1="146" x2="514" y2="146" stroke="url(#line)" stroke-width="2"/>
+    <text x="78" y="132" class="handle">ASKED BY</text>
+    <text x="78" y="184" class="name">Maya</text>
+    <text x="78" y="212" class="handle">@maya</text>
+    <text x="360" y="132" class="handle">ANSWERED BY</text>
+    <text x="360" y="184" class="name">Jay</text>
+    <text x="360" y="212" class="handle">@jay</text>
+    <path d="M250 186 C282 158 312 158 342 186" fill="none" stroke="#4ade80" stroke-opacity="0.54" stroke-width="3" stroke-linecap="round"/>
+    <text x="70" y="316" class="question">Would Jay tell the truth if it hurt Maya?</text>
+    <text x="40" y="356" class="caption">7. Match Receipt</text>
+    <text x="40" y="382" class="note">Feels official, clean, good for feed trust/readability.</text>
+  </g>
+
+  <!-- 8. Versus Capsule -->
+  <g transform="translate(740 165)">
+    <rect class="panel" width="590" height="410" rx="34"/>
+    <rect x="38" y="42" width="514" height="108" rx="54" class="smoke"/>
+    <circle cx="94" cy="96" r="36" fill="#4ade80"/>
+    <circle cx="496" cy="96" r="36" fill="#10231c" stroke="#38bdf8" stroke-opacity="0.34" stroke-width="2"/>
+    <rect x="232" y="70" width="126" height="52" rx="26" fill="rgba(74,222,128,0.12)" stroke="rgba(74,222,128,0.34)"/>
+    <text x="267" y="102" fill="#86efac" font-family="Inter,Arial" font-size="15" font-weight="950">ASKED</text>
+    <text x="144" y="89" class="name">Maya</text>
+    <text x="144" y="114" class="handle">@maya</text>
+    <text x="378" y="89" class="name">Jay</text>
+    <text x="378" y="114" class="handle">@jay</text>
+    <rect x="58" y="190" width="474" height="86" rx="26" fill="rgba(255,255,255,0.045)" stroke="rgba(255,255,255,0.11)"/>
+    <text x="86" y="226" class="label">PUBLIC TRUTH PROMPT</text>
+    <text x="86" y="260" class="question">Jay’s answer is now on feed.</text>
+    <text x="40" y="356" class="caption">8. Versus Capsule</text>
+    <text x="40" y="382" class="note">Strong “who asked who” signal. Very social.</text>
+  </g>
+
+  <!-- 9. Story Ring Header -->
+  <g transform="translate(70 625)">
+    <rect class="panel" width="590" height="410" rx="34"/>
+    <rect x="42" y="38" width="506" height="194" rx="34" fill="rgba(5,12,9,0.72)" stroke="rgba(255,255,255,0.11)"/>
+    <circle cx="190" cy="111" r="52" fill="none" stroke="url(#green)" stroke-width="5"/>
+    <circle cx="190" cy="111" r="40" fill="#4ade80"/>
+    <circle cx="400" cy="111" r="52" fill="none" stroke="url(#cyan)" stroke-width="5" opacity="0.72"/>
+    <circle cx="400" cy="111" r="40" fill="#10231c"/>
+    <text x="160" y="188" class="name">Maya</text>
+    <text x="373" y="188" class="name">Jay</text>
+    <text x="252" y="112" class="label">TRUTH</text>
+    <text x="236" y="137" class="handle">feed prompt</text>
+    <rect x="76" y="268" width="438" height="2" fill="url(#line)"/>
+    <text x="84" y="308" class="question">Maya asked. Jay answered.</text>
+    <text x="40" y="356" class="caption">9. Story Ring Header</text>
+    <text x="40" y="382" class="note">Instagram-like, familiar for friend feed content.</text>
+  </g>
+
+  <!-- 10. Compact News Ticker -->
+  <g transform="translate(740 625)">
+    <rect class="panel" width="590" height="410" rx="34"/>
+    <rect x="36" y="42" width="518" height="62" rx="22" fill="#07120e" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="54" y="58" width="102" height="30" rx="15" fill="url(#green)"/>
+    <text x="80" y="78" fill="#051008" font-family="Inter,Arial" font-size="12" font-weight="950">TRUTH</text>
+    <text x="176" y="79" class="name">Maya</text>
+    <text x="236" y="79" class="handle">asked</text>
+    <text x="286" y="79" class="name">Jay</text>
+    <circle cx="504" cy="73" r="6" fill="#4ade80" filter="url(#glow)"/>
+    <rect x="56" y="142" width="478" height="136" rx="30" class="glass"/>
+    <text x="86" y="188" class="label">FRIENDS CAN VOTE</text>
+    <text x="86" y="230" class="question">Is Jay telling the truth?</text>
+    <text x="40" y="356" class="caption">10. Compact News Ticker</text>
+    <text x="40" y="382" class="note">Best when vertical space is precious.</text>
+  </g>
+
+  <!-- 11. Split Ledger -->
+  <g transform="translate(70 1085)">
+    <rect class="panel" width="590" height="410" rx="34"/>
+    <rect x="42" y="42" width="246" height="152" rx="30" class="glass"/>
+    <rect x="302" y="42" width="246" height="152" rx="30" class="glass"/>
+    <text x="68" y="76" class="handle">CHALLENGER</text>
+    <text x="328" y="76" class="handle">RECEIVER</text>
+    <circle cx="92" cy="126" r="28" fill="#4ade80"/>
+    <circle cx="352" cy="126" r="28" fill="#10231c" stroke="#38bdf8" stroke-opacity="0.38" stroke-width="2"/>
+    <text x="132" y="120" class="name">Maya</text>
+    <text x="132" y="146" class="handle">@maya</text>
+    <text x="392" y="120" class="name">Jay</text>
+    <text x="392" y="146" class="handle">@jay</text>
+    <rect x="72" y="226" width="446" height="58" rx="29" fill="rgba(74,222,128,0.10)" stroke="rgba(74,222,128,0.24)"/>
+    <text x="168" y="263" class="label">MAYA ASKED JAY A TRUTH</text>
+    <text x="40" y="356" class="caption">11. Split Ledger</text>
+    <text x="40" y="382" class="note">Very clear for feed, slightly more formal.</text>
+  </g>
+
+  <!-- 12. Cinematic Stamp -->
+  <g transform="translate(740 1085)">
+    <rect class="panel" width="590" height="410" rx="34"/>
+    <circle cx="482" cy="68" r="126" fill="#4ade80" opacity="0.08"/>
+    <rect x="50" y="50" width="236" height="48" rx="24" fill="rgba(255,255,255,0.055)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="76" y="80" class="label">TRUTH DROP</text>
+    <text x="52" y="154" fill="#ffffff" font-family="Inter,Arial" font-size="38" font-weight="950">Maya</text>
+    <text x="52" y="196" fill="#86efac" font-family="Inter,Arial" font-size="22" font-weight="900">asked Jay</text>
+    <rect x="352" y="120" width="144" height="54" rx="27" fill="url(#green)" filter="url(#glow)"/>
+    <text x="391" y="154" fill="#061006" font-family="Inter,Arial" font-size="16" font-weight="950">VIEW</text>
+    <rect x="52" y="246" width="486" height="2" fill="url(#line)"/>
+    <text x="52" y="300" class="question">Friends decide: Truth or Lie.</text>
+    <text x="40" y="356" class="caption">12. Cinematic Stamp</text>
+    <text x="40" y="382" class="note">Boldest, most premium, good for first card impact.</text>
+  </g>
+
+  <text x="70" y="1570" fill="#f8fafc" font-family="Inter,Arial" font-size="26" font-weight="900">Best Picks</text>
+  <text x="70" y="1610" fill="#9fb3a8" font-family="Inter,Arial" font-size="18" font-weight="650">For feed clarity: 7, 8, or 11. For modern social feel: 9 or 10. For a premium first-card moment: 12.</text>
+</svg>

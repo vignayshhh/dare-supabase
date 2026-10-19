@@ -24,14 +24,10 @@ export interface PresenceStore {
   updatePresence: (userId: string, updates: any) => Promise<void>;
   getUserPresence: (userId: string) => Promise<Presence | null>;
   getOnlineFriends: (userId: string) => Promise<void>;
-  trackProfileView: (viewerId: string, profileId: string) => Promise<void>;
-  stopProfileView: (viewerId: string) => Promise<void>;
   trackTypingInChat: (userId: string, chatPartnerId: string) => Promise<void>;
   stopTypingInChat: (userId: string, chatPartnerId: string) => Promise<void>;
-  setGhostMode: (userId: string, enabled: boolean) => Promise<void>;
   goOffline: (userId: string) => Promise<void>;
   getWhoUserIsChattingWith: (userId: string) => Promise<string | null>;
-  getProfileViewers: (profileId: string) => Promise<void>;
   isUserBeingIgnored: (userId: string, targetUserId: string) => Promise<boolean>;
   getPresenceStats: (userId: string) => Promise<void>;
   getBulkPresence: (userIds: string[]) => Promise<Presence[]>;
@@ -47,7 +43,6 @@ export interface PresenceStore {
 
   // Computed values
   isOnline: boolean;
-  isGhostMode: boolean;
   isTyping: boolean;
   onlineFriendsCount: number;
   profileViewersCount: number;
@@ -68,12 +63,9 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
     return get().userPresence?.is_online || false;
   },
 
-  get isGhostMode() {
-    return false; // Ghost mode not implemented in Firebase version
-  },
 
   get isTyping() {
-    return false; // Typing tracking not implemented in Firebase version
+    return false; // Typing tracking not implemented in Supabase version
   },
 
   get onlineFriendsCount() {
@@ -87,7 +79,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
   // Actions
   initializePresence: (userId: string) => {
     try {
-      // Presence initialization not implemented in Firebase version
+      // Presence initialization not implemented in Supabase version
       console.log(`Presence initialized for user ${userId}`);
     } catch (error) {
       console.error("Error initializing presence:", error);
@@ -96,7 +88,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   updatePresence: async (userId: string, updates: any) => {
     try {
-      // Presence updates not implemented in Firebase version
+      // Presence updates not implemented in Supabase version
       console.log(`Presence updated for user ${userId}:`, updates);
     } catch (error) {
       console.error("Error updating presence:", error);
@@ -105,7 +97,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   getUserPresence: async (userId: string) => {
     try {
-      // Get user presence not implemented in Firebase version
+      // Get user presence not implemented in Supabase version
       console.log(`Getting presence for user ${userId}`);
       return null;
     } catch (error) {
@@ -116,34 +108,16 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   getOnlineFriends: async (userId: string) => {
     try {
-      // Get online friends not implemented in Firebase version
+      // Get online friends not implemented in Supabase version
       console.log(`Getting online friends for user ${userId}`);
     } catch (error) {
       console.error("Error getting online friends:", error);
     }
   },
 
-  trackProfileView: async (viewerId: string, profileId: string) => {
-    try {
-      // Profile view tracking not implemented in Firebase version
-      console.log(`Profile view tracked: ${viewerId} viewed ${profileId}`);
-    } catch (error) {
-      console.error("Error tracking profile view:", error);
-    }
-  },
-
-  stopProfileView: async (viewerId: string) => {
-    try {
-      // Profile view stopping not implemented in Firebase version
-      console.log(`Profile view stopped: ${viewerId}`);
-    } catch (error) {
-      console.error("Error stopping profile view:", error);
-    }
-  },
-
   trackTypingInChat: async (userId: string, chatPartnerId: string) => {
     try {
-      // Typing tracking not implemented in Firebase version
+      // Typing tracking not implemented in Supabase version
       console.log(`Typing tracked: ${userId} typing to ${chatPartnerId}`);
     } catch (error) {
       console.error("Error tracking typing:", error);
@@ -152,25 +126,17 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   stopTypingInChat: async (userId: string, chatPartnerId: string) => {
     try {
-      // Typing stopping not implemented in Firebase version
+      // Typing stopping not implemented in Supabase version
       console.log(`Typing stopped: ${userId} stopped typing to ${chatPartnerId}`);
     } catch (error) {
       console.error("Error stopping typing:", error);
     }
   },
 
-  setGhostMode: async (userId: string, enabled: boolean) => {
-    try {
-      // Ghost mode setting not implemented in Firebase version
-      console.log(`Ghost mode set to ${enabled} for user ${userId}`);
-    } catch (error) {
-      console.error("Error setting ghost mode:", error);
-    }
-  },
 
   goOffline: async (userId: string) => {
     try {
-      // Going offline not implemented in Firebase version
+      // Going offline not implemented in Supabase version
       console.log(`User ${userId} going offline`);
     } catch (error) {
       console.error("Error going offline:", error);
@@ -179,7 +145,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   getWhoUserIsChattingWith: async (userId: string) => {
     try {
-      // Get chat partner not implemented in Firebase version
+      // Get chat partner not implemented in Supabase version
       console.log(`Getting chat partner for user ${userId}`);
       return null;
     } catch (error) {
@@ -190,7 +156,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   getProfileViewers: async (profileId: string) => {
     try {
-      // Get profile viewers not implemented in Firebase version
+      // Get profile viewers not implemented in Supabase version
       console.log(`Getting profile viewers for ${profileId}`);
     } catch (error) {
       console.error("Error getting profile viewers:", error);
@@ -199,7 +165,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   isUserBeingIgnored: async (userId: string, targetUserId: string) => {
     try {
-      // Check if user is being ignored not implemented in Firebase version
+      // Check if user is being ignored not implemented in Supabase version
       console.log(`Checking if ${userId} is being ignored by ${targetUserId}`);
       return false;
     } catch (error) {
@@ -210,7 +176,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   getPresenceStats: async (userId: string) => {
     try {
-      // Get presence stats not implemented in Firebase version
+      // Get presence stats not implemented in Supabase version
       console.log(`Getting presence stats for user ${userId}`);
     } catch (error) {
       console.error("Error getting presence stats:", error);
@@ -219,7 +185,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   getBulkPresence: async (userIds: string[]) => {
     try {
-      // Get bulk presence not implemented in Firebase version
+      // Get bulk presence not implemented in Supabase version
       console.log(`Getting bulk presence for users: ${userIds.join(", ")}`);
       return [];
     } catch (error) {
@@ -230,7 +196,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
 
   getOnlineUsersNotFriends: async (userId: string, limit?: number) => {
     try {
-      // Get online users not friends not implemented in Firebase version
+      // Get online users not friends not implemented in Supabase version
       console.log(`Getting online users not friends for user ${userId}`);
     } catch (error) {
       console.error("Error getting online users not friends:", error);
@@ -238,7 +204,7 @@ export const usePresenceStore = create<PresenceStore>((set, get) => ({
   },
 
   cleanup: () => {
-    // Cleanup not implemented in Firebase version
+    // Cleanup not implemented in Supabase version
     console.log("Presence cleanup completed");
   },
 

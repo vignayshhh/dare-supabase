@@ -1,0 +1,75 @@
+SUPABASE USAGE OPTIMIZATION IMPLEMENTATION RECORD
+=================================================
+
+Scope
+-----
+This file records implementation of the approved Supabase usage plan, findings 2-16.
+Finding 1 remains excluded: the Supabase-backed Redis-style cache remains the cache backend.
+Existing uncommitted work was preserved. No applied migration was edited, no materialized-feed
+table was dropped, and historical Storage objects are not deleted.
+
+Implemented foundations
+-----------------------
+1. Resource accounting now classifies REST reads, RPCs, Auth calls, Storage uploads, Storage
+   signing, other Storage operations, failures, and response bytes. It accepts string, URL,
+   and Request fetch inputs; it does not clone media responses. Existing metric names remain.
+2. Circle request clients now use the shared fetch instrumenter. Circle member IDs are memoized
+   as one request-local Promise, preventing repeated audience reads inside one request.
+3. Fresh Auth verification remains authoritative. Duplicate verification calls for one Request
+   share one in-flight Promise; verification is never cached across Requests and admin checks
+   still run after fresh verification.
+4. Added single-flight refresh controller with coalesced requests, dirty trailing refresh,
+   visibility gating, abort, disposal, and last-good-snapshot behavior.
+
+Cache and feed changes
+----------------------
+5. Added bounded cache setMany/deleteMany/incrementMany operations. Batches are capped at 100,
+   keys are deduplicated, and process memory updates only after successful backend operations.
+6. Added service-role-only increment_cache_entries RPC and additive cache/feed indexes.
+7. Circle feed cache generations now use persistent keys feed-generation:v2:<circle>:<kind>;
+   page entries remain viewer-specific. Circle mutations increment each affected generation once,
+   without per-member RPC loops or obsolete pattern deletes.
+8. Profile cache population now writes through one bounded setMany operation. Feed invalidation
+   removes direct profile/friend keys in one deleteMany operation.
+9. Circle-scoped post/truth/dare publishing no longer writes feed_items or feed_fanout_jobs;
+   it invalidates the relevant shared generation. Legacy unscoped fanout helpers remain for
+   compatibility and historical maintenance reporting.
+
+Media and interaction changes
+-----------------------------
+10. Server signed-media hydration now normalizes object identity by viewer, Circle, bucket,
+    and path; concurrent requests share in-flight signing and a bounded 1,000-entry cache.
+    Expiration is read from the signed token when available.
+11. Community proof upload now uses uploadOptimizedMedia, preserving dare-proofs bucket routing,
+    existing 100MB/type limits, and compatible success/error shape. Image proofs receive the
+    optimized asset URL; video originals remain unchanged.
+12. Dare voter profile hydration now deduplicates IDs and performs profiles IN queries in batches
+    of 100, reusing the existing five-minute process cache. Headline aggregate snapshot RPC work
+    remains a follow-up migration item because existing deployed schemas vary.
+
+Database deployment
+-------------------
+Migration 20261204000000_usage_optimization_foundations.sql is additive. It creates an expiration
+index, a Circle/created_at/id feed index, and a fixed-search-path service-role batch cache increment
+function. Deploy it before application code that calls increment_cache_entries. Keep older RPCs
+available through client rollout and rollback.
+
+Remaining planned work
+----------------------
+The implementation now also includes truth snapshots/revisions, targeted drama card refreshes,
+bounded community-chat event application, targeted inbox RPCs/pagination/events, delta counter
+triggers, Circle keyset feed indexes, tracked new-upload registry/cleanup/report routes, and daily
+maintenance scheduling. Remaining production work is deployment validation: run the complete
+migration chain in an isolated database, verify private Broadcast topic policies against deployed
+RLS, attach registered assets inside each authoritative content mutation, capture query plans on
+representative data, and collect before/after resource-envelope measurements. These checks must
+retain Circle isolation, fresh authorization, complete detail access, realtime recovery, media
+limits, and report-only treatment of historical objects.
+
+Verification
+------------
+Run npm run type-check, npm run lint, targeted tests, npm run build, npm run audit:supabase, then
+database integration tests against a complete isolated migration sequence. Compare baseline and
+post-rollout counts for REST reads, RPCs, Auth, Storage signing/upload, realtime recovery, cache
+hits/misses, response bytes, and failed operations. Do not claim savings percentages without those
+measurements.

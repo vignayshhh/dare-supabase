@@ -7,7 +7,7 @@ import { userDocSubscriptionService } from "../services/userDocSubscriptionServi
  *
  * Features:
  * - Checks avatarStore cache first for instant display
- * - Fetches from Firestore if not cached
+ * - Fetches from Postgres if not cached
  * - Subscribes to real-time avatar updates
  * - Automatically updates when user changes their avatar
  *
@@ -30,24 +30,24 @@ export function useUserAvatar(userId: string | undefined) {
 
     // Check cache first for instant display
     const cachedAvatar = getStoredAvatar(userId);
-    if (cachedAvatar) {
+    // Persisted Supabase signed links are short-lived. Do not paint a cached
+    // signed URL before the profile subscription can refresh it; otherwise the
+    // browser emits a guaranteed failed request for the expired link first.
+    const cachedAvatarIsSigned = cachedAvatar.includes("/storage/v1/object/sign/");
+    if (cachedAvatar && !cachedAvatarIsSigned) {
       setAvatar(cachedAvatar);
       setLoading(false);
     }
 
-    const unsubscribe = userDocSubscriptionService.subscribe(userId, (data) => {
+    let active = true;
+    void userDocSubscriptionService.load(userId).then((data) => {
+      if (!active) return;
       const avatarUrl = data?.avatarUrl || "";
-
       setAvatar(avatarUrl);
-      if (avatarUrl) {
-        useAvatarStore.getState().setUserAvatar(userId, avatarUrl);
-      }
+      if (avatarUrl) useAvatarStore.getState().setUserAvatar(userId, avatarUrl);
       setLoading(false);
     });
-
-    return () => {
-      unsubscribe();
-    };
+    return () => { active = false; };
   }, [userId]);
 
   return { avatar, loading };
@@ -72,21 +72,22 @@ export function useUserAvatars(userIds: string[]) {
       return;
     }
 
-    const unsubscribers: (() => void)[] = [];
     const avatarMap: Record<string, string> = {};
+    let active = true;
 
     // Check cache first using getState() to avoid unstable deps
     const { getStoredAvatar } = useAvatarStore.getState();
     userIds.forEach((userId) => {
       const cached = getStoredAvatar(userId);
-      if (cached) {
+      if (cached && !cached.includes("/storage/v1/object/sign/")) {
         avatarMap[userId] = cached;
       }
     });
     setAvatars({ ...avatarMap });
 
     userIds.forEach((userId) => {
-      const unsubscribe = userDocSubscriptionService.subscribe(userId, (data) => {
+      void userDocSubscriptionService.load(userId).then((data) => {
+        if (!active) return;
         avatarMap[userId] = data?.avatarUrl || "";
         setAvatars({ ...avatarMap });
 
@@ -94,12 +95,11 @@ export function useUserAvatars(userIds: string[]) {
           useAvatarStore.getState().setUserAvatar(userId, data.avatarUrl);
         }
       });
-      unsubscribers.push(unsubscribe);
     });
     setLoading(false);
 
     return () => {
-      unsubscribers.forEach((unsub) => unsub());
+      active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userIdsKey]);

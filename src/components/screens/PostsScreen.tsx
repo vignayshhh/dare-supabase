@@ -18,7 +18,6 @@ import { useMessagingStore } from "../../stores/useMessagingStore";
 import { formatTimeAgo } from "../../utils/timeFormat";
 import { Avatar } from "../ui/Avatar";
 import { CommentSection, type CommentItem } from "../ui/CommentSection";
-import { useSurveillance } from "../../hooks/useSurveillance";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock";
 import { useProfileDataStore } from "../../stores/profileDataStore";
 import { friendsService } from "../../middleware/services/friends.service";
@@ -254,11 +253,6 @@ export function PostsScreen({
   const currentDisplayName = useProfileDataStore((s) => s.currentDisplayName);
   const currentUsername = useProfileDataStore((s) => s.currentUsername);
   const currentProfileUserId = useProfileDataStore((s) => s.currentUserId);
-
-  // Surveillance setup
-  const derivedTargetUserId =
-    targetUserId || posts[0]?.author?.id || user?.id || "";
-  useSurveillance({ targetUserId: derivedTargetUserId, screen: "posts" });
 
   const {
     posts: feedPosts,

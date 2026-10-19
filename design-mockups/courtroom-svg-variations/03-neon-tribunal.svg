@@ -1,0 +1,174 @@
+<svg width="390" height="844" viewBox="0 0 390 844" fill="none" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, -apple-system, sans-serif">
+  <!-- ============================================================
+       CONCEPT 03 — NEON TRIBUNAL (VS BATTLE MODE)
+       Courtroom as a versus arena: diagonal rose/sky split,
+       big VS badge, tug-of-war verdict bar as the hero element,
+       judge floats above as referee. Esports energy.
+  ============================================================ -->
+  <defs>
+    <linearGradient id="ntBg" x1="0" y1="0" x2="0" y2="844" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0a0d0b"/>
+      <stop offset="1" stop-color="#050705"/>
+    </linearGradient>
+    <linearGradient id="ntRose" x1="0" y1="0" x2="1" y2="0.3">
+      <stop offset="0" stop-color="#fb7185" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#fb7185" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="ntSky" x1="1" y1="0" x2="0" y2="0.3">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="ntSlam" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <g id="ntBody" stroke="#ffffff" stroke-opacity="0.78" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="0" x2="0" y2="20"/>
+      <line x1="0" y1="6" x2="-11" y2="14"/>
+      <line x1="0" y1="6" x2="11" y2="14"/>
+      <line x1="0" y1="20" x2="-9" y2="33"/>
+      <line x1="0" y1="20" x2="9" y2="33"/>
+    </g>
+    <g id="ntBodyFight" stroke="#ffffff" stroke-opacity="0.9" stroke-width="3" stroke-linecap="round">
+      <line x1="0" y1="0" x2="0" y2="20"/>
+      <line x1="0" y1="7" x2="13" y2="1"/>
+      <line x1="0" y1="9" x2="-10" y2="16"/>
+      <line x1="0" y1="20" x2="-9" y2="33"/>
+      <line x1="0" y1="20" x2="10" y2="31"/>
+    </g>
+  </defs>
+
+  <rect width="390" height="844" fill="url(#ntBg)"/>
+  <!-- diagonal arena split -->
+  <path d="M0 130 L232 130 L158 700 L0 700 Z" fill="url(#ntRose)"/>
+  <path d="M232 130 L390 130 L390 700 L158 700 Z" fill="url(#ntSky)"/>
+  <line x1="232" y1="130" x2="158" y2="700" stroke="#facc15" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="3 7"/>
+
+  <!-- status bar -->
+  <text x="30" y="34" fill="#fff" font-size="13" font-weight="700">9:41</text>
+  <rect x="336" y="24" width="22" height="11" rx="3" stroke="#ffffff66"/>
+  <rect x="338" y="26" width="14" height="7" rx="1.5" fill="#4ade80"/>
+
+  <!-- header -->
+  <rect x="16" y="54" width="36" height="36" rx="14" fill="#ffffff0a" stroke="#ffffff14"/>
+  <path d="M40 72 H30 M34 67 l-5 5 5 5" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="195" y="70" text-anchor="middle" fill="#fff" font-size="15" font-weight="900">FRIEND COURT · CASE #42</text>
+  <text x="195" y="88" text-anchor="middle" fill="#7c8a80" font-size="10" font-weight="700">Who ruined the Goa trip? · round 2 of 5</text>
+  <rect x="318" y="54" width="52" height="22" rx="11" fill="#fb718522" stroke="#fb718566"/>
+  <text x="344" y="69" text-anchor="middle" fill="#fda4af" font-size="9" font-weight="900">● 14</text>
+
+  <!-- ── JUDGE floating referee ── -->
+  <g transform="translate(195,168)">
+    <circle r="26" fill="#facc15" opacity="0.12"/>
+    <circle r="17" fill="#facc15"/>
+    <circle r="14" fill="#2a2410"/>
+    <text y="5" text-anchor="middle" fill="#facc15" font-size="13" font-weight="900">P</text>
+    <use href="#ntBody" y="17" transform="scale(0.85)"/>
+    <rect x="-42" y="52" width="84" height="16" rx="8" fill="#00000080" stroke="#facc1533"/>
+    <text y="64" text-anchor="middle" fill="#facc15" font-size="8.5" font-weight="900">JUDGE PRIYA ⚖</text>
+  </g>
+
+  <!-- team headers -->
+  <text x="96" y="264" text-anchor="middle" fill="#fda4af" font-size="12" font-weight="900" letter-spacing="2">PROSECUTION</text>
+  <text x="294" y="264" text-anchor="middle" fill="#7dd3fc" font-size="12" font-weight="900" letter-spacing="2">DEFENSE</text>
+
+  <!-- VS badge -->
+  <g transform="translate(195,340)">
+    <circle r="30" fill="#0b0f0a" stroke="#facc15" stroke-width="2.5"/>
+    <circle r="30" fill="#facc15" opacity="0.08"/>
+    <text y="8" text-anchor="middle" fill="#facc15" font-size="22" font-weight="900" font-style="italic">VS</text>
+  </g>
+
+  <!-- ── left team: fighting stance leader ── -->
+  <g transform="translate(96,330)">
+    <g transform="translate(0,-14)">
+      <circle r="22" fill="#fb7185" opacity="0.28"/>
+      <circle r="17" fill="#fb7185"/>
+      <circle r="14" fill="#2a1216"/>
+      <text y="5" text-anchor="middle" fill="#fda4af" font-size="13" font-weight="900">A</text>
+      <use href="#ntBodyFight" y="17"/>
+    </g>
+    <rect x="-32" y="40" width="64" height="15" rx="7.5" fill="#00000080" stroke="#fb718544"/>
+    <text y="51" text-anchor="middle" fill="#fff" font-size="8.5" font-weight="900">Aakash 🗡</text>
+    <g transform="translate(-52,74) scale(0.72)">
+      <circle r="15" fill="#fb7185"/><circle r="12" fill="#2a1216"/>
+      <text y="4" text-anchor="middle" fill="#fda4af" font-size="11" font-weight="900">M</text>
+      <use href="#ntBody" y="15"/>
+    </g>
+    <g transform="translate(6,84) scale(0.72)">
+      <circle r="15" fill="#c084fc"/><circle r="12" fill="#231328"/>
+      <text y="4" text-anchor="middle" fill="#e9d5ff" font-size="11" font-weight="900">K</text>
+      <use href="#ntBody" y="15"/>
+    </g>
+  </g>
+
+  <!-- ── right team: leader shielding ── -->
+  <g transform="translate(294,330)">
+    <g transform="translate(0,-14)">
+      <circle r="22" fill="#38bdf8" opacity="0.28"/>
+      <circle r="17" fill="#38bdf8"/>
+      <circle r="14" fill="#0e1f2a"/>
+      <text y="5" text-anchor="middle" fill="#7dd3fc" font-size="13" font-weight="900">R</text>
+      <g stroke="#ffffff" stroke-opacity="0.9" stroke-width="3" stroke-linecap="round">
+        <line x1="0" y1="17" x2="0" y2="37"/>
+        <line x1="0" y1="24" x2="-13" y2="18"/>
+        <line x1="0" y1="26" x2="-11" y2="30"/>
+        <line x1="0" y1="37" x2="-10" y2="48"/>
+        <line x1="0" y1="37" x2="9" y2="50"/>
+      </g>
+      <!-- shield -->
+      <path d="M-24 14 q-8 8 0 20 q8 -4 8 -12 q0 -6 -8 -8Z" fill="#38bdf833" stroke="#38bdf8" stroke-width="1.5"/>
+    </g>
+    <rect x="-30" y="40" width="60" height="15" rx="7.5" fill="#00000080" stroke="#38bdf844"/>
+    <text y="51" text-anchor="middle" fill="#fff" font-size="8.5" font-weight="900">Rahul 🛡</text>
+    <g transform="translate(-6,84) scale(0.72)">
+      <circle r="15" fill="#38bdf8"/><circle r="12" fill="#0e1f2a"/>
+      <text y="4" text-anchor="middle" fill="#7dd3fc" font-size="11" font-weight="900">S</text>
+      <use href="#ntBody" y="15"/>
+    </g>
+    <g transform="translate(52,74) scale(0.72)">
+      <circle r="15" fill="#4ade80"/><circle r="12" fill="#0f2416"/>
+      <text y="4" text-anchor="middle" fill="#bbf7d0" font-size="11" font-weight="900">D</text>
+      <use href="#ntBody" y="15"/>
+    </g>
+  </g>
+
+  <!-- ── HERO verdict tug-of-war ── -->
+  <text x="195" y="500" text-anchor="middle" fill="#7c8a80" font-size="9" font-weight="900" letter-spacing="3">LIVE VERDICT METER</text>
+  <rect x="28" y="512" width="334" height="30" rx="15" fill="#ffffff08" stroke="#ffffff12"/>
+  <rect x="28" y="512" width="190" height="30" rx="15" fill="#fb7185"/>
+  <rect x="203" y="512" width="145" height="30" fill="#38bdf8"/>
+  <rect x="334" y="512" width="28" height="30" rx="15" fill="#38bdf8"/>
+  <!-- flame marker at the front line -->
+  <circle cx="218" cy="527" r="17" fill="#0b0f0a" stroke="#facc15" stroke-width="2.5"/>
+  <text x="218" y="533" text-anchor="middle" font-size="14">🔥</text>
+  <text x="44" y="532" fill="#2a1216" font-size="12" font-weight="900">GUILTY 57%</text>
+  <text x="346" y="532" text-anchor="end" fill="#0e1f2a" font-size="12" font-weight="900">43% FREE</text>
+  <text x="40" y="562" fill="#fda4af" font-size="9" font-weight="800">8 votes · streak +3 🔥</text>
+  <text x="350" y="562" text-anchor="end" fill="#7dd3fc" font-size="9" font-weight="800">6 votes · comeback? 👀</text>
+
+  <!-- vote buttons -->
+  <rect x="28" y="576" width="163" height="46" rx="23" fill="#fb718518" stroke="#fb7185" stroke-width="2"/>
+  <text x="109" y="605" text-anchor="middle" fill="#fda4af" font-size="13" font-weight="900">VOTE GUILTY 😤</text>
+  <rect x="199" y="576" width="163" height="46" rx="23" fill="#38bdf818" stroke="#38bdf866"/>
+  <text x="280" y="605" text-anchor="middle" fill="#7dd3fc" font-size="13" font-weight="900">VOTE FREE 😇</text>
+
+  <!-- live argument feed -->
+  <rect x="20" y="638" width="350" height="34" rx="12" fill="#ffffff06" stroke="#ffffff10"/>
+  <circle cx="40" cy="655" r="9" fill="#fb7185"/><circle cx="40" cy="655" r="7" fill="#2a1216"/>
+  <text x="40" y="658" text-anchor="middle" fill="#fda4af" font-size="7.5" font-weight="900">M</text>
+  <text x="56" y="659" fill="#e5e7eb" font-size="11" font-weight="600">Meera: "He literally slept through checkout" 💀</text>
+  <rect x="20" y="678" width="350" height="34" rx="12" fill="#ffffff06" stroke="#ffffff10"/>
+  <circle cx="40" cy="695" r="9" fill="#38bdf8"/><circle cx="40" cy="695" r="7" fill="#0e1f2a"/>
+  <text x="40" y="698" text-anchor="middle" fill="#7dd3fc" font-size="7.5" font-weight="900">S</text>
+  <text x="56" y="699" fill="#e5e7eb" font-size="11" font-weight="600">Sana: "The alarm app crashed, not his fault!!"</text>
+
+  <!-- composer -->
+  <rect x="20" y="732" width="244" height="48" rx="24" fill="#ffffff0a" stroke="#4ade8055"/>
+  <text x="40" y="762" fill="#94a3b8" font-size="14">📎</text>
+  <text x="64" y="761" fill="#5b6b60" font-size="13" font-weight="600">Drop your evidence…</text>
+  <rect x="272" y="732" width="98" height="48" rx="24" fill="url(#ntSlam)"/>
+  <text x="321" y="762" text-anchor="middle" fill="#04170c" font-size="14" font-weight="900">SLAM ⚡</text>
+
+  <rect x="128" y="822" width="134" height="5" rx="2.5" fill="#ffffff33"/>
+</svg>

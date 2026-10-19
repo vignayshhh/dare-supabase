@@ -1,7 +1,7 @@
 /**
  * Minimal authenticated-fetch helper for Next.js API routes.
  *
- * Attaches the Firebase ID token (Bearer), the double-submit CSRF
+ * Attaches the Supabase access token (Bearer), the double-submit CSRF
  * token (`x-csrf-token`), and — when Turnstile is enabled — the
  * Cloudflare Turnstile response token. Keeps callers ignorant of the
  * security pipeline so adding Turnstile later is transparent.
@@ -9,8 +9,12 @@
  * Usage:
  *   await apiFetch("/api/posts/abc/like", { method: "POST" });
  */
-import { auth } from "@/backend/lib/firebase";
-import type { User } from "firebase/auth";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createUuid } from "@/utils/uuid";
+import { recordResourceMetric } from "@/lib/observability/resourceMetrics";
+
+import { getActiveCircleId, getActiveEventId } from "@/lib/circleContext";
+import { getChatSource } from "@/lib/chatContext";
 
 function readCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -27,10 +31,7 @@ function ensureCsrfToken(): string | null {
   const existing = readCookie("csrf-token");
   if (existing || typeof document === "undefined") return existing;
 
-  const token =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const token = createUuid();
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
   const sameSite = window.location.protocol === "https:" ? "Strict" : "Lax";
   document.cookie = `csrf-token=${encodeURIComponent(
@@ -40,23 +41,10 @@ function ensureCsrfToken(): string | null {
   return token;
 }
 
-async function waitForIdToken(timeoutMs = 5000): Promise<string> {
-  const user = auth.currentUser;
-  if (user) return user.getIdToken();
-  // Wait briefly for auth to hydrate on first load.
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      unsub();
-      reject(new Error("Not signed in"));
-    }, timeoutMs);
-    const unsub = auth.onAuthStateChanged((u: User | null) => {
-      if (u) {
-        clearTimeout(timer);
-        unsub();
-        u.getIdToken().then(resolve, reject);
-      }
-    });
-  });
+async function waitForIdToken(): Promise<string> {
+  const { data, error } = await getSupabaseBrowserClient().auth.getSession();
+  if (error || !data.session?.access_token) throw new Error("Not signed in");
+  return data.session.access_token;
 }
 
 export interface ApiFetchOptions extends RequestInit {
@@ -77,6 +65,10 @@ export async function apiFetch<T = unknown>(
   path: string,
   opts: ApiFetchOptions = {},
 ): Promise<T> {
+  const circleId = getActiveCircleId();
+  const chatSourceId = getChatSource()?.id;
+  const eventId = getActiveEventId();
+  recordResourceMetric("api_requests");
   const token = await waitForIdToken();
   const csrf = ensureCsrfToken();
   // Window.turnstile widget stashes the latest response on window; pick
@@ -87,6 +79,9 @@ export async function apiFetch<T = unknown>(
       : undefined;
 
   const headers = new Headers(opts.headers);
+  if (chatSourceId && opts.method === 'POST' && /^\/api\/(dares|truth|drama)$/.test(path)) headers.set('x-chat-source-id', chatSourceId);
+  if (eventId) headers.set("x-event-id", eventId);
+  if (circleId) headers.set("x-circle-id", circleId);
   headers.set("Authorization", `Bearer ${token}`);
   if (csrf) headers.set("x-csrf-token", csrf);
   if (turnstile) headers.set("cf-turnstile-response", turnstile);
@@ -99,6 +94,7 @@ export async function apiFetch<T = unknown>(
     headers,
     credentials: "same-origin",
   });
+  if (circleId !== getActiveCircleId()) throw new DOMException("Circle changed", "AbortError");
   if (opts.raw) return res as unknown as T;
   if (!res.ok) {
     let detail = "";
@@ -110,8 +106,11 @@ export async function apiFetch<T = unknown>(
     throw new Error(`API ${res.status} ${path}: ${detail}`);
   }
   try {
-    return (await res.json()) as T;
-  } catch {
+    const data = (await res.json()) as T;
+    if (circleId !== getActiveCircleId()) throw new DOMException("Circle changed", "AbortError");
+    return data;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
     return undefined as unknown as T;
   }
 }

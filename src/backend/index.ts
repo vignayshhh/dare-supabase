@@ -8,5 +8,4 @@ export type { AuthUserEntity } from "./domain/entities";
 export type { DareEntity } from "./domain/entities";
 export type { UserProfileEntity } from "./domain/entities";
 export * from "./repositories";
-export * from "./lib";
 export * from "./utils";

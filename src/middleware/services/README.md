@@ -12,9 +12,9 @@ This directory contains the complete backend implementation following clean arch
 - **Purpose**: Pure business logic, no external dependencies
 
 ### 2. Repository Layer (`/repositories`)
-- **Implementation**: Firebase-specific data access
+- **Implementation**: Supabase-specific data access
 - **Mapping**: Converts between domain entities and database models
-- **Purpose**: Infrastructure layer, handles all Firebase operations
+- **Purpose**: Infrastructure layer, handles all Supabase operations
 
 ### 3. Service Layer (`/services`)
 - **Orchestration**: Business workflow coordination
@@ -23,14 +23,14 @@ This directory contains the complete backend implementation following clean arch
 - **Purpose**: Application layer, coordinates between domain and infrastructure
 
 ### 4. Infrastructure Layer (`/lib`)
-- **Firebase Config**: Database connection and setup
+- **Supabase Config**: Database connection and setup
 - **External Services**: Third-party integrations
 - **Purpose**: Low-level infrastructure concerns
 
 ## Key Principles
 
 ### UI-Agnostic Design
-- **No Firebase calls in UI components**
+- **No Supabase calls in UI components**
 - **No business logic in React components**
 - **Clean service interfaces**
 - **Typed DTOs for all data flow**
@@ -80,7 +80,6 @@ This directory contains the complete backend implementation following clean arch
 ### Presence Service (`presence.service.new.ts`)
 - Real-time online status
 - Profile viewing tracking
-- Ghost mode management
 
 ### Moderation Service (`moderation.service.new.ts`)
 - Content reporting
@@ -140,8 +139,8 @@ The new services are suffixed with `.new.ts` to avoid conflicts with existing im
 This implementation strictly follows the architectural requirements:
 
 - ✅ No backend logic in UI components
-- ✅ No direct Firebase calls in screens
-- ✅ No Firestore queries in UI
+- ✅ No direct Supabase calls in screens
+- ✅ No Postgres queries in UI
 - ✅ No business logic in React components
 - ✅ No coupling between component structure and data shape
 - ✅ UI is fully replaceable without touching backend

@@ -1,0 +1,244 @@
+<svg width="1800" height="1640" viewBox="0 0 1800 1640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="26" stdDeviation="30" flood-color="#000000" flood-opacity="0.48"/>
+    </filter>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="phone" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#07120b"/>
+      <stop offset="0.52" stop-color="#050806"/>
+      <stop offset="1" stop-color="#020302"/>
+    </linearGradient>
+    <linearGradient id="truth" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="lie" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#7f1d1d"/>
+      <stop offset="1" stop-color="#3a0b0b"/>
+    </linearGradient>
+    <radialGradient id="greenMist" cx="50%" cy="42%" r="62%">
+      <stop stop-color="#4ade8028"/>
+      <stop offset="0.58" stop-color="#4ade8008"/>
+      <stop offset="1" stop-color="#00000000"/>
+    </radialGradient>
+    <style>
+      .title { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 44px; font-weight: 950; fill: #fff; }
+      .subtitle { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 21px; font-weight: 650; fill: #94a3b8; }
+      .idea { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 21px; font-weight: 950; fill: #d7ffe6; letter-spacing: 1.4px; }
+      .tiny { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 12px; font-weight: 850; fill: #94a3b8; letter-spacing: 1px; }
+      .small { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 15px; font-weight: 760; fill: #a7b7ab; }
+      .copy { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 17px; font-weight: 780; fill: #dbe7dd; }
+      .big { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 28px; font-weight: 950; fill: #fff; }
+      .num { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 36px; font-weight: 950; fill: #fff; }
+      .chip { font-family: Inter, Segoe UI, Arial, sans-serif; font-size: 15px; font-weight: 950; fill: #061006; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1640" fill="#050806"/>
+  <text x="80" y="76" class="title">Truth Card Blank Space: Tension Area Ideas</text>
+  <text x="80" y="114" class="subtitle">Six SVG mock directions for the space between answer preview and the final Truth/Lie decision.</text>
+
+  <!-- Reusable card anatomy is repeated manually for portability. Each phone is 460x680. -->
+
+  <!-- 1 Friend Calls Split -->
+  <g transform="translate(80 170)" filter="url(#shadow)">
+    <rect width="460" height="680" rx="42" fill="url(#phone)" stroke="#ffffff16" stroke-width="2"/>
+    <rect width="460" height="680" rx="42" fill="url(#greenMist)"/>
+    <text x="230" y="58" text-anchor="middle" class="idea">FRIEND CALLS</text>
+    <circle cx="170" cy="112" r="28" fill="#19291f" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="206" y="94" width="48" height="28" rx="14" fill="#4ade8022" stroke="#4ade8045"/>
+    <text x="230" y="113" text-anchor="middle" class="tiny" fill="#86efac">ASKED</text>
+    <circle cx="290" cy="112" r="28" fill="#16211b" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="52" y="156" width="356" height="104" rx="24" fill="#101a13" stroke="#ffffff12"/>
+    <text x="76" y="191" class="tiny" fill="#86efac">THE QUESTION</text>
+    <text x="76" y="226" class="copy">Who was your almost?</text>
+    <rect x="84" y="282" width="324" height="92" rx="24" fill="#07100b" stroke="#4ade8034"/>
+    <text x="108" y="317" class="tiny" fill="#bbf7d0">ANSWER PREVIEW</text>
+    <text x="108" y="350" class="big">I still..</text>
+
+    <rect x="52" y="392" width="356" height="154" rx="28" fill="#ffffff08" stroke="#86efac22"/>
+    <text x="78" y="426" class="tiny">FRIENDS ARE CALLING IT</text>
+    <text x="102" y="477" text-anchor="middle" class="num" fill="#4ade80">61%</text>
+    <text x="358" y="477" text-anchor="middle" class="num" fill="#fca5a5">39%</text>
+    <circle cx="210" cy="466" r="5" fill="#86efac" filter="url(#glow)"/>
+    <circle cx="230" cy="458" r="6" fill="#ffffffaa"/>
+    <circle cx="250" cy="466" r="5" fill="#fca5a5" filter="url(#glow)"/>
+    <rect x="82" y="504" width="296" height="10" rx="5" fill="#ffffff14"/>
+    <rect x="82" y="504" width="180" height="10" rx="5" fill="#4ade80"/>
+    <rect x="262" y="504" width="116" height="10" rx="5" fill="#7f1d1d"/>
+    <text x="230" y="535" text-anchor="middle" class="small">Truth is ahead by 22</text>
+
+    <rect x="52" y="578" width="168" height="58" rx="20" fill="url(#truth)"/>
+    <text x="136" y="614" text-anchor="middle" class="chip">TRUTH</text>
+    <rect x="240" y="578" width="168" height="58" rx="20" fill="url(#lie)" stroke="#ff808030"/>
+    <text x="324" y="614" text-anchor="middle" class="chip" fill="#ffe4e6">LIE</text>
+  </g>
+
+  <!-- 2 Pulse Jury -->
+  <g transform="translate(670 170)" filter="url(#shadow)">
+    <rect width="460" height="680" rx="42" fill="url(#phone)" stroke="#ffffff16" stroke-width="2"/>
+    <rect width="460" height="680" rx="42" fill="url(#greenMist)"/>
+    <text x="230" y="58" text-anchor="middle" class="idea">PULSE JURY</text>
+    <circle cx="170" cy="112" r="28" fill="#19291f" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="206" y="94" width="48" height="28" rx="14" fill="#4ade8022" stroke="#4ade8045"/>
+    <text x="230" y="113" text-anchor="middle" class="tiny" fill="#86efac">ASKED</text>
+    <circle cx="290" cy="112" r="28" fill="#16211b" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="52" y="156" width="356" height="104" rx="24" fill="#101a13" stroke="#ffffff12"/>
+    <text x="76" y="191" class="tiny" fill="#86efac">THE QUESTION</text>
+    <text x="76" y="226" class="copy">Who was your almost?</text>
+    <rect x="84" y="282" width="324" height="92" rx="24" fill="#07100b" stroke="#4ade8034"/>
+    <text x="108" y="317" class="tiny" fill="#bbf7d0">ANSWER PREVIEW</text>
+    <text x="108" y="350" class="big">I still..</text>
+
+    <rect x="52" y="392" width="356" height="154" rx="28" fill="#06110c" stroke="#86efac20"/>
+    <text x="78" y="426" class="tiny">THE ROOM IS LEANING</text>
+    <path d="M78 492 C112 442 145 540 178 486 S244 446 278 492 S338 520 382 470" stroke="#4ade80" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#glow)"/>
+    <path d="M78 504 C118 520 154 456 188 508 S250 548 286 498 S338 448 382 512" stroke="#f87171" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.55"/>
+    <circle cx="288" cy="491" r="9" fill="#4ade80"/>
+    <text x="230" y="535" text-anchor="middle" class="small">Live pressure line</text>
+
+    <rect x="52" y="578" width="168" height="58" rx="20" fill="url(#truth)"/>
+    <text x="136" y="614" text-anchor="middle" class="chip">TRUTH</text>
+    <rect x="240" y="578" width="168" height="58" rx="20" fill="url(#lie)" stroke="#ff808030"/>
+    <text x="324" y="614" text-anchor="middle" class="chip" fill="#ffe4e6">LIE</text>
+  </g>
+
+  <!-- 3 Countdown Fuse -->
+  <g transform="translate(1260 170)" filter="url(#shadow)">
+    <rect width="460" height="680" rx="42" fill="url(#phone)" stroke="#ffffff16" stroke-width="2"/>
+    <rect width="460" height="680" rx="42" fill="url(#greenMist)"/>
+    <text x="230" y="58" text-anchor="middle" class="idea">COUNTDOWN FUSE</text>
+    <circle cx="170" cy="112" r="28" fill="#19291f" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="206" y="94" width="48" height="28" rx="14" fill="#4ade8022" stroke="#4ade8045"/>
+    <text x="230" y="113" text-anchor="middle" class="tiny" fill="#86efac">ASKED</text>
+    <circle cx="290" cy="112" r="28" fill="#16211b" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="52" y="156" width="356" height="104" rx="24" fill="#101a13" stroke="#ffffff12"/>
+    <text x="76" y="191" class="tiny" fill="#86efac">THE QUESTION</text>
+    <text x="76" y="226" class="copy">Who was your almost?</text>
+    <rect x="84" y="282" width="324" height="92" rx="24" fill="#07100b" stroke="#4ade8034"/>
+    <text x="108" y="317" class="tiny" fill="#bbf7d0">ANSWER PREVIEW</text>
+    <text x="108" y="350" class="big">I still..</text>
+
+    <rect x="52" y="392" width="356" height="154" rx="28" fill="#ffffff08" stroke="#86efac22"/>
+    <text x="78" y="426" class="tiny">VOTING CLOSES IN</text>
+    <circle cx="230" cy="486" r="48" stroke="#ffffff18" stroke-width="10"/>
+    <path d="M230 438 A48 48 0 1 1 186 506" stroke="#4ade80" stroke-width="10" stroke-linecap="round" fill="none" filter="url(#glow)"/>
+    <text x="230" y="497" text-anchor="middle" class="num">23s</text>
+    <path d="M118 505 C156 497 166 462 202 482" stroke="#4ade8060" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="118" cy="505" r="5" fill="#4ade80"/>
+    <text x="230" y="535" text-anchor="middle" class="small">Decide before it locks</text>
+
+    <rect x="52" y="578" width="168" height="58" rx="20" fill="url(#truth)"/>
+    <text x="136" y="614" text-anchor="middle" class="chip">TRUTH</text>
+    <rect x="240" y="578" width="168" height="58" rx="20" fill="url(#lie)" stroke="#ff808030"/>
+    <text x="324" y="614" text-anchor="middle" class="chip" fill="#ffe4e6">LIE</text>
+  </g>
+
+  <!-- 4 First Five Friends -->
+  <g transform="translate(80 910)" filter="url(#shadow)">
+    <rect width="460" height="680" rx="42" fill="url(#phone)" stroke="#ffffff16" stroke-width="2"/>
+    <rect width="460" height="680" rx="42" fill="url(#greenMist)"/>
+    <text x="230" y="58" text-anchor="middle" class="idea">FIRST FIVE FRIENDS</text>
+    <circle cx="170" cy="112" r="28" fill="#19291f" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="206" y="94" width="48" height="28" rx="14" fill="#4ade8022" stroke="#4ade8045"/>
+    <text x="230" y="113" text-anchor="middle" class="tiny" fill="#86efac">ASKED</text>
+    <circle cx="290" cy="112" r="28" fill="#16211b" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="52" y="156" width="356" height="104" rx="24" fill="#101a13" stroke="#ffffff12"/>
+    <text x="76" y="191" class="tiny" fill="#86efac">THE QUESTION</text>
+    <text x="76" y="226" class="copy">Who was your almost?</text>
+    <rect x="84" y="282" width="324" height="92" rx="24" fill="#07100b" stroke="#4ade8034"/>
+    <text x="108" y="317" class="tiny" fill="#bbf7d0">ANSWER PREVIEW</text>
+    <text x="108" y="350" class="big">I still..</text>
+
+    <rect x="52" y="392" width="356" height="154" rx="28" fill="#ffffff08" stroke="#86efac22"/>
+    <text x="78" y="426" class="tiny">RECENT CALLS</text>
+    <g transform="translate(78 455)">
+      <circle cx="24" cy="24" r="23" fill="#183321" stroke="#4ade80" stroke-width="3"/>
+      <text x="24" y="69" text-anchor="middle" class="tiny" fill="#86efac">Truth</text>
+      <circle cx="86" cy="24" r="23" fill="#2b1212" stroke="#f87171" stroke-width="3"/>
+      <text x="86" y="69" text-anchor="middle" class="tiny" fill="#fca5a5">Lie</text>
+      <circle cx="148" cy="24" r="23" fill="#183321" stroke="#4ade80" stroke-width="3"/>
+      <text x="148" y="69" text-anchor="middle" class="tiny" fill="#86efac">Truth</text>
+      <circle cx="210" cy="24" r="23" fill="#183321" stroke="#4ade80" stroke-width="3"/>
+      <text x="210" y="69" text-anchor="middle" class="tiny" fill="#86efac">Truth</text>
+      <circle cx="272" cy="24" r="23" fill="#121a16" stroke="#ffffff30" stroke-width="3"/>
+      <text x="272" y="69" text-anchor="middle" class="tiny">Next</text>
+    </g>
+    <text x="230" y="535" text-anchor="middle" class="small">Your vote joins the row</text>
+
+    <rect x="52" y="578" width="168" height="58" rx="20" fill="url(#truth)"/>
+    <text x="136" y="614" text-anchor="middle" class="chip">TRUTH</text>
+    <rect x="240" y="578" width="168" height="58" rx="20" fill="url(#lie)" stroke="#ff808030"/>
+    <text x="324" y="614" text-anchor="middle" class="chip" fill="#ffe4e6">LIE</text>
+  </g>
+
+  <!-- 5 Suspicion Thermometer -->
+  <g transform="translate(670 910)" filter="url(#shadow)">
+    <rect width="460" height="680" rx="42" fill="url(#phone)" stroke="#ffffff16" stroke-width="2"/>
+    <rect width="460" height="680" rx="42" fill="url(#greenMist)"/>
+    <text x="230" y="58" text-anchor="middle" class="idea">SUSPICION METER</text>
+    <circle cx="170" cy="112" r="28" fill="#19291f" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="206" y="94" width="48" height="28" rx="14" fill="#4ade8022" stroke="#4ade8045"/>
+    <text x="230" y="113" text-anchor="middle" class="tiny" fill="#86efac">ASKED</text>
+    <circle cx="290" cy="112" r="28" fill="#16211b" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="52" y="156" width="356" height="104" rx="24" fill="#101a13" stroke="#ffffff12"/>
+    <text x="76" y="191" class="tiny" fill="#86efac">THE QUESTION</text>
+    <text x="76" y="226" class="copy">Who was your almost?</text>
+    <rect x="84" y="282" width="324" height="92" rx="24" fill="#07100b" stroke="#4ade8034"/>
+    <text x="108" y="317" class="tiny" fill="#bbf7d0">ANSWER PREVIEW</text>
+    <text x="108" y="350" class="big">I still..</text>
+
+    <rect x="52" y="392" width="356" height="154" rx="28" fill="#ffffff08" stroke="#86efac22"/>
+    <text x="78" y="426" class="tiny">SUSPICION LEVEL</text>
+    <rect x="106" y="474" width="248" height="18" rx="9" fill="#ffffff14"/>
+    <rect x="106" y="474" width="156" height="18" rx="9" fill="url(#truth)" filter="url(#glow)"/>
+    <path d="M262 462L276 483L262 504L248 483Z" fill="#ffffff"/>
+    <text x="230" y="459" text-anchor="middle" class="small">friends trust it</text>
+    <text x="106" y="524" class="tiny" fill="#86efac">TRUTHY</text>
+    <text x="354" y="524" text-anchor="end" class="tiny" fill="#fca5a5">CAP</text>
+
+    <rect x="52" y="578" width="168" height="58" rx="20" fill="url(#truth)"/>
+    <text x="136" y="614" text-anchor="middle" class="chip">TRUTH</text>
+    <rect x="240" y="578" width="168" height="58" rx="20" fill="url(#lie)" stroke="#ff808030"/>
+    <text x="324" y="614" text-anchor="middle" class="chip" fill="#ffe4e6">LIE</text>
+  </g>
+
+  <!-- 6 Receipt Tease -->
+  <g transform="translate(1260 910)" filter="url(#shadow)">
+    <rect width="460" height="680" rx="42" fill="url(#phone)" stroke="#ffffff16" stroke-width="2"/>
+    <rect width="460" height="680" rx="42" fill="url(#greenMist)"/>
+    <text x="230" y="58" text-anchor="middle" class="idea">RECEIPT TEASE</text>
+    <circle cx="170" cy="112" r="28" fill="#19291f" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="206" y="94" width="48" height="28" rx="14" fill="#4ade8022" stroke="#4ade8045"/>
+    <text x="230" y="113" text-anchor="middle" class="tiny" fill="#86efac">ASKED</text>
+    <circle cx="290" cy="112" r="28" fill="#16211b" stroke="#4ade8070" stroke-width="3"/>
+    <rect x="52" y="156" width="356" height="104" rx="24" fill="#101a13" stroke="#ffffff12"/>
+    <text x="76" y="191" class="tiny" fill="#86efac">THE QUESTION</text>
+    <text x="76" y="226" class="copy">Who was your almost?</text>
+    <rect x="84" y="282" width="324" height="92" rx="24" fill="#07100b" stroke="#4ade8034"/>
+    <text x="108" y="317" class="tiny" fill="#bbf7d0">ANSWER PREVIEW</text>
+    <text x="108" y="350" class="big">I still..</text>
+
+    <rect x="52" y="392" width="356" height="154" rx="28" fill="#ffffff08" stroke="#86efac22"/>
+    <text x="78" y="426" class="tiny">UNLOCK AFTER VOTE</text>
+    <rect x="88" y="452" width="284" height="72" rx="18" fill="#07100b" stroke="#ffffff14"/>
+    <rect x="112" y="474" width="156" height="8" rx="4" fill="#ffffff24"/>
+    <rect x="112" y="494" width="214" height="8" rx="4" fill="#ffffff16"/>
+    <rect x="112" y="514" width="112" height="8" rx="4" fill="#ffffff12"/>
+    <rect x="302" y="468" width="44" height="44" rx="14" fill="#4ade8018" stroke="#4ade8040"/>
+    <text x="324" y="497" text-anchor="middle" class="big" fill="#86efac">?</text>
+    <text x="230" y="543" text-anchor="middle" class="small">Vote to see the full reply</text>
+
+    <rect x="52" y="578" width="168" height="58" rx="20" fill="url(#truth)"/>
+    <text x="136" y="614" text-anchor="middle" class="chip">TRUTH</text>
+    <rect x="240" y="578" width="168" height="58" rx="20" fill="url(#lie)" stroke="#ff808030"/>
+    <text x="324" y="614" text-anchor="middle" class="chip" fill="#ffe4e6">LIE</text>
+  </g>
+</svg>

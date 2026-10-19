@@ -1,9 +1,10 @@
+import { getChatSource } from "@/lib/chatContext";
 // Truth Service - Business logic layer for truth operations
 // Follows architecture contract strictly
 
 import { ITruthRepository } from "@/backend/domain/interfaces/ITruthRepository";
 import { TruthRepository } from "@/backend/repositories/TruthRepository";
-import { TruthEntity, TruthState } from "@/backend/domain/entities/Truth";
+import { TruthEntity } from "@/backend/domain/entities/Truth";
 import { IFriendshipRepository } from "@/backend/domain/interfaces/IFriendshipRepository";
 import { FriendshipRepository } from "@/backend/repositories/FriendshipRepository";
 import { IFeedRepository } from "@/backend/domain/interfaces/IFeedRepository";
@@ -60,6 +61,22 @@ class TruthService {
     this.alertService = new AlertService(new AlertRepository());
   }
 
+  private invalidateServerSocialCache(
+    ...userIds: Array<string | undefined>
+  ): void {
+    const validIds = userIds.filter((id): id is string => !!id);
+    if (validIds.length === 0 || typeof window === "undefined") return;
+
+    import("@/lib/apiClient")
+      .then(({ apiFetch }) =>
+        apiFetch("/api/cache/social", {
+          method: "POST",
+          body: JSON.stringify({ userIds: validIds }),
+        }),
+      )
+      .catch(() => {});
+  }
+
   // Helper to convert repository Truth to TruthEntity format
   private mapToEntity(truth: any): any {
     return {
@@ -90,7 +107,31 @@ class TruthService {
   }
 
   async createTruth(request: CreateTruthRequest): Promise<TruthResponse> {
+    const sourceId = getChatSource()?.id;
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; truth: any }>(
+            "/api/truth",
+            {
+              method: "POST",
+              headers: sourceId ? { "x-chat-source-id": sourceId } : undefined,
+              body: JSON.stringify({
+                receiverId: request.receiverId,
+                question: request.question,
+              }),
+            },
+          );
+          if (response.truth) {
+            return { success: true, truth: TruthEntity.create(response.truth) };
+          }
+        } catch (apiError) {
+          if (sourceId) throw apiError;
+          console.warn("[truthService] createTruth API fallback:", apiError);
+        }
+      }
+
       const canTruth = await this.truthRepository.canTruthUser(
         request.challengerId,
         request.receiverId,
@@ -151,6 +192,8 @@ class TruthService {
         },
       });
 
+      this.invalidateServerSocialCache(request.challengerId, request.receiverId);
+
       return { success: true, truth: truthEntity };
     } catch (error) {
       const errorMessage =
@@ -165,6 +208,31 @@ class TruthService {
     answer: string,
   ): Promise<TruthResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; truth: any }>(
+            `/api/truth/${encodeURIComponent(truthId)}/answer`,
+            {
+              method: "POST",
+              body: JSON.stringify({ answer }),
+            },
+          );
+          if (response.truth) {
+            return { success: true, truth: TruthEntity.create(response.truth) };
+          }
+        } catch (apiError) {
+          console.error("[truthService] answerTruth API failed:", apiError);
+          return {
+            success: false,
+            error:
+              apiError instanceof Error
+                ? apiError.message
+                : "Failed to answer truth",
+          };
+        }
+      }
+
       const truthResponse = await this.getTruthById(truthId);
 
       if (!truthResponse.success || !truthResponse.truth) {
@@ -188,24 +256,27 @@ class TruthService {
       }
 
       const answeredTruth = truth.submitAnswer(answer);
+      const completedTruth = answeredTruth.approve();
       await this.truthRepository.updateTruth(truthId, {
-        answer: answeredTruth.answer,
-        state: answeredTruth.state,
+        answer: completedTruth.answer,
+        state: completedTruth.state,
         answered_at: new Date().toISOString(),
+        reviewed_at: new Date().toISOString(),
       });
 
       await this.feedRepository.createFeedEvent({
         userId: userId,
-        eventType: "truth_answered",
+        eventType: "truth_completed",
         relatedTruthId: truthId,
         eventData: {
           challengerId: truth.challengerId,
           receiverId: truth.receiverId,
           answer: answer,
+          result: "APPROVED",
         },
       });
 
-      // Create alert for challenger to review the answer
+      // Notify the challenger; the answer is already live and needs no review.
       console.log("🚨 CREATING ALERT FOR CHALLENGER:", truth.challengerId);
       console.log("🚨 ALERT DATA:", {
         userId: truth.challengerId,
@@ -244,13 +315,14 @@ class TruthService {
         metadata: {
           answer: this.truncateContent(answer, 200), // Limit to 200 chars
           question: this.truncateContent(truth.question, 200), // Limit to 200 chars
-          navigateTo: "dares", // Add navigation hint
+          navigateTo: "main",
         },
       });
 
       console.log("✅ ALERT CREATED SUCCESSFULLY");
 
-      const finalTruthEntity = answeredTruth;
+      const finalTruthEntity = completedTruth;
+      this.invalidateServerSocialCache(truth.challengerId, truth.receiverId);
 
       return { success: true, truth: finalTruthEntity };
     } catch (error) {
@@ -266,6 +338,19 @@ class TruthService {
     vote: "TRUTH" | "LIE",
   ): Promise<VoteResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          await apiFetch(`/api/truth/${encodeURIComponent(truthId)}/vote`, {
+            method: "POST",
+            body: JSON.stringify({ vote }),
+          });
+          return { success: true };
+        } catch (apiError) {
+          console.warn("[truthService] voteOnTruth API fallback:", apiError);
+        }
+      }
+
       const truthResponse = await this.getTruthById(truthId);
 
       if (!truthResponse.success || !truthResponse.truth) {
@@ -308,6 +393,8 @@ class TruthService {
           },
         });
       }
+
+      this.invalidateServerSocialCache(truth.challengerId, truth.receiverId);
 
       return { success: true };
     } catch (error) {
@@ -406,6 +493,21 @@ class TruthService {
 
   async refuseTruth(truthId: string, userId: string): Promise<TruthResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; truth: any }>(
+            `/api/truth/${encodeURIComponent(truthId)}/refuse`,
+            { method: "POST" },
+          );
+          if (response.truth) {
+            return { success: true, truth: TruthEntity.create(response.truth) };
+          }
+        } catch (apiError) {
+          console.warn("[truthService] refuseTruth API fallback:", apiError);
+        }
+      }
+
       const truthResponse = await this.getTruthById(truthId);
 
       if (!truthResponse.success || !truthResponse.truth) {
@@ -436,6 +538,8 @@ class TruthService {
           receiverId: truth.receiverId,
         },
       });
+
+      this.invalidateServerSocialCache(truth.challengerId, truth.receiverId);
 
       return { success: true, truth: refusedTruth };
     } catch (error) {
@@ -546,6 +650,21 @@ class TruthService {
     reviewerId: string,
   ): Promise<TruthResponse> {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          const { apiFetch } = await import("@/lib/apiClient");
+          const response = await apiFetch<{ ok: boolean; truth: any }>(
+            `/api/truth/${encodeURIComponent(truthId)}/approve`,
+            { method: "POST" },
+          );
+          if (response.truth) {
+            return { success: true, truth: TruthEntity.create(response.truth) };
+          }
+        } catch (apiError) {
+          console.warn("[truthService] approveTruth API fallback:", apiError);
+        }
+      }
+
       const truthResponse = await this.getTruthById(truthId);
       if (!truthResponse.success || !truthResponse.truth) {
         return { success: false, error: "Truth not found" };
@@ -603,6 +722,8 @@ class TruthService {
         },
       });
 
+      this.invalidateServerSocialCache(truth.challengerId, truth.receiverId);
+
       return {
         success: true,
         truth: TruthEntity.create({
@@ -620,7 +741,14 @@ class TruthService {
 
   async deleteTruth(truthId: string): Promise<TruthResponse> {
     try {
+      const existingTruth = await this.getTruthById(truthId);
       await this.truthRepository.deleteTruth(truthId);
+      if (existingTruth.success && existingTruth.truth) {
+        this.invalidateServerSocialCache(
+          existingTruth.truth.challengerId,
+          existingTruth.truth.receiverId,
+        );
+      }
       return { success: true };
     } catch (error) {
       const errorMessage =

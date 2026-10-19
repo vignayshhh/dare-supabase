@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { BadgeCheck, Flame, Home, LucideIcon, Plus, Scale, Users } from "lucide-react";
 
 type Screen =
@@ -35,6 +36,75 @@ export function BottomNavigation({
   onVerdictsClick,
   onCircleClick,
 }: BottomNavigationProps) {
+  const [showCreateInHomeSlot, setShowCreateInHomeSlot] = useState(false);
+  const [showCenterChooser, setShowCenterChooser] = useState(false);
+  const [isAppModalOpen, setIsAppModalOpen] = useState(false);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setShowCreateInHomeSlot((current) => !current);
+    }, 10000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setIsAppModalOpen(Boolean(document.querySelector(".app-modal-backdrop")));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleCenterPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    clearLongPressTimer();
+    longPressTriggeredRef.current = false;
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setShowCenterChooser(true);
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate?.(8);
+      }
+    }, 520);
+  };
+
+  const handleCenterPointerUp = () => {
+    clearLongPressTimer();
+  };
+
+  const handleCenterClick = (onClick: () => void) => (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (longPressTriggeredRef.current) {
+      event.preventDefault();
+      longPressTriggeredRef.current = false;
+      return;
+    }
+
+    onClick();
+  };
+
+  const chooseCenterAction = (action: "create" | "home") => {
+    setShowCenterChooser(false);
+    if (action === "create") {
+      setShowCreateInHomeSlot(true);
+      onCreateClick();
+      return;
+    }
+
+    setShowCreateInHomeSlot(false);
+    onScreenChange("feed");
+  };
+
   const leftItems: NavItem[] = [
     {
       id: "truth",
@@ -79,6 +149,71 @@ export function BottomNavigation({
       isActive: currentScreen === "circle",
     });
   }
+  const visibleItems = [...leftItems, ...rightItems];
+
+  const renderNavButton = (item: NavItem) => {
+    const Icon = item.icon;
+    const isHomeSlot = item.id === "feed";
+    const showCreate = isHomeSlot && showCreateInHomeSlot;
+    const clickAction = showCreate ? onCreateClick : item.onClick;
+
+    return (
+      <button
+        key={item.id}
+        onClick={isHomeSlot ? handleCenterClick(clickAction) : clickAction}
+        onPointerDown={isHomeSlot ? handleCenterPointerDown : undefined}
+        onPointerUp={isHomeSlot ? handleCenterPointerUp : undefined}
+        onPointerCancel={isHomeSlot ? handleCenterPointerUp : undefined}
+        onPointerLeave={isHomeSlot ? handleCenterPointerUp : undefined}
+        onContextMenu={isHomeSlot ? (event) => event.preventDefault() : undefined}
+        className="app-pressable flex min-w-0 items-center justify-center px-1 py-1"
+        aria-label={showCreate ? "Create" : item.label}
+        aria-haspopup={isHomeSlot ? "dialog" : undefined}
+        aria-expanded={isHomeSlot ? showCenterChooser : undefined}
+      >
+        <div
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
+            item.isActive
+              ? "bg-white shadow-[0_10px_28px_rgba(255,255,255,0.18),inset_0_1px_0_rgba(255,255,255,0.72)]"
+            : "bg-black/20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]"
+          }`}
+        >
+          {isHomeSlot ? (
+            <span className="relative flex h-5 w-5 items-center justify-center">
+              <Home
+                size={20}
+                strokeWidth={item.isActive ? 2.2 : 1.8}
+                className={`absolute transition-all duration-500 ease-out ${
+                  item.isActive ? "text-black" : "text-white/48"
+                } ${
+                  showCreate
+                    ? "scale-75 opacity-0 blur-[1px]"
+                    : "scale-100 opacity-100 blur-0"
+                }`}
+              />
+              <Plus
+                size={21}
+                strokeWidth={2.5}
+                className={`absolute transition-all duration-500 ease-out ${
+                  item.isActive ? "text-black" : "text-white/72"
+                } ${
+                  showCreate
+                    ? "scale-100 opacity-100 blur-0"
+                    : "scale-75 opacity-0 blur-[1px]"
+                }`}
+              />
+            </span>
+          ) : (
+            <Icon
+              size={20}
+              strokeWidth={item.isActive ? 2.2 : 1.8}
+              className={item.isActive ? "text-black" : "text-white/48"}
+            />
+          )}
+        </div>
+      </button>
+    );
+  };
 
   return (
     <div
@@ -86,88 +221,58 @@ export function BottomNavigation({
       style={{ paddingBottom: "max(10px, env(safe-area-inset-bottom))", pointerEvents: "none" }}
     >
       <div
-        className="relative mx-3 flex w-full items-center overflow-hidden rounded-[28px] border border-white/[0.07]"
+        className="relative mx-3 flex w-full items-center overflow-visible rounded-[28px] border border-white/[0.07]"
         style={{
-          pointerEvents: "auto",
-          background: "linear-gradient(180deg, rgba(14,27,17,0.97) 0%, rgba(4,9,5,0.99) 100%)",
+          pointerEvents: isAppModalOpen ? "none" : "auto",
+          background:
+            "linear-gradient(180deg, rgba(20,20,20,0.97) 0%, rgba(5,5,5,0.99) 100%)",
           backdropFilter: "blur(48px)",
           WebkitBackdropFilter: "blur(48px)",
           boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.06), 0 24px 64px rgba(0,0,0,0.55), 0 8px 28px rgba(0,0,0,0.35)",
-          paddingTop: "9px",
+            "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(255,255,255,0.03), 0 24px 64px rgba(0,0,0,0.58), 0 8px 28px rgba(0,0,0,0.38)",
+          paddingTop: "10px",
           paddingBottom: "9px",
           paddingLeft: "6px",
           paddingRight: "6px",
         }}
       >
-        {/* Top shine */}
         <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.10] to-transparent" />
 
-        {/* Left group */}
-        <div className="flex flex-1 items-center justify-around">
-          {leftItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={item.onClick}
-                className="app-pressable flex items-center justify-center px-2 py-1"
-              >
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
-                    item.isActive ? "bg-[#4ade80]/[0.12]" : ""
-                  }`}
-                >
-                  <Icon
-                    size={20}
-                    strokeWidth={item.isActive ? 2.2 : 1.8}
-                    className={item.isActive ? "text-[#4ade80]" : "text-white/40"}
-                  />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Center Plus — fixed width so it stays truly centered */}
-        <div className="flex w-[68px] shrink-0 items-center justify-center">
-          <button
-            onClick={onCreateClick}
-            className="nav-plus-btn app-pressable flex h-[44px] w-[44px] items-center justify-center rounded-full"
-            style={{
-              background: "linear-gradient(145deg, #55ea8e 0%, #1db954 100%)",
-              boxShadow:
-                "0 0 0 1px rgba(74,222,128,0.22), 0 12px 32px rgba(74,222,128,0.42), 0 4px 14px rgba(0,0,0,0.55)",
-            }}
+        {showCenterChooser && (
+          <div
+            role="dialog"
+            aria-label="Choose center action"
+            className="absolute bottom-[calc(100%+12px)] left-1/2 z-10 w-[min(290px,calc(100vw-32px))] -translate-x-1/2 rounded-2xl border border-white/[0.1] bg-[#111]/95 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
           >
-            <Plus size={20} strokeWidth={2.6} className="text-[#011508]" />
-          </button>
-        </div>
-
-        {/* Right group */}
-        <div className="flex flex-1 items-center justify-around">
-          {rightItems.map((item) => {
-            const Icon = item.icon;
-            return (
+            <p className="px-1 pb-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-white/48">
+              Choose center action
+            </p>
+            <div className="grid grid-cols-2 gap-2">
               <button
-                key={item.id}
-                onClick={item.onClick}
-                className="app-pressable flex items-center justify-center px-2 py-1"
+                type="button"
+                onClick={() => chooseCenterAction("create")}
+                className="app-pressable flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-3 py-2.5 text-xs font-bold text-black"
               >
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
-                    item.isActive ? "bg-[#4ade80]/[0.12]" : ""
-                  }`}
-                >
-                  <Icon
-                    size={20}
-                    strokeWidth={item.isActive ? 2.2 : 1.8}
-                    className={item.isActive ? "text-[#4ade80]" : "text-white/40"}
-                  />
-                </div>
+                <Plus size={16} strokeWidth={2.6} />
+                Create
               </button>
-            );
-          })}
+              <button
+                type="button"
+                onClick={() => chooseCenterAction("home")}
+                className="app-pressable flex items-center justify-center gap-2 rounded-xl bg-white/[0.08] px-3 py-2.5 text-xs font-bold text-white"
+              >
+                <Home size={16} strokeWidth={2.2} />
+                Home
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div
+          className="grid w-full items-center"
+          style={{ gridTemplateColumns: `repeat(${visibleItems.length}, minmax(0, 1fr))` }}
+        >
+          {visibleItems.map(renderNavButton)}
         </div>
       </div>
     </div>

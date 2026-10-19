@@ -6,9 +6,11 @@ import { type CommunityChallenge } from "./communityChallengeData";
 
 export function CommunityChallengeFeed({
   challenges,
+  joinedChallengeIds = new Set(),
   onPreview,
 }: {
   challenges: CommunityChallenge[];
+  joinedChallengeIds?: Set<string>;
   onPreview: (challenge: CommunityChallenge) => void;
 }) {
   const reelRef = useRef<HTMLDivElement>(null);
@@ -115,17 +117,18 @@ export function CommunityChallengeFeed({
         <section
           key={challenge.id}
           data-community-card-active={activeIndex === index ? "true" : undefined}
-          className="flex h-full min-h-full snap-start snap-always items-start justify-center overflow-hidden px-4 pt-3"
+          className="flex h-full min-h-full snap-start snap-always items-start justify-center overflow-hidden px-2 pt-[18px]"
           style={{
-            paddingBottom: "calc(var(--bottom-nav-total-height) + 12px)",
+            paddingBottom: "calc(var(--bottom-nav-total-height, 82px) + 10px)",
             contain: "layout paint style",
             transform: "translateZ(0)",
             backfaceVisibility: "hidden",
           }}
         >
-          <div className="w-full max-w-[444px]">
+          <div className="w-full max-w-[520px]">
             <CommunityChallengeCard
               challenge={challenge}
+              isJoined={joinedChallengeIds.has(challenge.id)}
               onPreview={() => onPreview(challenge)}
             />
           </div>

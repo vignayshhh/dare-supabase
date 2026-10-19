@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" font-family="system-ui, 'Segoe UI', sans-serif">
+  <defs>
+    <!-- app background: near-black + green/sky/rose radial glows -->
+    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#070907"/><stop offset="0.48" stop-color="#0a0f0b"/><stop offset="1" stop-color="#030403"/>
+    </linearGradient>
+    <radialGradient id="glowG" cx="0.5" cy="-0.12" r="0.5"><stop offset="0" stop-color="#4ade80" stop-opacity="0.16"/><stop offset="1" stop-color="#4ade80" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glowS" cx="0.14" cy="0.16" r="0.4"><stop offset="0" stop-color="#38bdf8" stop-opacity="0.12"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glowR" cx="0.88" cy="0.22" r="0.4"><stop offset="0" stop-color="#fb7185" stop-opacity="0.1"/><stop offset="1" stop-color="#fb7185" stop-opacity="0"/></radialGradient>
+    <!-- panel -->
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#12160f" stop-opacity="0.97"/><stop offset="1" stop-color="#07090895"/></linearGradient>
+    <!-- team head gradients (135deg color -> white .3) -->
+    <linearGradient id="rose" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fb7185"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.3"/></linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.3"/></linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#facc15"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.3"/></linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#22c55e"/></linearGradient>
+    <linearGradient id="roseBar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fb7185"/><stop offset="1" stop-color="#e11d48"/></linearGradient>
+    <linearGradient id="skyBar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0ea5e9"/><stop offset="1" stop-color="#38bdf8"/></linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cbd5e1" stop-opacity="0.75"/><stop offset="1" stop-color="#64748b" stop-opacity="0.45"/></linearGradient>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.5"/></filter>
+  </defs>
+
+  <rect width="390" height="844" fill="url(#base)"/>
+  <rect width="390" height="844" fill="url(#glowG)"/>
+  <rect width="390" height="844" fill="url(#glowS)"/>
+  <rect width="390" height="844" fill="url(#glowR)"/>
+
+  <!-- header -->
+  <g>
+    <text x="20" y="46" fill="#e6f6ec" font-size="20" font-weight="800">Friendship Court</text>
+    <!-- session chip (green) -->
+    <rect x="20" y="58" width="150" height="22" rx="11" fill="#4ade80" fill-opacity="0.1" stroke="#4ade80" stroke-opacity="0.2"/>
+    <circle cx="33" cy="69" r="3.5" fill="#4ade80"><animate attributeName="opacity" values="1;0.3;1" dur="1.4s" repeatCount="indefinite"/></circle>
+    <text x="43" y="73" fill="#bbf7d0" font-size="9" font-weight="900" letter-spacing="1.8">COURT IN SESSION</text>
+    <!-- timer pill (rose urgency) -->
+    <rect x="290" y="34" width="82" height="30" rx="15" fill="#fb7185" fill-opacity="0.12" stroke="#fb7185" stroke-opacity="0.4"/>
+    <text x="331" y="54" text-anchor="middle" fill="#fda4af" font-size="15" font-weight="800" font-family="ui-monospace, monospace">18:42</text>
+  </g>
+
+  <!-- case panel -->
+  <g filter="url(#sh)">
+    <rect x="16" y="92" width="358" height="58" rx="20" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="32" y="120" fill="#f8fafc" font-size="16" font-weight="800">Who ruined the Goa trip?</text>
+    <text x="32" y="139" fill="#94a3b8" font-size="11">Court #42  ·  filed by Aakash  ·  accused: Rahul</text>
+  </g>
+
+  <!-- JUDGE (amber) raised -->
+  <g transform="translate(195,176)">
+    <!-- head -->
+    <circle cx="0" cy="0" r="20" fill="url(#amber)" stroke="#facc15" stroke-opacity="0.5" stroke-width="1.5"/>
+    <text x="0" y="6" text-anchor="middle" font-size="20">🧑‍⚖️</text>
+    <!-- limbs (rounded bars, white/72) -->
+    <rect x="-3" y="18" width="6" height="26" rx="3" fill="#fff" fill-opacity="0.72"/>
+    <rect x="-2" y="22" width="22" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(32 -2 24)"/>
+    <rect x="-20" y="22" width="22" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(-32 0 24)"/>
+    <text x="0" y="64" text-anchor="middle" fill="#facc15" font-size="11" font-weight="800">Judge Priya</text>
+    <!-- bench -->
+    <rect x="-46" y="70" width="92" height="8" rx="4" fill="#1c2418" stroke="#facc15" stroke-opacity="0.25"/>
+  </g>
+
+  <!-- side labels -->
+  <text x="84" y="276" text-anchor="middle" fill="#fda4af" font-size="11" font-weight="900" letter-spacing="1">⚔ PROSECUTION</text>
+  <text x="306" y="276" text-anchor="middle" fill="#7dd3fc" font-size="11" font-weight="900" letter-spacing="1">🛡 DEFENSE</text>
+
+  <!-- stickman builder: head + 4 limb bars (RoastJail geometry) -->
+  <!-- PROSECUTION front (Aakash) -->
+  <g transform="translate(84,300)">
+    <rect x="-3" y="20" width="6" height="34" rx="3" fill="#fff" fill-opacity="0.72"/>
+    <rect x="0" y="24" width="22" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(32 0 26)"/>
+    <rect x="-22" y="24" width="22" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(-32 0 26)"/>
+    <rect x="0" y="50" width="24" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(58 2 52)"/>
+    <rect x="-24" y="50" width="24" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(-58 -2 52)"/>
+    <circle cx="0" cy="0" r="20" fill="url(#rose)" stroke="#fff" stroke-opacity="0.5" stroke-width="1.5"/>
+    <text x="0" y="6" text-anchor="middle" font-size="18">😤</text>
+    <text x="0" y="86" text-anchor="middle" fill="#fecdd3" font-size="10" font-weight="700">Aakash</text>
+    <text x="0" y="98" text-anchor="middle" fill="#c98a93" font-size="8">accuser</text>
+  </g>
+  <!-- two prosecution supporters (smaller) -->
+  <g transform="translate(40,372) scale(0.8)" opacity="0.92">
+    <rect x="-3" y="18" width="6" height="28" rx="3" fill="#fff" fill-opacity="0.6"/>
+    <rect x="0" y="44" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.6" transform="rotate(58 2 46)"/>
+    <rect x="-20" y="44" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.6" transform="rotate(-58 -2 46)"/>
+    <circle cx="0" cy="0" r="16" fill="url(#rose)" stroke="#fff" stroke-opacity="0.4"/>
+    <text x="0" y="5" text-anchor="middle" font-size="15">🤨</text>
+  </g>
+  <g transform="translate(116,380) scale(0.78)" opacity="0.85">
+    <rect x="-3" y="18" width="6" height="28" rx="3" fill="#fff" fill-opacity="0.6"/>
+    <rect x="0" y="44" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.6" transform="rotate(58 2 46)"/>
+    <rect x="-20" y="44" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.6" transform="rotate(-58 -2 46)"/>
+    <circle cx="0" cy="0" r="16" fill="url(#rose)" stroke="#fff" stroke-opacity="0.4"/>
+    <text x="0" y="5" text-anchor="middle" font-size="15">😏</text>
+  </g>
+
+  <!-- DEFENSE front (Rahul) -->
+  <g transform="translate(306,300)">
+    <rect x="-3" y="20" width="6" height="34" rx="3" fill="#fff" fill-opacity="0.72"/>
+    <rect x="0" y="26" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(20 0 28)"/>
+    <rect x="-20" y="26" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(-20 0 28)"/>
+    <rect x="0" y="50" width="24" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(58 2 52)"/>
+    <rect x="-24" y="50" width="24" height="4" rx="2" fill="#fff" fill-opacity="0.72" transform="rotate(-58 -2 52)"/>
+    <circle cx="0" cy="0" r="20" fill="url(#sky)" stroke="#fff" stroke-opacity="0.5" stroke-width="1.5"/>
+    <text x="0" y="6" text-anchor="middle" font-size="18">😰</text>
+    <text x="0" y="86" text-anchor="middle" fill="#bae6fd" font-size="10" font-weight="700">Rahul</text>
+    <text x="0" y="98" text-anchor="middle" fill="#7ea8c4" font-size="8">accused</text>
+  </g>
+  <g transform="translate(274,380) scale(0.78)" opacity="0.85">
+    <rect x="-3" y="18" width="6" height="28" rx="3" fill="#fff" fill-opacity="0.6"/>
+    <rect x="0" y="44" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.6" transform="rotate(58 2 46)"/>
+    <rect x="-20" y="44" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.6" transform="rotate(-58 -2 46)"/>
+    <circle cx="0" cy="0" r="16" fill="url(#sky)" stroke="#fff" stroke-opacity="0.4"/>
+    <text x="0" y="5" text-anchor="middle" font-size="15">🙏</text>
+  </g>
+  <g transform="translate(350,372) scale(0.8)" opacity="0.92">
+    <rect x="-3" y="18" width="6" height="28" rx="3" fill="#fff" fill-opacity="0.6"/>
+    <rect x="0" y="44" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.6" transform="rotate(58 2 46)"/>
+    <rect x="-20" y="44" width="20" height="4" rx="2" fill="#fff" fill-opacity="0.6" transform="rotate(-58 -2 46)"/>
+    <circle cx="0" cy="0" r="16" fill="url(#sky)" stroke="#fff" stroke-opacity="0.4"/>
+    <text x="0" y="5" text-anchor="middle" font-size="15">😎</text>
+  </g>
+
+  <!-- VS -->
+  <g transform="translate(195,330)">
+    <circle r="24" fill="#0a0f0b" stroke="#4ade80" stroke-opacity="0.5" stroke-width="1.5"/>
+    <text x="0" y="7" text-anchor="middle" fill="#4ade80" font-size="18" font-weight="900" font-style="italic">VS</text>
+  </g>
+
+  <!-- reveal-on-send suspense (spectator sees NO live text) -->
+  <g filter="url(#sh)">
+    <rect x="16" y="430" width="358" height="62" rx="20" fill="url(#panel)" stroke="#fb7185" stroke-opacity="0.3"/>
+    <text x="40" y="468" text-anchor="middle" font-size="24">📜</text>
+    <text x="64" y="456" fill="#fda4af" font-size="11" font-weight="800">Aakash is sealing their statement</text>
+    <circle cx="68" cy="472" r="3" fill="#4ade80"><animate attributeName="opacity" values="1;.2;1" dur="1s" begin="0s" repeatCount="indefinite"/></circle>
+    <circle cx="80" cy="472" r="3" fill="#4ade80"><animate attributeName="opacity" values="1;.2;1" dur="1s" begin=".2s" repeatCount="indefinite"/></circle>
+    <circle cx="92" cy="472" r="3" fill="#4ade80"><animate attributeName="opacity" values="1;.2;1" dur="1s" begin=".4s" repeatCount="indefinite"/></circle>
+    <text x="108" y="476" fill="#94a3b8" font-size="11">it drops all at once 👀</text>
+  </g>
+
+  <!-- live opinion bar (rose vs sky) -->
+  <g transform="translate(16,516)">
+    <text x="0" y="-6" fill="#94a3b8" font-size="10" font-weight="700" letter-spacing="1">LIVE OPINION</text>
+    <rect x="0" y="2" width="358" height="34" rx="17" fill="#0a0f0b" stroke="#ffffff" stroke-opacity="0.06"/>
+    <clipPath id="cb"><rect x="0" y="2" width="358" height="34" rx="17"/></clipPath>
+    <g clip-path="url(#cb)">
+      <rect x="0" y="2" width="205" height="34" fill="url(#roseBar)"/>
+      <rect x="205" y="2" width="153" height="34" fill="url(#skyBar)"/>
+    </g>
+    <text x="14" y="24" fill="#fff" font-size="12" font-weight="800">GUILTY 8</text>
+    <text x="344" y="24" text-anchor="end" fill="#fff" font-size="12" font-weight="800">6 NOT GUILTY</text>
+    <polygon points="205,38 199,46 211,46" fill="#4ade80"/>
+  </g>
+
+  <!-- round chips -->
+  <g transform="translate(16,576)">
+    <rect x="0" width="80" height="26" rx="13" fill="#4ade80" fill-opacity="0.12" stroke="#4ade80" stroke-opacity="0.4"/>
+    <text x="40" y="17" text-anchor="middle" fill="#bbf7d0" font-size="9.5" font-weight="800">● Opening</text>
+    <rect x="88" width="78" height="26" rx="13" fill="#ffffff" fill-opacity="0.04"/>
+    <text x="127" y="17" text-anchor="middle" fill="#64748b" font-size="9.5">Defense</text>
+    <rect x="174" width="78" height="26" rx="13" fill="#ffffff" fill-opacity="0.04"/>
+    <text x="213" y="17" text-anchor="middle" fill="#64748b" font-size="9.5">Witness</text>
+    <rect x="260" width="98" height="26" rx="13" fill="#ffffff" fill-opacity="0.04"/>
+    <text x="309" y="17" text-anchor="middle" fill="#64748b" font-size="9.5">Closing</text>
+  </g>
+
+  <!-- locked input + switch side -->
+  <g transform="translate(0,762)">
+    <rect x="0" y="0" width="390" height="82" fill="#070907"/>
+    <rect x="16" y="16" width="252" height="50" rx="25" fill="#ffffff" fill-opacity="0.04" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="36" y="46" fill="#5b6b60" font-size="12.5">🔒 Only Aakash can speak right now</text>
+    <rect x="278" y="16" width="96" height="50" rx="25" fill="url(#green)" filter="url(#sh)"/>
+    <text x="326" y="40" text-anchor="middle" fill="#031008" font-size="10.5" font-weight="900">SWITCH</text>
+    <text x="326" y="54" text-anchor="middle" fill="#031008" font-size="10.5" font-weight="900">SIDE ⇄</text>
+  </g>
+</svg>

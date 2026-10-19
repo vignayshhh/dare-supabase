@@ -376,7 +376,7 @@ export function UserSearchScreen({
             radial-gradient(circle at 50% -12%, rgba(74,222,128,0.18), transparent 34%),
             radial-gradient(circle at 12% 18%, rgba(14,165,233,0.12), transparent 28%),
             linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%);
-          font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+          font-family: var(--font-ui);
         }
         @keyframes dailySweep {
           0% { transform: translateX(-120%); }

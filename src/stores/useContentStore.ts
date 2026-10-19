@@ -1,4 +1,4 @@
-// UseContentStore - Single source of truth for all content data
+﻿// UseContentStore - Single source of truth for all content data
 // Uses service factory and follows architecture contract strictly
 // UI components only interact with this store - never directly with services
 
@@ -7,12 +7,11 @@ import {
   dareService,
   truthService,
 } from "@/middleware/services/service-factory";
-import { db } from "@/backend/lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
 import { TruthPost, DarePost } from "@/middleware/adapters/data-adapters";
 import { useAuthStore } from "./useAuthStore-v2";
 import { TruthEntity } from "@/backend/domain/entities/Truth";
 import { resolveUserProfile } from "@/utils/profileResolver";
+import { apiFetch } from "@/lib/apiClient";
 
 interface ContentState {
   truthPosts: TruthPost[];
@@ -36,21 +35,92 @@ interface ContentState {
   addTruthPost: (truth: TruthPost) => void;
   voteOnDare: (dareId: string, vote: "real" | "fake") => Promise<void>;
   voteOnTruth: (truthId: string, vote: "truth" | "lie") => Promise<void>;
+  invalidateFeedRailCache: (userId?: string) => void;
   refreshContent: () => Promise<void>;
   clearErrors: () => void;
 }
 
-// ─── Profile cache (one Firestore read per userId per session) ────────────────
+// â”€â”€â”€ Profile cache (one Postgres read per userId per session) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const profileCache = new Map<string, any>();
+const FEED_RAIL_CACHE_TTL_MS = 5 * 60 * 1000;
 
-// ─── fetchProfile ─────────────────────────────────────────────────────────────
+function getFeedRailCacheKey(
+  kind: "truth" | "dare",
+  userId: string,
+): string {
+  return `dare:${kind}-feed-rail:${userId}`;
+}
+
+function readFeedRailCache<T>(
+  kind: "truth" | "dare",
+  userId: string,
+): T[] | null {
+  if (typeof window === "undefined" || !userId) return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(getFeedRailCacheKey(kind, userId));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as {
+      items?: unknown;
+      cachedAt?: unknown;
+    };
+    if (
+      typeof parsed.cachedAt !== "number" ||
+      Date.now() - parsed.cachedAt > FEED_RAIL_CACHE_TTL_MS ||
+      !Array.isArray(parsed.items) ||
+      parsed.items.length === 0
+    ) {
+      window.sessionStorage.removeItem(getFeedRailCacheKey(kind, userId));
+      return null;
+    }
+
+    return parsed.items as T[];
+  } catch {
+    return null;
+  }
+}
+
+function writeFeedRailCache(
+  kind: "truth" | "dare",
+  userId: string,
+  items: TruthPost[] | DarePost[],
+): void {
+  if (typeof window === "undefined" || !userId) return;
+  if (items.length === 0) return;
+
+  try {
+    window.sessionStorage.setItem(
+      getFeedRailCacheKey(kind, userId),
+      JSON.stringify({
+        cachedAt: Date.now(),
+        items: items.slice(0, 20),
+      }),
+    );
+  } catch {
+    // Session storage can be unavailable; API cache remains the fallback.
+  }
+}
+
+// â”€â”€â”€ fetchProfile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function clearFeedRailCache(userId: string): void {
+  if (typeof window === "undefined" || !userId) return;
+
+  try {
+    window.sessionStorage.removeItem(getFeedRailCacheKey("truth", userId));
+    window.sessionStorage.removeItem(getFeedRailCacheKey("dare", userId));
+  } catch {
+    // A storage failure must not prevent a relationship update from completing.
+  }
+}
+
 // Strategy 1: getProfileByUserIdForContent(userId)
-//   → UserRepository.getProfileByUserId → doc(db,"users",userId)
-//   Works when Firestore doc ID === userId on dare/truth records.
+//   â†’ UserRepository.getProfileByUserId â†’ row(db,"users",userId)
+//   Works when Postgres doc ID === userId on dare/truth records.
 //
-// Strategy 2: query where("user_id","==",userId)
+// Strategy 2: buildQuery filterWhere("user_id","==",userId)
 //   Works when doc IDs are Auth UIDs but stored userId values differ (e.g. "user8").
-//   Manually maps snake_case → camelCase to match UserProfileEntity shape.
+//   Manually maps snake_case â†’ camelCase to match UserProfileEntity shape.
 async function fetchProfile(userId: string): Promise<any | null> {
   if (!userId) return null;
   if (profileCache.has(userId)) return profileCache.get(userId);
@@ -62,31 +132,7 @@ async function fetchProfile(userId: string): Promise<any | null> {
       profileCache.set(userId, resolvedProfile);
       return resolvedProfile;
     }
-  } catch (_e) {
-    /* fall through */
-  }
-
-  // Strategy 2 — direct Firestore query by user_id field
-  try {
-    const snap = await getDocs(
-      query(collection(db, "users"), where("user_id", "==", userId)),
-    );
-    if (!snap.empty) {
-      const data = snap.docs[0].data();
-      const docId = snap.docs[0].id;
-      const profile = {
-        id: data.user_id || docId,
-        userId: data.user_id || docId,
-        displayName: data.display_name,
-        username: data.username,
-        nickname: data.display_name || data.nickname,
-        avatarUrl: data.avatar_url,
-        visibility: data.visibility,
-      };
-      profileCache.set(userId, profile);
-      return profile;
-    }
-  } catch (_e) {
+  } catch {
     /* fall through */
   }
 
@@ -94,7 +140,7 @@ async function fetchProfile(userId: string): Promise<any | null> {
   return null;
 }
 
-// ─── extractName ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ extractName â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // UserProfileEntity has camelCase fields (mapped by UserRepository.mapToUserProfile).
 function extractName(profile: any, userId: string): string {
   if (profile && typeof profile === "object") {
@@ -102,7 +148,7 @@ function extractName(profile: any, userId: string): string {
       profile.displayName ||
       profile.username ||
       profile.nickname ||
-      profile.display_name; // raw Firestore safety net
+      profile.display_name; // raw Postgres safety net
     if (name && typeof name === "string" && name.trim().length > 0) {
       return name.trim();
     }
@@ -110,7 +156,7 @@ function extractName(profile: any, userId: string): string {
   return userId ?? "Unknown";
 }
 
-// ─── extractAvatar ────────────────────────────────────────────────────────────
+// â”€â”€â”€ extractAvatar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function extractAvatar(profile: any): string {
   if (profile && typeof profile === "object") {
     const url = profile.avatarUrl || profile.avatar_url || profile.photoURL;
@@ -121,8 +167,8 @@ function extractAvatar(profile: any): string {
   return "/default-avatar.png";
 }
 
-// ─── buildTruthPost ───────────────────────────────────────────────────────────
-// Each card is built in full isolation — one failure never blocks the others.
+// â”€â”€â”€ buildTruthPost â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Each card is built in full isolation â€” one failure never blocks the others.
 async function buildTruthPost(truth: TruthEntity): Promise<TruthPost | null> {
   try {
     const [challengerProfile, receiverProfile] = await Promise.all([
@@ -168,8 +214,8 @@ async function buildTruthPost(truth: TruthEntity): Promise<TruthPost | null> {
   }
 }
 
-// ─── buildDarePost ────────────────────────────────────────────────────────────
-// Each card is built in full isolation — one failure never blocks the others.
+// â”€â”€â”€ buildDarePost â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Each card is built in full isolation â€” one failure never blocks the others.
 async function buildDarePost(dare: any): Promise<DarePost | null> {
   try {
     const [challengerProfile, receiverProfile] = await Promise.all([
@@ -223,7 +269,49 @@ async function buildDarePost(dare: any): Promise<DarePost | null> {
   }
 }
 
-// ─── Store ────────────────────────────────────────────────────────────────────
+async function fetchTruthFeedFromApi(
+  refresh: boolean,
+): Promise<TruthPost[] | null> {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const params = new URLSearchParams({ limit: "20" });
+    if (refresh) params.set("refresh", "1");
+
+    const response = await apiFetch<{
+      ok?: boolean;
+      truths?: TruthPost[];
+    }>(`/api/truth/feed?${params.toString()}`, { method: "GET" });
+
+    return Array.isArray(response.truths) ? response.truths : null;
+  } catch (error) {
+    console.warn("[useContentStore] cached truth feed unavailable:", error);
+    return null;
+  }
+}
+
+async function fetchDareFeedFromApi(
+  refresh: boolean,
+): Promise<DarePost[] | null> {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const params = new URLSearchParams({ limit: "20" });
+    if (refresh) params.set("refresh", "1");
+
+    const response = await apiFetch<{
+      ok?: boolean;
+      dares?: DarePost[];
+    }>(`/api/dares/feed?${params.toString()}`, { method: "GET" });
+
+    return Array.isArray(response.dares) ? response.dares : null;
+  } catch (error) {
+    console.warn("[useContentStore] cached dare feed unavailable:", error);
+    return null;
+  }
+}
+
+// â”€â”€â”€ Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const useContentStore = create<ContentState>((set, get) => ({
   truthPosts: [],
   darePosts: [],
@@ -241,9 +329,9 @@ export const useContentStore = create<ContentState>((set, get) => ({
   hasMoreTruth: true,
   hasMoreDares: true,
 
-  // ── Load truth posts ──────────────────────────────────────────────────────
+  // â”€â”€ Load truth posts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // getUserTruths returns ALL truths the user is involved in (sent + received).
-  // This is the correct source for the Truth feed — friends' truths involving
+  // This is the correct source for the Truth feed â€” friends' truths involving
   // the current user show up here naturally.
   loadTruthPosts: async (refresh = false, scope = "profile") => {
     const { loadingTruth } = get();
@@ -255,13 +343,95 @@ export const useContentStore = create<ContentState>((set, get) => ({
     try {
       if (!currentUser) throw new Error("User not authenticated");
 
-      const response =
-        scope === "feed"
-          ? await truthService.getFriendsTruths(currentUser.id)
-          : await truthService.getUserTruths(currentUser.id, "all");
+      if (scope === "feed") {
+        const sessionTruthPosts = !refresh
+          ? readFeedRailCache<TruthPost>("truth", currentUser.id)
+          : null;
+        if (sessionTruthPosts) {
+          set({
+            truthPosts: sessionTruthPosts,
+            loadingTruth: false,
+            hasLoadedTruth: true,
+            truthPostsUserId: currentUser.id,
+            truthPostsScope: scope,
+            refreshing: false,
+            hasMoreTruth: sessionTruthPosts.length > 0,
+          });
+          return;
+        }
+
+        const cachedTruthPosts = await fetchTruthFeedFromApi(refresh);
+        if (cachedTruthPosts && cachedTruthPosts.length > 0) {
+          writeFeedRailCache("truth", currentUser.id, cachedTruthPosts);
+          set({
+            truthPosts: cachedTruthPosts,
+            loadingTruth: false,
+            hasLoadedTruth: true,
+            truthPostsUserId: currentUser.id,
+            truthPostsScope: scope,
+            refreshing: false,
+            hasMoreTruth: cachedTruthPosts.length > 0,
+          });
+          return;
+        }
+
+        const [friendTruthsResponse, userTruthsResponse] = await Promise.all([
+          truthService.getFriendsTruths(currentUser.id),
+          truthService.getUserTruths(currentUser.id, "all"),
+        ]);
+        const fallbackRawTruths = [
+          ...(friendTruthsResponse.success ? friendTruthsResponse.truths ?? [] : []),
+          ...(userTruthsResponse.success ? userTruthsResponse.truths ?? [] : []),
+        ];
+        const seenFallbackTruthIds = new Set<string>();
+        const fallbackUniqueTruths = fallbackRawTruths.filter((truth: TruthEntity) => {
+          if (!truth?.id || seenFallbackTruthIds.has(truth.id)) return false;
+          seenFallbackTruthIds.add(truth.id);
+          return true;
+        });
+        const fallbackTruthResults = await Promise.all(
+          fallbackUniqueTruths.map(buildTruthPost),
+        );
+        const fallbackTruthPosts = fallbackTruthResults
+          .filter((post): post is TruthPost => post !== null)
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+
+        if (fallbackTruthPosts.length > 0) {
+          writeFeedRailCache("truth", currentUser.id, fallbackTruthPosts);
+          set({
+            truthPosts: fallbackTruthPosts,
+            loadingTruth: false,
+            hasLoadedTruth: true,
+            truthPostsUserId: currentUser.id,
+            truthPostsScope: scope,
+            refreshing: false,
+            hasMoreTruth: true,
+          });
+          return;
+        }
+
+        set({
+          truthPosts: [],
+          loadingTruth: false,
+          hasLoadedTruth: true,
+          truthPostsUserId: currentUser.id,
+          truthPostsScope: scope,
+          refreshing: false,
+          hasMoreTruth: false,
+        });
+        return;
+      }
+
+      const response = await truthService.getUserTruths(
+        currentUser.id,
+        "all",
+      );
 
       // getUserTruths returns { success: false } when user has no truths at all
-      // — treat that as an empty list, not a hard error
+      // â€” treat that as an empty list, not a hard error
       if (!response.success) {
         console.warn(
           "[useContentStore] getUserTruths returned failure:",
@@ -289,10 +459,9 @@ export const useContentStore = create<ContentState>((set, get) => ({
         return true;
       });
 
-      // Build each card in isolation — one bad card never blocks the rest
+      // Build each card in isolation â€” one bad card never blocks the rest
       const results = await Promise.all(uniqueTruths.map(buildTruthPost));
       const truthPosts = results.filter((p): p is TruthPost => p !== null);
-
       set({
         truthPosts,
         loadingTruth: false,
@@ -307,7 +476,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       set({
         truthError:
           error instanceof Error ? error.message : "Failed to load truth posts",
-        loadingTruth: false, // ← always cleared — prevents infinite loading
+        loadingTruth: false, // â† always cleared â€” prevents infinite loading
         hasLoadedTruth: true,
         truthPostsUserId: currentUser?.id ?? null,
         truthPostsScope: scope,
@@ -316,7 +485,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  // ── Load dare posts ───────────────────────────────────────────────────────
+  // â”€â”€ Load dare posts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // For profile screen: only load dares the user is involved in (sent + received).
   // Uses getDaresForUser which returns the user's own sent/received dares.
   loadDarePosts: async (refresh = false, scope = "profile") => {
@@ -329,11 +498,90 @@ export const useContentStore = create<ContentState>((set, get) => ({
     try {
       if (!currentUser) throw new Error("User not authenticated");
 
+      if (scope === "feed") {
+        const sessionDarePosts = !refresh
+          ? readFeedRailCache<DarePost>("dare", currentUser.id)
+          : null;
+        if (sessionDarePosts) {
+          set({
+            darePosts: sessionDarePosts,
+            loadingDares: false,
+            hasLoadedDares: true,
+            darePostsUserId: currentUser.id,
+            darePostsScope: scope,
+            refreshing: false,
+            hasMoreDares: sessionDarePosts.length > 0,
+          });
+          return;
+        }
+
+        const cachedDarePosts = await fetchDareFeedFromApi(refresh);
+        if (cachedDarePosts && cachedDarePosts.length > 0) {
+          writeFeedRailCache("dare", currentUser.id, cachedDarePosts);
+          set({
+            darePosts: cachedDarePosts,
+            loadingDares: false,
+            hasLoadedDares: true,
+            darePostsUserId: currentUser.id,
+            darePostsScope: scope,
+            refreshing: false,
+            hasMoreDares: cachedDarePosts.length > 0,
+          });
+          return;
+        }
+
+        const [friendDaresResponse, userDaresResponse] = await Promise.all([
+          dareService.getFriendsDares(currentUser.id),
+          dareService.getDaresForUser(currentUser.id),
+        ]);
+        const fallbackRawDares = [
+          ...(friendDaresResponse.success ? friendDaresResponse.dares ?? [] : []),
+          ...(userDaresResponse.success ? userDaresResponse.dares ?? [] : []),
+        ];
+        const seenFallbackDareIds = new Set<string>();
+        const fallbackUniqueDares = fallbackRawDares.filter((dare: any) => {
+          if (!dare?.id || seenFallbackDareIds.has(dare.id)) return false;
+          seenFallbackDareIds.add(dare.id);
+          return true;
+        });
+        const fallbackDareResults = await Promise.all(
+          fallbackUniqueDares.map(buildDarePost),
+        );
+        const fallbackDarePosts = fallbackDareResults
+          .filter((post): post is DarePost => post !== null)
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+
+        if (fallbackDarePosts.length > 0) {
+          writeFeedRailCache("dare", currentUser.id, fallbackDarePosts);
+          set({
+            darePosts: fallbackDarePosts,
+            loadingDares: false,
+            hasLoadedDares: true,
+            darePostsUserId: currentUser.id,
+            darePostsScope: scope,
+            refreshing: false,
+            hasMoreDares: true,
+          });
+          return;
+        }
+
+        set({
+          darePosts: [],
+          loadingDares: false,
+          hasLoadedDares: true,
+          darePostsUserId: currentUser.id,
+          darePostsScope: scope,
+          refreshing: false,
+          hasMoreDares: false,
+        });
+        return;
+      }
+
       // Only load dares the current user is involved in (as challenger or receiver)
-      const response =
-        scope === "feed"
-          ? await dareService.getFriendsDares(currentUser.id)
-          : await dareService.getDaresForUser(currentUser.id);
+      const response = await dareService.getDaresForUser(currentUser.id);
 
       if (!response.success || !response.dares || response.dares.length === 0) {
         set({
@@ -364,10 +612,9 @@ export const useContentStore = create<ContentState>((set, get) => ({
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
 
-      // Build each card in isolation — one bad card never blocks the rest
+      // Build each card in isolation â€” one bad card never blocks the rest
       const results = await Promise.all(uniqueDares.map(buildDarePost));
       const darePosts = results.filter((p): p is DarePost => p !== null);
-
       set({
         darePosts,
         loadingDares: false,
@@ -391,7 +638,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  // ── Vote on dare ──────────────────────────────────────────────────────────
+  // â”€â”€ Vote on dare â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   voteOnDare: async (dareId: string, vote: "real" | "fake") => {
     try {
       const currentUser = useAuthStore.getState().user;
@@ -402,7 +649,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
         vote.toUpperCase() as "REAL" | "FAKE",
       );
       if (response.success) {
-        await get().loadDarePosts(true);
+        await get().loadDarePosts(true, get().darePostsScope || "profile");
       } else {
         throw new Error(response.error || "Failed to vote on dare");
       }
@@ -414,7 +661,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  // ── Vote on truth ─────────────────────────────────────────────────────────
+  // â”€â”€ Vote on truth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   voteOnTruth: async (truthId: string, vote: "truth" | "lie") => {
     try {
       const currentUser = useAuthStore.getState().user;
@@ -425,7 +672,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
         vote.toUpperCase() as "TRUTH" | "LIE",
       );
       if (response.success) {
-        await get().loadTruthPosts(true);
+        await get().loadTruthPosts(true, get().truthPostsScope || "profile");
       } else {
         throw new Error(response.error || "Failed to vote on truth");
       }
@@ -437,14 +684,23 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  // ── Refresh all content ───────────────────────────────────────────────────
+  // â”€â”€ Refresh all content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  invalidateFeedRailCache: (userId) => {
+    const currentUserId = userId || useAuthStore.getState().user?.id;
+    if (currentUserId) clearFeedRailCache(currentUserId);
+  },
+
   refreshContent: async () => {
     set({ refreshing: true });
-    await Promise.all([get().loadTruthPosts(true), get().loadDarePosts(true)]);
+    const state = get();
+    await Promise.all([
+      state.loadTruthPosts(true, state.truthPostsScope || "profile"),
+      state.loadDarePosts(true, state.darePostsScope || "profile"),
+    ]);
     set({ refreshing: false });
   },
 
-  // ── Add a new dare post ───────────────────────────────────────────────────
+  // â”€â”€ Add a new dare post â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   addDarePost: (dare: DarePost) => {
     set((state) => {
       const existing = state.darePosts.find((post) => post.id === dare.id);
@@ -483,7 +739,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     });
   },
 
-  // ── Add a new truth post ──────────────────────────────────────────────────
+  // â”€â”€ Add a new truth post â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   addTruthPost: (truth: TruthPost) => {
     set((state) => {
       const existing = state.truthPosts.find((post) => post.id === truth.id);
@@ -522,7 +778,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     });
   },
 
-  // ── Clear errors ──────────────────────────────────────────────────────────
+  // â”€â”€ Clear errors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   clearErrors: () => {
     set({ truthError: null, dareError: null });
   },

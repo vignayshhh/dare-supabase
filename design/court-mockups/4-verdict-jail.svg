@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" font-family="'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1010"/><stop offset="0.5" stop-color="#1a0c1c"/><stop offset="1" stop-color="#0c0612"/>
+    </linearGradient>
+    <linearGradient id="red4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff5a6e"/><stop offset="1" stop-color="#b3142b"/>
+    </linearGradient>
+    <linearGradient id="gold4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe07a"/><stop offset="1" stop-color="#e0a92e"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9cdd6"/><stop offset="1" stop-color="#6b7180"/>
+    </linearGradient>
+    <filter id="glow4" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft4"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.5"/></filter>
+  </defs>
+  <rect width="390" height="844" fill="url(#bg4)"/>
+
+  <!-- VERDICT banner -->
+  <text x="195" y="64" text-anchor="middle" fill="#ffd766" font-size="13" letter-spacing="4">⚖ JUDGE VERDICT</text>
+  <g transform="translate(195,118)" filter="url(#glow4)">
+    <rect x="-120" y="-34" width="240" height="68" rx="16" fill="url(#red4)"/>
+    <text x="0" y="14" text-anchor="middle" fill="#fff" font-size="34" font-weight="900" letter-spacing="2">GUILTY</text>
+  </g>
+
+  <!-- override result -->
+  <g transform="translate(45,176)">
+    <rect width="300" height="52" rx="14" fill="#1a0c1c" stroke="#3a2030" filter="url(#soft4)"/>
+    <text x="16" y="22" fill="#9d8bc4" font-size="11">PUBLIC OVERRIDE VOTE</text>
+    <text x="16" y="42" fill="#fff" font-size="13" font-weight="700">Agree with Judge: <tspan fill="#7fd6ff">14</tspan>  ·  Overrule: <tspan fill="#ff8a9a">3</tspan> ✓ upheld</text>
+  </g>
+
+  <!-- SENTENCE -->
+  <text x="195" y="270" text-anchor="middle" fill="#ff8a9a" font-size="15" font-weight="700" letter-spacing="2">🚔 SENTENCED · 6 HOURS</text>
+
+  <!-- JAIL scene -->
+  <g transform="translate(45,290)">
+    <rect width="300" height="290" rx="18" fill="#160a18" stroke="#3a2030" filter="url(#soft4)"/>
+    <!-- back wall -->
+    <rect x="14" y="14" width="272" height="262" rx="10" fill="#241018"/>
+    <!-- bars -->
+    <g stroke="url(#bar)" stroke-width="7">
+      <line x1="44" y1="20" x2="44" y2="270"/>
+      <line x1="92" y1="20" x2="92" y2="270"/>
+      <line x1="140" y1="20" x2="140" y2="270"/>
+      <line x1="188" y1="20" x2="188" y2="270"/>
+      <line x1="236" y1="20" x2="236" y2="270"/>
+      <line x1="284" y1="20" x2="284" y2="270"/>
+    </g>
+    <rect x="14" y="22" width="272" height="7" fill="url(#bar)"/>
+    <!-- prisoner -->
+    <g transform="translate(166,150)">
+      <line x1="0" y1="36" x2="0" y2="78" stroke="#b85a6a" stroke-width="6" stroke-linecap="round"/>
+      <line x1="0" y1="48" x2="-18" y2="60" stroke="#b85a6a" stroke-width="6" stroke-linecap="round"/>
+      <line x1="0" y1="48" x2="18" y2="60" stroke="#b85a6a" stroke-width="6" stroke-linecap="round"/>
+      <line x1="0" y1="78" x2="-14" y2="108" stroke="#b85a6a" stroke-width="6" stroke-linecap="round"/>
+      <line x1="0" y1="78" x2="14" y2="108" stroke="#b85a6a" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="0" cy="16" r="20" fill="url(#red4)" stroke="#fff" stroke-width="2"/>
+      <text x="0" y="23" text-anchor="middle" font-size="20">😭</text>
+    </g>
+    <text x="166" y="278" text-anchor="middle" fill="#ffb3bd" font-size="11" font-weight="700">Rahul</text>
+    <!-- striped prisoner cap detail -->
+    <text x="120" y="120" font-size="16">📄</text>
+    <text x="220" y="200" font-size="16">📄</text>
+    <!-- roses on the floor -->
+    <text x="60" y="250" font-size="18">🌹</text>
+    <text x="86" y="256" font-size="16">🌹</text>
+    <text x="250" y="250" font-size="18">🌹</text>
+    <!-- pinned note -->
+    <g transform="translate(40,60)">
+      <rect width="46" height="34" rx="4" fill="#fff4c2" transform="rotate(-6)"/>
+      <text x="8" y="20" font-size="7" fill="#5c3917" transform="rotate(-6)">lmaooo</text>
+      <text x="8" y="29" font-size="7" fill="#5c3917" transform="rotate(-6)">deserved</text>
+    </g>
+    <!-- countdown -->
+    <g transform="translate(150,18)">
+      <rect x="-58" y="-2" width="116" height="26" rx="13" fill="#0c0612" stroke="#ffd766"/>
+      <text x="0" y="16" text-anchor="middle" fill="#ffd766" font-size="13" font-weight="700" font-family="monospace">05:58:21</text>
+    </g>
+  </g>
+
+  <!-- observer mode note -->
+  <g transform="translate(45,594)">
+    <rect width="300" height="40" rx="12" fill="#1a0c1c" stroke="#3a2030"/>
+    <text x="150" y="18" text-anchor="middle" fill="#9d8bc4" font-size="11">👁 OBSERVER MODE · can watch + react, can't post/vote</text>
+    <text x="150" y="33" text-anchor="middle" fill="#6c5a8c" font-size="10">(visual for this event — your spec's full jail comes later)</text>
+  </g>
+
+  <!-- visitor actions -->
+  <text x="45" y="664" fill="#fff" font-size="13" font-weight="700">Visit Rahul 👇</text>
+  <g transform="translate(45,676)">
+    <rect x="0" y="0" width="68" height="44" rx="14" fill="#2a1010" stroke="#ff8a9a"/>
+    <text x="34" y="20" text-anchor="middle" font-size="16">🌹</text>
+    <text x="34" y="36" text-anchor="middle" fill="#ffb3bd" font-size="9">Rose</text>
+    <g transform="translate(76,0)"><rect width="68" height="44" rx="14" fill="#1a1428" stroke="#7fd6ff"/><text x="34" y="20" text-anchor="middle" font-size="16">📄</text><text x="34" y="36" text-anchor="middle" fill="#7fd6ff" font-size="9">Paper ball</text></g>
+    <g transform="translate(152,0)"><rect width="68" height="44" rx="14" fill="#1a1428" stroke="#ffd766"/><text x="34" y="20" text-anchor="middle" font-size="16">🤗</text><text x="34" y="36" text-anchor="middle" fill="#ffd766" font-size="9">Hug</text></g>
+    <g transform="translate(228,0)"><rect width="72" height="44" rx="14" fill="#1a1428" stroke="#cbb8ec"/><text x="36" y="20" text-anchor="middle" font-size="16">📝</text><text x="36" y="36" text-anchor="middle" fill="#cbb8ec" font-size="9">Note</text></g>
+  </g>
+
+  <!-- archive card teaser -->
+  <g transform="translate(45,740)" filter="url(#soft4)">
+    <rect width="300" height="74" rx="14" fill="#22143c" stroke="url(#gold4)"/>
+    <text x="16" y="26" fill="#ffd766" font-size="12" font-weight="800">🏛 The Great Goa Trial — archived</text>
+    <text x="16" y="46" fill="#cbb8ec" font-size="11">Verdict: Guilty · Sentence: 6h · Witnesses: 4</text>
+    <text x="16" y="63" fill="#9d8bc4" font-size="10">Saved to Highlights · Memories · Circle Timeline</text>
+  </g>
+</svg>

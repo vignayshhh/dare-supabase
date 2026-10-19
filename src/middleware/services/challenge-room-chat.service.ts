@@ -1,16 +1,6 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  collection,
-  doc,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  type FirestoreError,
-  type Unsubscribe,
-} from "firebase/firestore";
+﻿import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { Unsubscribe } from "@/types/realtime";
+import { scheduleRefresh } from "@/lib/realtime/scheduleRefresh";
 
 export type ChallengeRoomChatMessage = {
   id: string;
@@ -85,38 +75,38 @@ class ChallengeRoomChatService {
       return () => {};
     }
 
-    const messagesQuery = query(
-      collection(db, "community_challenge_rooms", challengeId, "messages"),
-      orderBy("client_created_at", "desc"),
-      limit(ROOM_MESSAGE_LIMIT),
-    );
-
-    return onSnapshot(
-      messagesQuery,
-      (snapshot) => {
-        callback(
-          snapshot.docs
-            .map((messageDoc) =>
-              normalizeMessage(messageDoc.id, messageDoc.data()),
-            )
-            .filter(
-              (message): message is ChallengeRoomChatMessage =>
-                message !== null,
-            )
-            .sort((a, b) => a.createdAtMs - b.createdAtMs),
-        );
-        onError?.("");
-      },
-      (error: FirestoreError) => {
-        console.warn("Community room chat unavailable:", error.code);
-        callback([]);
-        onError?.(
-          error.code === "permission-denied"
-            ? "Only current members can open this room chat."
-            : "Room chat is unavailable right now.",
-        );
-      },
-    );
+    const client = getSupabaseBrowserClient(); let active = true;
+    const rows = new Map<string, ChallengeRoomChatMessage>();
+    const emit = () => callback([...rows.values()].sort((a, b) => a.createdAtMs - b.createdAtMs || a.id.localeCompare(b.id)));
+    const load = async () => {
+      const { data, error } = await client.from("community_challenge_room_messages").select("id,challenge_id,sender_id,username,display_name,avatar_url,content,client_created_at,created_at").eq("challenge_id", challengeId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(ROOM_MESSAGE_LIMIT);
+      if (!active) return;
+      if (error) { callback([]); onError?.("Room chat is unavailable right now."); return; }
+      rows.clear();
+      for (const message of data ?? []) {
+        const normalized = normalizeMessage(message.id, message);
+        if (normalized) rows.set(normalized.id, normalized);
+      }
+      emit();
+      onError?.("");
+    };
+    void load();
+    const refresh = scheduleRefresh(() => { void load(); });
+    const apply = (payload: any) => {
+      const id = String(payload?.new?.id || payload?.old?.id || "");
+      if (!id) { refresh.schedule(); return; }
+      if (payload.eventType === "DELETE") rows.delete(id);
+      else {
+        const normalized = normalizeMessage(id, payload.new);
+        if (!normalized) { refresh.schedule(); return; }
+        rows.set(id, normalized);
+        const bounded = [...rows.values()].sort((a, b) => b.createdAtMs - a.createdAtMs || b.id.localeCompare(a.id)).slice(0, ROOM_MESSAGE_LIMIT);
+        rows.clear(); for (const message of bounded) rows.set(message.id, message);
+      }
+      emit();
+    };
+    const channel = client.channel(`community-room-chat:${challengeId}`).on("postgres_changes", { event: "*", schema: "public", table: "community_challenge_room_messages", filter: `challenge_id=eq.${challengeId}` }, apply).subscribe();
+    return () => { active = false; refresh.cancel(); void client.removeChannel(channel); };
   }
 
   async sendMessage(input: SendRoomMessageInput) {
@@ -134,16 +124,7 @@ class ChallengeRoomChatService {
     try {
       const username = normalizeUsername(input.username);
       const displayName = normalizeDisplayName(input.displayName, username);
-      const messageRef = doc(
-        collection(
-          db,
-          "community_challenge_rooms",
-          input.challengeId,
-          "messages",
-        ),
-      );
-
-      await setDoc(messageRef, {
+      const { data, error } = await getSupabaseBrowserClient().from("community_challenge_room_messages").insert({
         challenge_id: input.challengeId,
         sender_id: input.senderId,
         username,
@@ -151,10 +132,11 @@ class ChallengeRoomChatService {
         avatar_url: input.avatarUrl || "",
         content,
         client_created_at: Date.now(),
-        created_at: serverTimestamp(),
-      });
-
-      return { success: true };
+        created_at: new Date().toISOString(),
+      }).select("id,challenge_id,sender_id,username,display_name,avatar_url,content,client_created_at,created_at").single();
+      if (error) throw error;
+      const message = normalizeMessage(String(data.id), data);
+      return message ? { success: true, message } : { success: false, error: "Could not read the sent message." };
     } catch (error) {
       console.warn("Failed to send community room message:", error);
       return { success: false, error: "Could not send message. Try again." };

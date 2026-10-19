@@ -1,16 +1,8 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  doc,
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-} from "firebase/firestore";
+﻿import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useProfileDataStore } from "../stores/profileDataStore";
 import { userDocSubscriptionService } from "./userDocSubscriptionService";
 import { avatarSyncService } from "./avatarSyncService";
-import { logFirestoreError } from "@/utils/firestoreErrors";
+import { logBackendError } from "@/utils/backendErrors";
 
 /**
  * Profile Data Synchronization Service
@@ -52,10 +44,8 @@ class ProfileSyncService {
    */
   async subscribeToFriendsProfiles(currentUserId: string): Promise<() => void> {
     try {
-      // Reuse avatarSync's cached friend IDs to avoid duplicate Firestore queries
-      const friendIds = await (avatarSyncService as any).getFriendIds(
-        currentUserId,
-      );
+      // Reuse avatarSync's cached friend IDs to avoid duplicate Postgres queries
+      const friendIds = await avatarSyncService.getFriendIds(currentUserId);
 
       console.log(
         `Found ${friendIds.size} friends, subscribing to their profile data...`,
@@ -80,30 +70,26 @@ class ProfileSyncService {
   }
 
   /**
-   * Force refresh profile data for a specific user from Firestore
+   * Force refresh profile data for a specific user from Postgres
    */
   async refreshUserProfile(userId: string): Promise<void> {
     try {
-      const userRef = doc(db, "users", userId);
-      const userDoc = await getDoc(userRef);
-
-      if (userDoc.exists()) {
-        const data = userDoc.data() as Record<string, any>;
-        const displayName = data.displayName || data.display_name || "";
+      const { data, error } = await getSupabaseBrowserClient()
+        .from("profiles")
+        .select("display_name,username,avatar_url")
+        .eq("id", userId)
+        .maybeSingle();
+      if (error) throw error;
+      if (data) {
+        const displayName = data.display_name || data.username || "";
         const username = data.username || "";
-        const avatarUrl =
-          data.avatar || data.avatarUrl || data.avatar_url || "";
-
-        if (displayName || username || avatarUrl) {
-          const { setUserProfile } = useProfileDataStore.getState();
-          setUserProfile(userId, displayName, username, avatarUrl);
-          console.log(
-            `Force refreshed profile data for user ${userId}: ${displayName} (@${username})`,
-          );
-        }
+        const avatarUrl = data.avatar_url || "";
+        const { setUserProfile } = useProfileDataStore.getState();
+        setUserProfile(userId, displayName, username, avatarUrl);
+        console.log(`Force refreshed profile data for user ${userId}: ${displayName} (@${username})`);
       }
     } catch (error) {
-      logFirestoreError(`Error refreshing profile for user ${userId}:`, error);
+      logBackendError(`Error refreshing profile for user ${userId}:`, error);
     }
   }
 

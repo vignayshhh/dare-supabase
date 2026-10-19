@@ -1,0 +1,10 @@
+alter table public.profiles add column if not exists is_banned boolean not null default false;
+alter table public.profiles add column if not exists banned_at timestamptz;
+alter table public.profiles add column if not exists banned_by uuid references public.profiles(id) on delete set null;
+alter table public.profiles add column if not exists muted_until timestamptz;
+alter table public.reports add column if not exists resolved_by uuid references public.profiles(id) on delete set null;
+alter table public.reports add column if not exists resolved_at timestamptz;
+alter table public.moderation_actions add column if not exists target_content_id uuid;
+alter table public.moderation_actions add column if not exists report_id uuid references public.reports(id) on delete set null;
+create index if not exists profiles_banned_idx on public.profiles(is_banned) where is_banned;
+create index if not exists profiles_muted_idx on public.profiles(muted_until) where muted_until is not null;

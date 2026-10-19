@@ -1,0 +1,219 @@
+<svg width="1800" height="1160" viewBox="0 0 1800 1160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1800" y2="1160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#040706"/>
+      <stop offset="0.45" stop-color="#10130d"/>
+      <stop offset="1" stop-color="#050403"/>
+    </linearGradient>
+    <radialGradient id="stage" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(900 0) rotate(90) scale(760 1200)">
+      <stop stop-color="#e8ff68" stop-opacity="0.22"/>
+      <stop offset="0.35" stop-color="#ff3d81" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#181914"/>
+      <stop offset="1" stop-color="#080907"/>
+    </linearGradient>
+    <linearGradient id="skinWarm" x1="0" y1="70" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd7a5"/>
+      <stop offset="1" stop-color="#a8643d"/>
+    </linearGradient>
+    <linearGradient id="skinCool" x1="0" y1="70" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d6b69d"/>
+      <stop offset="1" stop-color="#705049"/>
+    </linearGradient>
+    <linearGradient id="skinDeep" x1="0" y1="70" x2="0" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#b77754"/>
+      <stop offset="1" stop-color="#40231f"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="18" flood-color="#000000" flood-opacity="0.54"/>
+    </filter>
+    <filter id="limeGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#d9ff3f" flood-opacity="0.48"/>
+    </filter>
+    <filter id="pinkGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#ff3d81" flood-opacity="0.46"/>
+    </filter>
+    <clipPath id="circleClip">
+      <circle cx="150" cy="150" r="118"/>
+    </clipPath>
+    <style>
+      .title { font: 950 56px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .sub { font: 650 19px Inter, SF Pro Display, Arial, sans-serif; fill: #a8adb3; letter-spacing: 0; }
+      .name { font: 900 25px Inter, SF Pro Display, Arial, sans-serif; fill: #fff; letter-spacing: 0; }
+      .desc { font: 650 15px Inter, SF Pro Display, Arial, sans-serif; fill: #9ca3af; letter-spacing: 0; }
+      .tag { font: 900 12px Inter, SF Pro Display, Arial, sans-serif; fill: #d9ff3f; letter-spacing: 1.8px; }
+      .face { stroke: #1d0f0d; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.78; }
+      .ink { stroke: #050505; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+      .lime { stroke: #d9ff3f; stroke-width: 3; stroke-linecap: round; }
+      .pink { stroke: #ff3d81; stroke-width: 3; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1160" fill="url(#bg)"/>
+  <rect width="1800" height="1160" fill="url(#stage)"/>
+  <path d="M0 875 C250 788 433 925 688 855 C1004 769 1237 710 1800 822 V1160 H0 Z" fill="#0b120d"/>
+  <path d="M0 900 C360 854 506 1010 843 912 C1191 811 1440 898 1800 850" stroke="#d9ff3f" stroke-opacity="0.16" stroke-width="2"/>
+
+  <text x="80" y="104" class="title">Steve, Completely Different</text>
+  <text x="80" y="143" class="sub">Not a normal AI avatar. These versions make Steve feel like a real social character with a distinct silhouette.</text>
+
+  <!-- 1 -->
+  <g transform="translate(80 210)" filter="url(#shadow)">
+    <rect width="460" height="430" rx="30" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">1. The Green Room Host</text>
+    <text x="34" y="84" class="desc">Charismatic, social, always holding court.</text>
+    <g transform="translate(80 115)">
+      <circle cx="150" cy="150" r="128" fill="#11130c"/>
+      <g clip-path="url(#circleClip)">
+        <rect x="32" y="32" width="236" height="236" rx="118" fill="#10120d"/>
+        <path d="M32 250 C64 190 103 160 150 160 C198 160 238 190 268 250 V300 H32 Z" fill="#232112"/>
+        <path d="M80 242 C96 196 117 177 150 177 C184 177 207 196 222 242" stroke="#d9ff3f" stroke-opacity="0.18" stroke-width="31" stroke-linecap="round"/>
+        <ellipse cx="150" cy="138" rx="58" ry="70" fill="url(#skinWarm)"/>
+        <path d="M80 104 C95 51 135 32 177 44 C210 54 229 88 223 126 C196 85 122 82 80 104 Z" fill="#1a1711"/>
+        <path d="M88 98 C114 51 171 45 220 94" class="lime" opacity="0.32"/>
+        <path d="M106 135 C121 127 137 129 148 139" class="face"/>
+        <path d="M163 139 C177 129 194 128 206 135" class="face"/>
+        <circle cx="133" cy="150" r="4" fill="#050505"/>
+        <circle cx="186" cy="150" r="4" fill="#050505"/>
+        <path d="M134 190 C150 204 175 201 190 186" stroke="#29120d" stroke-width="4" stroke-linecap="round"/>
+        <rect x="205" y="156" width="34" height="54" rx="10" fill="#d9ff3f" filter="url(#limeGlow)"/>
+        <path d="M213 171 H232 M213 185 H228 M213 199 H232" stroke="#11130c" stroke-width="2"/>
+      </g>
+      <circle cx="150" cy="150" r="118" stroke="#d9ff3f" stroke-width="4"/>
+    </g>
+    <text x="34" y="386" class="tag">FRIEND-GROUP ENERGY</text>
+  </g>
+
+  <!-- 2 -->
+  <g transform="translate(620 210)" filter="url(#shadow)">
+    <rect width="460" height="430" rx="30" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">2. The Voice Note Steve</text>
+    <text x="34" y="84" class="desc">Looks like he sends 2AM voice notes.</text>
+    <g transform="translate(80 115)">
+      <circle cx="150" cy="150" r="128" fill="#0b0e10"/>
+      <g clip-path="url(#circleClip)">
+        <rect x="32" y="32" width="236" height="236" rx="118" fill="#0b0e10"/>
+        <path d="M30 270 C58 200 93 166 150 166 C207 166 244 200 270 270 V306 H30 Z" fill="#111827"/>
+        <path d="M78 250 C91 201 119 179 150 179 C183 179 210 201 224 250" stroke="#263241" stroke-width="32" stroke-linecap="round"/>
+        <ellipse cx="150" cy="139" rx="56" ry="70" fill="url(#skinCool)"/>
+        <path d="M72 117 C78 77 110 49 149 48 C199 47 230 87 227 126 C185 101 118 102 72 117 Z" fill="#090909"/>
+        <path d="M104 138 C119 132 134 133 146 140" class="face"/>
+        <path d="M163 140 C177 133 193 132 206 138" class="face"/>
+        <circle cx="132" cy="151" r="4" fill="#050505"/>
+        <circle cx="187" cy="151" r="4" fill="#050505"/>
+        <path d="M132 190 C150 198 171 197 188 189" stroke="#1f100f" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="66" cy="158" r="26" fill="#ff3d81" filter="url(#pinkGlow)"/>
+        <path d="M55 158 H73 M64 149 V167" stroke="#10080c" stroke-width="5" stroke-linecap="round"/>
+        <path d="M233 134 C254 145 254 176 233 188" stroke="#d9ff3f" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+        <path d="M249 116 C284 143 284 179 249 207" stroke="#d9ff3f" stroke-width="3" stroke-linecap="round" opacity="0.38"/>
+      </g>
+      <circle cx="150" cy="150" r="118" stroke="#ff3d81" stroke-width="4"/>
+    </g>
+    <text x="34" y="386" class="tag">MOST RELATABLE</text>
+  </g>
+
+  <!-- 3 -->
+  <g transform="translate(1160 210)" filter="url(#shadow)">
+    <rect width="460" height="430" rx="30" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">3. The Polaroid Steve</text>
+    <text x="34" y="84" class="desc">A real person vibe, like a saved memory.</text>
+    <g transform="translate(80 105)">
+      <rect x="56" y="24" width="244" height="300" rx="22" fill="#f4efe5"/>
+      <rect x="77" y="45" width="202" height="210" rx="16" fill="#151712"/>
+      <g transform="translate(28 5)" clip-path="url(#circleClip)">
+        <rect x="32" y="32" width="236" height="236" rx="28" fill="#151712"/>
+        <path d="M37 260 C70 204 101 178 150 178 C198 178 230 204 264 260 V306 H37 Z" fill="#1b1714"/>
+        <ellipse cx="150" cy="142" rx="58" ry="72" fill="url(#skinWarm)"/>
+        <path d="M82 122 C91 70 126 43 169 49 C208 54 228 90 220 130 C193 97 122 94 82 122 Z" fill="#17120d"/>
+        <path d="M106 139 C121 132 135 133 146 140" class="face"/>
+        <path d="M165 140 C176 133 191 132 204 139" class="face"/>
+        <circle cx="133" cy="151" r="4" fill="#050505"/>
+        <circle cx="185" cy="151" r="4" fill="#050505"/>
+        <path d="M135 191 C150 200 169 199 185 190" stroke="#2b130f" stroke-width="4" stroke-linecap="round"/>
+        <path d="M52 72 L251 220" stroke="#d9ff3f" stroke-width="2" opacity="0.22"/>
+      </g>
+      <text x="92" y="291" font-family="Inter, Arial" font-weight="900" font-size="18" fill="#151712">STEVE SAW IT</text>
+      <circle cx="264" cy="46" r="18" fill="#d9ff3f" filter="url(#limeGlow)"/>
+    </g>
+    <text x="34" y="386" class="tag">MOST PERSON-LIKE</text>
+  </g>
+
+  <!-- 4 -->
+  <g transform="translate(80 650)" filter="url(#shadow)">
+    <rect width="460" height="430" rx="30" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">4. The Mascot Person</text>
+    <text x="34" y="84" class="desc">Stylized, recognizable, made for an app icon.</text>
+    <g transform="translate(80 115)">
+      <circle cx="150" cy="150" r="128" fill="#19160d"/>
+      <g clip-path="url(#circleClip)">
+        <rect x="32" y="32" width="236" height="236" rx="118" fill="#19160d"/>
+        <path d="M31 248 C60 190 99 160 150 160 C202 160 240 190 270 248 V302 H31 Z" fill="#d9ff3f"/>
+        <ellipse cx="150" cy="138" rx="62" ry="74" fill="#ffe0b8"/>
+        <path d="M72 117 C78 56 113 28 150 28 C198 28 232 63 229 118 C197 75 112 75 72 117 Z" fill="#111111"/>
+        <path d="M105 137 C121 130 138 132 150 141" class="ink"/>
+        <path d="M161 141 C174 132 192 130 207 137" class="ink"/>
+        <circle cx="133" cy="153" r="5" fill="#050505"/>
+        <circle cx="187" cy="153" r="5" fill="#050505"/>
+        <path d="M130 190 C150 208 179 204 195 185" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+        <path d="M75 232 H225" stroke="#111" stroke-width="18" stroke-linecap="round"/>
+      </g>
+      <circle cx="150" cy="150" r="118" stroke="#111111" stroke-width="7"/>
+      <circle cx="235" cy="226" r="18" fill="#ff3d81" filter="url(#pinkGlow)"/>
+    </g>
+    <text x="34" y="386" class="tag">MOST BRANDABLE</text>
+  </g>
+
+  <!-- 5 -->
+  <g transform="translate(620 650)" filter="url(#shadow)">
+    <rect width="460" height="430" rx="30" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">5. The Anonymous Caller</text>
+    <text x="34" y="84" class="desc">He is a person, but never fully yours.</text>
+    <g transform="translate(80 115)">
+      <circle cx="150" cy="150" r="128" fill="#090b08"/>
+      <g clip-path="url(#circleClip)">
+        <rect x="32" y="32" width="236" height="236" rx="118" fill="#090b08"/>
+        <path d="M31 288 C45 174 87 68 150 68 C214 68 256 174 270 288 Z" fill="#11140f"/>
+        <ellipse cx="150" cy="146" rx="58" ry="73" fill="url(#skinDeep)" opacity="0.92"/>
+        <path d="M67 118 C76 64 112 34 150 34 C199 34 235 74 236 124 C194 99 111 99 67 118 Z" fill="#050505"/>
+        <rect x="55" y="116" width="235" height="74" fill="#050505" opacity="0.62"/>
+        <path d="M103 143 C122 133 139 134 151 144" stroke="#d9ff3f" stroke-width="4" stroke-linecap="round"/>
+        <path d="M160 144 C174 134 193 133 211 143" stroke="#d9ff3f" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="133" cy="154" r="4" fill="#d9ff3f" filter="url(#limeGlow)"/>
+        <circle cx="187" cy="154" r="4" fill="#d9ff3f" filter="url(#limeGlow)"/>
+        <path d="M110 202 C142 215 177 213 205 200" stroke="#050505" stroke-width="7" stroke-linecap="round"/>
+        <path d="M46 130 H262 M46 166 H262" stroke="#ff3d81" stroke-width="2" opacity="0.44"/>
+      </g>
+      <circle cx="150" cy="150" r="118" stroke="#d9ff3f" stroke-width="4"/>
+    </g>
+    <text x="34" y="386" class="tag">MOST STEVE-AS-MYTH</text>
+  </g>
+
+  <!-- 6 -->
+  <g transform="translate(1160 650)" filter="url(#shadow)">
+    <rect width="460" height="430" rx="30" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="34" y="58" class="name">6. The Dare Captain</text>
+    <text x="34" y="84" class="desc">Confident, playful, a little dangerous.</text>
+    <g transform="translate(80 115)">
+      <circle cx="150" cy="150" r="128" fill="#11130d"/>
+      <g clip-path="url(#circleClip)">
+        <rect x="32" y="32" width="236" height="236" rx="118" fill="#11130d"/>
+        <path d="M34 260 C64 199 99 166 150 166 C202 166 238 199 266 260 V305 H34 Z" fill="#2b191d"/>
+        <path d="M82 248 C94 203 120 181 150 181 C183 181 210 203 223 248" stroke="#ff3d81" stroke-opacity="0.18" stroke-width="32" stroke-linecap="round"/>
+        <ellipse cx="150" cy="139" rx="58" ry="72" fill="url(#skinWarm)"/>
+        <path d="M76 112 C88 62 121 40 153 40 C198 40 228 74 228 117 C192 92 115 91 76 112 Z" fill="#16110d"/>
+        <path d="M72 75 L150 36 L228 75 L218 103 C177 81 123 81 82 103 Z" fill="#d9ff3f"/>
+        <text x="136" y="76" font-family="Inter, Arial" font-weight="950" font-size="20" fill="#11130d">S</text>
+        <path d="M106 138 C121 130 137 132 149 141" class="face"/>
+        <path d="M163 141 C176 132 193 130 206 138" class="face"/>
+        <circle cx="133" cy="151" r="4" fill="#050505"/>
+        <circle cx="187" cy="151" r="4" fill="#050505"/>
+        <path d="M132 190 C150 205 175 202 191 186" stroke="#29120d" stroke-width="4" stroke-linecap="round"/>
+        <path d="M50 186 C82 169 112 166 150 166 C190 166 220 169 252 186" stroke="#d9ff3f" stroke-width="2" opacity="0.34"/>
+      </g>
+      <circle cx="150" cy="150" r="118" stroke="#ff3d81" stroke-width="4"/>
+    </g>
+    <text x="34" y="386" class="tag">MOST GAME-LIKE</text>
+  </g>
+</svg>

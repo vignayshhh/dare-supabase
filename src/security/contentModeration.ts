@@ -244,7 +244,7 @@ class ContentModerationService {
    */
   hasExternalLinks(content: string): boolean {
     const urlPattern =
-      /https?:\/\/(?!localhost|127\.0\.0\.1|firebasestorage\.googleapis\.com|storage\.googleapis\.com|dare-g5ijg25ue-vignayshhhs-projects\.vercel\.app|dare-web-app\.vercel\.app)[^\s]+/gi;
+      /https?:\/\/(?!localhost|127\.0\.0\.1|[a-z0-9-]+\.supabase\.co|dare-g5ijg25ue-vignayshhhs-projects\.vercel\.app|dare-web-app\.vercel\.app)[^\s]+/gi;
     return urlPattern.test(content);
   }
 

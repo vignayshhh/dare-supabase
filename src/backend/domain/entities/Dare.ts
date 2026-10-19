@@ -26,8 +26,6 @@ export class DareEntity {
     public readonly acceptedAt: string | null,
     public readonly proofSubmittedAt: string | null,
     public readonly completedAt: string | null,
-    // Timer/ghost mode fields
-    public readonly ghostModeUntil: string | null,
   ) {}
 
   static create(data: {
@@ -46,7 +44,6 @@ export class DareEntity {
     acceptedAt: string | null;
     proofSubmittedAt: string | null;
     completedAt: string | null;
-    ghostModeUntil: string | null;
   }): DareEntity {
     return new DareEntity(
       data.id,
@@ -64,7 +61,6 @@ export class DareEntity {
       data.acceptedAt,
       data.proofSubmittedAt,
       data.completedAt,
-      data.ghostModeUntil,
     );
   }
 
@@ -77,23 +73,8 @@ export class DareEntity {
       currentState: this.state,
       expectedState: "ACCEPTED",
       result: this.state === "ACCEPTED",
-      ghostModeUntil: this.ghostModeUntil,
-      isInGhostMode: this.isInGhostMode(),
     });
     return this.state === "ACCEPTED";
-  }
-
-  isInGhostMode(): boolean {
-    if (!this.ghostModeUntil) return false;
-    return new Date() < new Date(this.ghostModeUntil);
-  }
-
-  getGhostModeRemainingMinutes(): number {
-    if (!this.ghostModeUntil) return 0;
-    const now = new Date();
-    const expiry = new Date(this.ghostModeUntil);
-    const diff = expiry.getTime() - now.getTime();
-    return Math.max(0, Math.ceil(diff / (1000 * 60)));
   }
 
   canVote(voterId: string): boolean {
@@ -113,9 +94,6 @@ export class DareEntity {
       throw new Error("Dare cannot be accepted in current state");
     }
 
-    const now = new Date();
-    const ghostModeUntil = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes
-
     return new DareEntity(
       this.id,
       this.challengerId,
@@ -132,7 +110,6 @@ export class DareEntity {
       new Date().toISOString(), // acceptedAt
       this.proofSubmittedAt,
       this.completedAt,
-      ghostModeUntil.toISOString(), // ghostModeUntil
     );
   }
 
@@ -161,7 +138,6 @@ export class DareEntity {
       this.acceptedAt,
       new Date().toISOString(), // proofSubmittedAt
       this.completedAt,
-      this.ghostModeUntil,
     );
   }
 
@@ -188,7 +164,6 @@ export class DareEntity {
       this.acceptedAt,
       this.proofSubmittedAt,
       this.completedAt,
-      this.ghostModeUntil,
     );
   }
 
@@ -209,7 +184,6 @@ export class DareEntity {
       this.acceptedAt,
       this.proofSubmittedAt,
       new Date().toISOString(), // completedAt
-      this.ghostModeUntil,
     );
   }
 
@@ -230,7 +204,6 @@ export class DareEntity {
       this.acceptedAt,
       this.proofSubmittedAt,
       new Date().toISOString(), // completedAt
-      this.ghostModeUntil,
     );
   }
 
@@ -251,7 +224,6 @@ export class DareEntity {
       this.acceptedAt,
       this.proofSubmittedAt,
       this.completedAt,
-      this.ghostModeUntil,
     );
   }
 }

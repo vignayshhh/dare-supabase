@@ -3,10 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { feedService } from "@/middleware/services/feed.service";
 import { optimizedFeedService } from "@/middleware/services/feed.service.optimized";
 import { authService } from "@/middleware/services/auth-v2.service";
-import {
-  closeFriendsService,
-  surveillanceService,
-} from "@/middleware/services/service-factory";
+import { alertService } from "@/middleware/services/service-factory";
 import { commentLikePersistence } from "@/utils/commentLikePersistence";
 import {
   getResolvedDisplayName,
@@ -28,6 +25,7 @@ export interface FeedPost {
     thumbnail?: string;
     duration?: string;
   };
+  media_urls?: string[];
   stats: { views: number };
   likesByUser: Record<
     string,
@@ -59,6 +57,16 @@ export interface FeedPost {
   taggedFriends?: string[];
 }
 
+export interface PendingFeedUpload {
+  id: string;
+  caption: string;
+  previewUrl?: string;
+  mediaType?: "image" | "video" | "audio";
+  progress: number;
+  status: "uploading" | "error";
+  error?: string;
+}
+
 interface PostsStore {
   // State
   posts: FeedPost[];
@@ -72,6 +80,7 @@ interface PostsStore {
   userPostsUnsubscribe: (() => void) | null;
   commentUnsubscribes: Record<string, () => void>;
   likeUnsubscribes: Record<string, () => void>;
+  pendingUpload: PendingFeedUpload | null;
 
   // Actions
   createPost: (postData: {
@@ -82,8 +91,13 @@ interface PostsStore {
       thumbnail?: string;
       duration?: string;
     };
+    media_urls?: string[];
     taggedFriends?: string[];
   }) => Promise<void>;
+  beginPendingUpload: (upload: Omit<PendingFeedUpload, "progress" | "status">) => void;
+  updatePendingUpload: (progress: number) => void;
+  failPendingUpload: (error: string) => void;
+  completePendingUpload: () => void;
   loadPosts: (userId?: string) => Promise<void>;
   loadUserPosts: (userId: string) => Promise<void>;
   loadMorePosts: () => Promise<void>;
@@ -166,9 +180,70 @@ const SYNC_STALENESS_MS = 5 * 60 * 1000;
 
 // Limit how much post data we persist to avoid localStorage quota issues
 const MAX_PERSISTED_POSTS = 50;
+const recentlyDeletedPostIds = new Map<string, number>();
+const isRecentlyDeletedPost = (postId: string) => {
+  const expiresAt = recentlyDeletedPostIds.get(postId) || 0;
+  if (expiresAt > Date.now()) return true;
+  if (expiresAt) recentlyDeletedPostIds.delete(postId);
+  return false;
+};
 
 const isDataUrl = (value?: string) =>
   typeof value === "string" && value.startsWith("data:");
+
+// Supabase signed URLs get a fresh query token on feed refresh. Replacing an
+// otherwise identical src forces mobile browsers to decode/repaint the media,
+// producing a black flash during rapid likes.
+const mediaUrlIdentity = (url?: string) =>
+  typeof url === "string" ? url.split(/[?#]/, 1)[0] : "";
+
+const preserveSignedMediaUrl = (incoming?: string, existing?: string) => {
+  if (!incoming) return existing;
+  if (
+    existing &&
+    mediaUrlIdentity(incoming) === mediaUrlIdentity(existing)
+  ) {
+    return existing;
+  }
+  return incoming;
+};
+
+const preserveSignedMediaUrls = (
+  incoming?: string[],
+  existing?: string[],
+) => {
+  if (!incoming?.length) return existing;
+  if (
+    existing?.length === incoming.length &&
+    incoming.every(
+      (url, index) =>
+        mediaUrlIdentity(url) === mediaUrlIdentity(existing[index]),
+    )
+  ) {
+    return existing;
+  }
+  return incoming;
+};
+
+const getPostCaption = (post: unknown, fallback = "") => {
+  const data = (post || {}) as Record<string, unknown>;
+  const candidates = [
+    data.content,
+    data.body,
+    data.caption,
+    data.text,
+    data.description,
+    data.body,
+    fallback,
+  ];
+
+  return (
+    candidates.find(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    )?.trim() || ""
+  );
+};
 
 const sanitizePostForPersist = (post: FeedPost): FeedPost => {
   const media = post.media;
@@ -292,6 +367,22 @@ export const usePostsStore = create<PostsStore>()(
       userPostsUnsubscribe: null,
       commentUnsubscribes: {},
       likeUnsubscribes: {},
+      pendingUpload: null,
+      beginPendingUpload: (upload) =>
+        set({ pendingUpload: { ...upload, progress: 0, status: "uploading" } }),
+      updatePendingUpload: (progress) =>
+        set((state) =>
+          state.pendingUpload
+            ? { pendingUpload: { ...state.pendingUpload, progress, status: "uploading", error: undefined } }
+            : state,
+        ),
+      failPendingUpload: (error) =>
+        set((state) =>
+          state.pendingUpload
+            ? { pendingUpload: { ...state.pendingUpload, status: "error", error } }
+            : state,
+        ),
+      completePendingUpload: () => set({ pendingUpload: null }),
 
       // ─── Actions ────────────────────────────────────────────────────────────
 
@@ -326,8 +417,9 @@ export const usePostsStore = create<PostsStore>()(
           }
 
           // Map UI media to backend format
-          const mediaType =
-            postData.media?.type === "image"
+          const mediaType = postData.media_urls?.length
+            ? "PHOTO"
+            : postData.media?.type === "image"
               ? "PHOTO"
               : postData.media?.type === "video"
                 ? "VIDEO"
@@ -338,79 +430,75 @@ export const usePostsStore = create<PostsStore>()(
           const backendPost = await feedService.createPost({
             author_id: currentUser.id,
             content: trimmedContent,
-            media_url: postData.media?.url,
+            media_url: postData.media_urls?.length
+              ? postData.media_urls[0]
+              : postData.media?.url,
+            media_urls: postData.media_urls,
             media_type: mediaType,
           });
 
-          // Get enriched post with author info so usernames / avatars are correct
-          const postWithAuthor = await feedService.getPostWithAuthor(
-            backendPost.id,
-            currentUser.id,
-          );
-
           const nowIso = new Date().toISOString();
+          const currentDisplay = getCurrentUserDisplay();
+          // POST /api/posts already returns the committed row. Building the
+          // optimistic feed item from it avoids a redundant browser-side read
+          // that can be blocked by RLS even though creation succeeded.
+          const newPost: FeedPost = {
+            id: backendPost.id,
+            author: {
+              id: currentUser.id,
+              name: currentDisplay.name,
+              avatar: currentDisplay.avatar || "",
+              username: currentDisplay.username,
+            },
+            content: getPostCaption(backendPost, trimmedContent),
+            media: backendPost.media_url
+              ? {
+                  type:
+                    backendPost.media_type === "PHOTO"
+                      ? "image"
+                      : backendPost.media_type === "VIDEO"
+                        ? "video"
+                        : backendPost.media_type === "AUDIO"
+                          ? "audio"
+                          : "image",
+                  url: backendPost.media_url,
+                  thumbnail:
+                    postData.media?.thumbnail || backendPost.media_url,
+                  duration: postData.media?.duration,
+                }
+              : postData.media,
+            media_urls:
+              postData.media_urls ?? backendPost.media_urls ?? undefined,
+            stats: { views: backendPost.view_count || 0 },
+            likesByUser: {},
+            likes_count: backendPost.likes_count || 0,
+            comments: [],
+            comments_count: backendPost.comments_count || 0,
+            timestamp:
+              typeof backendPost.created_at === "string"
+                ? backendPost.created_at
+                : nowIso,
+            taggedFriends: postData.taggedFriends,
+          };
 
-          const newPost: FeedPost = postWithAuthor
-            ? {
-                id: postWithAuthor.id,
-                author: {
-                  id: postWithAuthor.author_id || currentUser.id,
-                  name:
-                    postWithAuthor.author.display_name ||
-                    postWithAuthor.author.username,
-                  avatar: postWithAuthor.author.avatar_url || "", // Use actual avatar or empty string
-                  username: postWithAuthor.author.username,
-                },
-                content: postWithAuthor.content || "",
-                media: postWithAuthor.media_url
-                  ? {
-                      type:
-                        postWithAuthor.media_type === "PHOTO"
-                          ? "image"
-                          : postWithAuthor.media_type === "VIDEO"
-                            ? "video"
-                            : "audio",
-                      url: postWithAuthor.media_url,
-                      thumbnail:
-                        postData.media?.thumbnail || postWithAuthor.media_url,
-                      duration: postData.media?.duration,
-                    }
-                  : undefined,
-                stats: { views: postWithAuthor.view_count || 0 },
-                likesByUser: {},
-                likes_count: 0,
-                comments: [],
-                comments_count: 0,
-                timestamp: postWithAuthor.created_at || nowIso,
-                taggedFriends: postData.taggedFriends,
-              }
-            : {
-                // Fallback mapping if enriched fetch fails
-                id: backendPost.id,
-                author: {
-                  id: currentUser.id,
-                  name: currentUser.displayName || currentUser.username,
-                  avatar: currentUser.avatar || "", // Use actual avatar or empty string
-                  username: currentUser.username,
-                },
-                content: trimmedContent,
-                media: postData.media,
-                stats: { views: 0 },
-                likesByUser: {},
-                likes_count: 0,
-                comments: [],
-                comments_count: 0,
-                timestamp: nowIso,
-                taggedFriends: postData.taggedFriends,
-              };
-
-          // Prepend to both feeds so it shows up everywhere immediately
-          set((state) => ({
-            posts: sortFeedPosts([newPost, ...state.posts]),
-            userPosts: sortFeedPosts([newPost, ...state.userPosts]),
-            loading: false,
-            feedBootstrapping: false,
-          }));
+          // Prepend to both feeds so it shows up everywhere immediately.
+          // Deduplicate by ID in case subscribeToFeed already added this post.
+          set((state) => {
+            const allPosts = [newPost, ...state.posts];
+            const uniquePosts = Array.from(
+              new Map(allPosts.map((p) => [p.id, p])).values(),
+            );
+            const allUserPosts = [newPost, ...state.userPosts];
+            const uniqueUserPosts = Array.from(
+              new Map(allUserPosts.map((p) => [p.id, p])).values(),
+            );
+            return {
+              posts: sortFeedPosts(uniquePosts),
+              userPosts: sortFeedPosts(uniqueUserPosts),
+              loading: false,
+              feedBootstrapping: false,
+            };
+          });
 
           // Update basic user activity in the background (best-effort)
           authService
@@ -458,7 +546,7 @@ export const usePostsStore = create<PostsStore>()(
               avatar: post.author.avatar_url || "", // Use actual avatar or empty string
               username: post.author.username,
             },
-            content: post.content || "",
+            content: getPostCaption(post),
             media: post.media_url
               ? {
                   type:
@@ -466,11 +554,14 @@ export const usePostsStore = create<PostsStore>()(
                       ? "image"
                       : post.media_type === "VIDEO"
                         ? "video"
-                        : "audio",
+                        : post.media_type === "AUDIO"
+                          ? "audio"
+                          : "image",
                   url: post.media_url,
                   thumbnail: post.media_url,
                 }
               : undefined,
+            media_urls: (post as any).media_urls ?? undefined,
             stats: { views: post.view_count || 0 },
             likesByUser: post.is_liked_by_user
               ? {
@@ -502,13 +593,53 @@ export const usePostsStore = create<PostsStore>()(
             })),
           });
 
+          // Fetch like previews in parallel — same number of reads, zero render delay
+          const likedPostIds = frontendPosts
+            .filter((p) => (p.likes_count || 0) > 0)
+            .map((p) => p.id)
+            .slice(0, 12);
+
+          type LikePreviewEntry = {
+            userId: string;
+            name: string;
+            username: string;
+            avatar: string;
+            tapCount: number;
+          };
+          const emptyLikePreviewMap = new Map<string, LikePreviewEntry[]>();
+          const likePreviewsMap: Map<string, LikePreviewEntry[]> =
+            likedPostIds.length > 0
+              ? await feedService
+                  .getPostLikePreviews(likedPostIds, 3)
+                  .catch(() => emptyLikePreviewMap)
+              : emptyLikePreviewMap;
+
+          const postsWithPreviews: FeedPost[] = frontendPosts.map((post) => {
+            const entries = likePreviewsMap.get(post.id);
+            if (!entries || entries.length === 0) return post;
+            const likesByUser = { ...post.likesByUser };
+            entries.forEach((entry) => {
+              if (!likesByUser[entry.userId]) {
+                likesByUser[entry.userId] = entry;
+              }
+            });
+            return {
+              ...post,
+              likesByUser,
+              likes_count: Math.max(
+                post.likes_count || 0,
+                Object.keys(likesByUser).length,
+              ),
+            };
+          });
+
           // Keep any locally-created posts not yet confirmed by the backend
-          const backendIds = new Set(frontendPosts.map((p) => p.id));
+          const backendIds = new Set(postsWithPreviews.map((p) => p.id));
           const localOnlyPosts = get().posts.filter(
             (p) => !backendIds.has(p.id),
           );
 
-          const mergedPosts = [...localOnlyPosts, ...frontendPosts];
+          const mergedPosts = [...localOnlyPosts, ...postsWithPreviews];
 
           // Deduplicate by ID to prevent duplicate key errors
           const uniquePosts = Array.from(
@@ -609,7 +740,7 @@ export const usePostsStore = create<PostsStore>()(
               avatar: post.author.avatar_url || "", // Use actual avatar or empty string
               username: post.author.username,
             },
-            content: post.content || "",
+            content: getPostCaption(post),
             media: post.media_url
               ? {
                   type:
@@ -617,11 +748,14 @@ export const usePostsStore = create<PostsStore>()(
                       ? "image"
                       : post.media_type === "VIDEO"
                         ? "video"
-                        : "audio",
+                        : post.media_type === "AUDIO"
+                          ? "audio"
+                          : "image",
                   url: post.media_url,
                   thumbnail: post.media_url,
                 }
               : undefined,
+            media_urls: (post as any).media_urls ?? undefined,
             stats: { views: post.view_count || 0 },
             likesByUser: post.is_liked_by_user
               ? {
@@ -723,32 +857,8 @@ export const usePostsStore = create<PostsStore>()(
             };
 
             // Social alert: "@username liked your post"
-            surveillanceService.trackPostLike(likeParams).catch(() => {});
+            alertService.trackPostLike(likeParams).catch(() => {});
 
-            // Sus alert: "@username liked your post X times" (at thresholds 5,10,20,50)
-            surveillanceService
-              .trackRepeatedLike({ ...likeParams, tapCount: newTapCount })
-              .catch(() => {});
-
-            closeFriendsService
-              .trackPostLikeActivity({
-                actorId: current.userId,
-                actorName: current.name,
-                actorUsername: current.username,
-                actorAvatar: current.avatar || "",
-                postId,
-                tapCount: newTapCount,
-                postAuthorId: post.author.id,
-                postAuthorUsername: post.author.username,
-                postThumbnail: post.media?.thumbnail || post.media?.url || "",
-                postContent: post.content || "",
-              })
-              .catch((closeFriendError) => {
-                console.error(
-                  "Failed to track close friend like activity:",
-                  closeFriendError,
-                );
-              });
           }
         } catch (error) {
           const currentDisplay = getCurrentUserDisplay();
@@ -842,7 +952,12 @@ export const usePostsStore = create<PostsStore>()(
 
       deletePost: async (postId: string, userId: string): Promise<boolean> => {
         try {
-          await feedService.deletePost(postId, userId);
+          const deleted = await optimizedFeedService.deletePostOptimized(postId, userId);
+          if (!deleted) return false;
+          // A Postgres delete can race a feed refresh that began with an old
+          // local snapshot. Suppress that stale callback briefly while the
+          // versioned server feed cache converges.
+          recentlyDeletedPostIds.set(postId, Date.now() + 120_000);
 
           set((state) => ({
             posts: state.posts.filter((post) => post.id !== postId),
@@ -1000,27 +1115,6 @@ export const usePostsStore = create<PostsStore>()(
                 });
               }
 
-              closeFriendsService
-                .trackPostCommentActivity({
-                  actorId: comment.userId,
-                  actorName: comment.name,
-                  actorUsername: comment.username,
-                  actorAvatar: comment.avatar,
-                  postId,
-                  commentId: newComment.id,
-                  commentText: comment.text,
-                  postAuthorId,
-                  postAuthorUsername: post?.author?.username || "someone",
-                  postThumbnail:
-                    post?.media?.thumbnail || post?.media?.url || "",
-                  postContent: post?.content || "",
-                })
-                .catch((closeFriendError) => {
-                  console.error(
-                    "Failed to track close friend comment activity:",
-                    closeFriendError,
-                  );
-                });
             }
           } catch (alertError) {
             console.error("Failed to send comment alert:", alertError);
@@ -1149,11 +1243,22 @@ export const usePostsStore = create<PostsStore>()(
         const unsubscribe = optimizedFeedService.subscribeToFeedOptimized(
           userId,
           (backendPosts) => {
+            backendPosts = backendPosts.filter(
+              (post) => !isRecentlyDeletedPost(post.id),
+            );
             console.log(
               "🔍 STORE DEBUG: Received from backend:",
               backendPosts.length,
               "posts",
             );
+            if (backendPosts.length === 0 && get().posts.length > 0) {
+              set({
+                loading: false,
+                feedBootstrapping: false,
+                lastSyncedAt: Date.now(),
+              });
+              return;
+            }
             console.log(
               "🔍 STORE DEBUG: Backend posts author_ids:",
               backendPosts.map((p) => ({
@@ -1168,6 +1273,11 @@ export const usePostsStore = create<PostsStore>()(
             );
 
             const frontendPosts: FeedPost[] = backendPosts.map((post) => {
+              const existingPost = existingPostsById.get(post.id);
+              const stableMediaUrl = preserveSignedMediaUrl(
+                post.media_url,
+                existingPost?.media?.url,
+              );
               const mappedPost: FeedPost = {
                 id: post.id,
                 author: {
@@ -1176,19 +1286,25 @@ export const usePostsStore = create<PostsStore>()(
                   avatar: post.author.avatar_url || "",
                   username: post.author.username,
                 },
-                content: post.content || "",
-                media: post.media_url
+                content: getPostCaption(post),
+                media: stableMediaUrl
                   ? {
                       type:
                         post.media_type === "PHOTO"
                           ? "image"
                           : post.media_type === "VIDEO"
                             ? "video"
-                            : "audio",
-                      url: post.media_url,
-                      thumbnail: post.media_url,
+                            : post.media_type === "AUDIO"
+                              ? "audio"
+                              : "image",
+                      url: stableMediaUrl,
+                      thumbnail: stableMediaUrl,
                     }
-                  : undefined,
+                  : existingPost?.media,
+                media_urls: preserveSignedMediaUrls(
+                  (post as any).media_urls,
+                  existingPost?.media_urls,
+                ),
                 stats: { views: post.view_count || 0 },
                 likesByUser: post.is_liked_by_user
                   ? (() => {
@@ -1213,7 +1329,7 @@ export const usePostsStore = create<PostsStore>()(
 
               return preserveCurrentUserLike(
                 mappedPost,
-                existingPostsById.get(post.id),
+                existingPost,
                 userId,
               );
             });
@@ -1264,6 +1380,11 @@ export const usePostsStore = create<PostsStore>()(
         const unsubscribe = optimizedFeedService.subscribeToUserPostsOptimized(
           userId,
           (backendPosts) => {
+            if (backendPosts.length === 0 && get().userPosts.length > 0) {
+              set({ loadingUserPosts: false });
+              return;
+            }
+
             const frontendPosts: FeedPost[] = backendPosts.map((post) => ({
               id: post.id,
               author: {
@@ -1272,7 +1393,7 @@ export const usePostsStore = create<PostsStore>()(
                 avatar: post.author.avatar_url || "",
                 username: post.author.username,
               },
-              content: post.content || "",
+              content: getPostCaption(post),
               media: post.media_url
                 ? {
                     type:
@@ -1280,11 +1401,14 @@ export const usePostsStore = create<PostsStore>()(
                         ? "image"
                         : post.media_type === "VIDEO"
                           ? "video"
-                          : "audio",
+                          : post.media_type === "AUDIO"
+                            ? "audio"
+                            : "image",
                     url: post.media_url,
                     thumbnail: post.media_url,
                   }
                 : undefined,
+              media_urls: (post as any).media_urls ?? undefined,
               stats: { views: post.view_count || 0 },
               likesByUser: post.is_liked_by_user
                 ? {
@@ -1450,35 +1574,28 @@ export const usePostsStore = create<PostsStore>()(
             previews.forEach((entries, postId) => {
               if (entries.length === 0) return;
 
-              nextState = updatePostInCollections(
-                nextState,
-                postId,
-                (post) => {
-                  const likesByUser = { ...post.likesByUser };
+              nextState = updatePostInCollections(nextState, postId, (post) => {
+                const likesByUser = { ...post.likesByUser };
 
-                  entries.forEach((entry) => {
-                    const existing = likesByUser[entry.userId];
-                    likesByUser[entry.userId] = {
-                      ...existing,
-                      ...entry,
-                      tapCount: Math.max(
-                        entry.tapCount,
-                        existing?.tapCount || 0,
-                      ),
-                    };
-                  });
-
-                  return {
-                    ...post,
-                    likesByUser,
-                    likes_count: Math.max(
-                      post.likes_count || 0,
-                      Object.keys(likesByUser).length,
-                    ),
-                    likesLoading: false,
+                entries.forEach((entry) => {
+                  const existing = likesByUser[entry.userId];
+                  likesByUser[entry.userId] = {
+                    ...existing,
+                    ...entry,
+                    tapCount: Math.max(entry.tapCount, existing?.tapCount || 0),
                   };
-                },
-              );
+                });
+
+                return {
+                  ...post,
+                  likesByUser,
+                  likes_count: Math.max(
+                    post.likes_count || 0,
+                    Object.keys(likesByUser).length,
+                  ),
+                  likesLoading: false,
+                };
+              });
             });
 
             return nextState;
@@ -1571,6 +1688,7 @@ export const usePostsStore = create<PostsStore>()(
 
     // ─── Persist Config ───────────────────────────────────────────────────────
     {
+      skipHydration: true,
       name: "social-app-posts", // the localStorage key
       version: 3, // Bump to clear old cached counts/metadata
       storage: createJSONStorage(() => sessionStorage),

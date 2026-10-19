@@ -33,11 +33,11 @@ export const useAvatarSync = () => {
         setCurrentUsername(user.username);
       }
 
-      // Priority: Firebase avatar > stored avatar
+      // Priority: Supabase avatar > stored avatar
       if (user.avatar) {
         setGlobalAvatar(user.avatar);
         setUserAvatar(user.id, user.avatar);
-        console.log("🔄 AVATAR SYNC: Set from Firebase");
+        console.log("🔄 AVATAR SYNC: Set from Supabase");
       } else {
         const storedAvatar = getStoredAvatar(user.id);
         if (storedAvatar) {
@@ -51,17 +51,17 @@ export const useAvatarSync = () => {
   // Ensure avatar persistence on user changes
   useEffect(() => {
     if (user?.id && user?.avatar) {
-      // Always store the latest avatar from Firebase
+      // Always store the latest avatar from Supabase
       setUserAvatar(user.id, user.avatar);
       console.log("💾 AVATAR SYNC: Stored latest avatar for user:", user.id);
     }
   }, [user?.id, user?.avatar, setUserAvatar]);
 
   // Get avatar for any user with proper fallback logic
-  const getUserAvatar = (userId: string, firebaseAvatar?: string, username?: string) => {
-    // Priority: Firebase avatar > stored avatar > global avatar (if current user)
-    if (firebaseAvatar) {
-      return firebaseAvatar;
+  const getUserAvatar = (userId: string, supabaseAvatar?: string, username?: string) => {
+    // Priority: Supabase avatar > stored avatar > global avatar (if current user)
+    if (supabaseAvatar) {
+      return supabaseAvatar;
     }
 
     if (userId === user?.id && user?.avatar) {
@@ -77,7 +77,7 @@ export const useAvatarSync = () => {
     return "";
   };
 
-  // Force refresh avatar from Firebase
+  // Force refresh avatar from Supabase
   const refreshAvatar = async () => {
     if (user?.id) {
       await AvatarSyncManager.refreshAllAvatars();

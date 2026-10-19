@@ -224,62 +224,27 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       const response = await truthService.answerTruth(truthId, userId, answer);
 
       if (response.success) {
-        console.log(
-          "Truth answered successfully, creating alert for challenger",
-        );
-
-        // Get the truth to find challenger ID
-        const truth =
-          get().receivedTruths.find((t) => t.id === truthId) ||
-          get().sentTruths.find((t) => t.id === truthId);
-        const challengerId = truth?.challengerId;
-
-        console.log("Found truth for alert:", { truthId, challengerId, truth });
-
-        if (challengerId) {
-          // Get user profile for actor name
-          let actorName = "Someone";
-          let actorUsername = "someone";
-
-          try {
-            const { UserRepository } =
-              await import("@/backend/repositories/UserRepository");
-            const userRepository = new UserRepository();
-            const actorProfile = await userRepository.getProfileById(userId);
-
-            if (actorProfile) {
-              actorName =
-                actorProfile.displayName || actorProfile.username || "Someone";
-              actorUsername = actorProfile.username || "someone";
-            }
-          } catch (error) {
-            console.error("Error getting actor profile:", error);
-          }
-
-          // Create alert for challenger
-          await alertService.createAlert({
-            userId: challengerId,
-            type: "TRUTH_ANSWERED",
-            entityId: truthId,
-            actorId: userId,
-            actorName,
-            actorUsername,
-            message: "finished your dare", // As requested
-          });
-
-          console.log("Alert created for challenger:", challengerId);
-        }
-
-        // Update local state
+        const completedTruth = response.truth;
         set((state) => ({
           receivedTruths: state.receivedTruths.map((truth) =>
             truth.id === truthId
-              ? { ...truth, answer, state: "ANSWERED" as const }
+              ? {
+                  ...truth,
+                  answer: completedTruth?.answer || answer,
+                  state: "APPROVED" as const,
+                }
+              : truth,
+          ),
+          sentTruths: state.sentTruths.map((truth) =>
+            truth.id === truthId
+              ? {
+                  ...truth,
+                  answer: completedTruth?.answer || answer,
+                  state: "APPROVED" as const,
+                }
               : truth,
           ),
         }));
-
-        console.log("Local state updated");
       } else {
         throw new Error(response.error || "Failed to answer truth");
       }
@@ -348,6 +313,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       const errorMessage =
         error instanceof Error ? error.message : "Failed to refuse truth";
       set({ error: errorMessage });
+      throw new Error(errorMessage);
     }
   },
 

@@ -1,20 +1,8 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  arrayRemove,
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  runTransaction,
-  setDoc,
-  updateDoc,
-  where,
-  writeBatch,
-  type Unsubscribe,
-} from "firebase/firestore";
+﻿import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { Unsubscribe } from "@/types/realtime";
 import { resolveUserProfile } from "@/utils/profileResolver";
+
+const CHAT_INVITE_COLUMNS = "id,legacy_key,conversation_id,sender_id,recipient_id,inviter_name,invitee_name,original_participant_ids,status,created_at,updated_at,joined_at,entered_at,ended_at";
 
 export type ChatInviteStatus =
   | "pending"
@@ -47,8 +35,11 @@ function inviteDocId(conversationId: string, inviteeId: string): string {
   return `${conversationId}_${inviteeId}`;
 }
 
-function getOriginalParticipantIds(conversation: any): string[] {
-  return [conversation?.user1_id, conversation?.user2_id].filter(Boolean);
+async function findInvite(client: ReturnType<typeof getSupabaseBrowserClient>, inviteId: string) {
+  const byLegacy = await client.from("chat_invites").select(CHAT_INVITE_COLUMNS).eq("legacy_key", inviteId).maybeSingle();
+  if (byLegacy.data || byLegacy.error || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(inviteId)) return byLegacy.data;
+  const { data } = await client.from("chat_invites").select(CHAT_INVITE_COLUMNS).eq("id", inviteId).maybeSingle();
+  return data;
 }
 
 async function createInviteEvent(
@@ -58,19 +49,18 @@ async function createInviteEvent(
   participant: { userId: string; name: string },
   participants: string[],
 ): Promise<void> {
-  const eventRef = doc(collection(db, "message_events"));
-  await setDoc(eventRef, {
+  const { error } = await getSupabaseBrowserClient().from("message_events").insert({
     conversation_id: conversationId,
-    user_id: userId,
+    actor_id: userId,
     event_type: "invite",
-    participants: [...new Set(participants)],
-    data: {
+    payload: {
       action,
       user_id: participant.userId,
       user_name: participant.name,
+      participants: [...new Set(participants)],
     },
-    created_at: nowIso(),
   });
+  if (error) throw error;
 }
 
 class ChatInviteService {
@@ -78,32 +68,16 @@ class ChatInviteService {
     userId: string,
     callback: (invites: ChatInvite[]) => void,
   ): Unsubscribe {
-    const q = query(
-      collection(db, "chat_invites"),
-      where("invitee_id", "==", userId),
-    );
-
-    return onSnapshot(
-      q,
-      (snapshot) => {
-        const invites = snapshot.docs
-          .map((inviteDoc) => ({
-            id: inviteDoc.id,
-            ...inviteDoc.data(),
-          })) as ChatInvite[];
-        invites.sort(
-          (a, b) =>
-            new Date(b.updated_at || b.created_at).getTime() -
-            new Date(a.updated_at || a.created_at).getTime(),
-        );
-        callback(invites);
-      },
-      (error) => {
-        console.error("Unable to subscribe to received chat invites:", error);
-        callback([]);
-      },
-    );
+    const client = getSupabaseBrowserClient(); let disposed = false; const rows = new Map<string, ChatInvite>();
+    const emit = () => callback([...rows.values()].sort((a,b) => Date.parse(b.updated_at)-Date.parse(a.updated_at) || b.id.localeCompare(a.id)).slice(0,100));
+    const apply = (row: any) => { const invite=this.mapInvite(row); rows.set(String(row.id),invite); };
+    const load = async () => { const { data, error } = await client.from("chat_invites").select(CHAT_INVITE_COLUMNS).eq("recipient_id", userId).order("updated_at", { ascending: false }).order("id",{ascending:false}).limit(100); if (!disposed) { if(error){callback([]);return;} for(const row of data??[])apply(row); emit(); } };
+    void load();
+    const channel = client.channel(`chat-invites:${userId}`).on("postgres_changes", { event: "*", schema: "public", table: "chat_invites", filter: `recipient_id=eq.${userId}` }, (payload) => { if(disposed)return; const id=String((payload.old as any)?.id||""); if(payload.eventType==="DELETE")rows.delete(id);else apply(payload.new);emit(); }).subscribe();
+    return () => { disposed = true; void client.removeChannel(channel); };
   }
+
+  private mapInvite(row: any): ChatInvite { return { id: row.legacy_key || row.id, conversation_id: row.conversation_id, inviter_id: row.sender_id, inviter_name: row.inviter_name || "", invitee_id: row.recipient_id, invitee_name: row.invitee_name || "", original_participant_ids: Array.isArray(row.original_participant_ids) ? row.original_participant_ids : [], status: String(row.status || "PENDING").toLowerCase() as ChatInviteStatus, created_at: row.created_at, updated_at: row.updated_at || row.created_at, joined_at: row.joined_at, entered_at: row.entered_at, ended_at: row.ended_at }; }
 
   subscribeConversationInvites(
     conversationId: string,
@@ -114,45 +88,20 @@ class ChatInviteService {
   ): Unsubscribe {
     const targetInviteeIds = isOriginalParticipant ? inviteeIds : [userId];
     const uniqueInviteeIds = [...new Set(targetInviteeIds.filter(Boolean))];
+    const isOriginalScope = isOriginalParticipant;
 
-    if (uniqueInviteeIds.length === 0) {
+    if (!isOriginalScope && uniqueInviteeIds.length === 0) {
       callback([]);
       return () => {};
     }
 
-    const byId = new Map<string, ChatInvite>();
-    let readyCount = 0;
-    let hasEmittedReady = false;
-
-    const emit = () => {
-      if (!hasEmittedReady && readyCount < uniqueInviteeIds.length) return;
-      hasEmittedReady = true;
-      callback([...byId.values()]);
-    };
-
-    const unsubscribes = uniqueInviteeIds.map((inviteeId) => {
-      const id = inviteDocId(conversationId, inviteeId);
-      return onSnapshot(
-        doc(db, "chat_invites", id),
-        (snapshot) => {
-          if (!hasEmittedReady) readyCount += 1;
-          if (snapshot.exists()) {
-            byId.set(id, { id: snapshot.id, ...snapshot.data() } as ChatInvite);
-          } else {
-            byId.delete(id);
-          }
-          emit();
-        },
-        (error) => {
-          if (!hasEmittedReady) readyCount += 1;
-          byId.delete(id);
-          console.error("Unable to subscribe to conversation chat invite:", error);
-          emit();
-        },
-      );
-    });
-
-    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+    const client = getSupabaseBrowserClient(); let disposed = false; const rows = new Map<string, ChatInvite>();
+    const emit = () => callback([...rows.values()].filter((invite)=>isOriginalScope || uniqueInviteeIds.includes(invite.invitee_id)).sort((a,b)=>Date.parse(b.updated_at)-Date.parse(a.updated_at)||b.id.localeCompare(a.id)));
+    const apply = (row:any)=>{const invite=this.mapInvite(row);rows.set(String(row.id),invite);};
+    const load = async () => { let query = client.from("chat_invites").select(CHAT_INVITE_COLUMNS).eq("conversation_id", conversationId); if (!isOriginalScope) query = query.in("recipient_id", uniqueInviteeIds); const { data, error } = await query.order("updated_at",{ascending:false}).order("id",{ascending:false}).limit(100); if (!disposed) {if(error){callback([]);return;}for(const row of data??[])apply(row);emit();} };
+    void load();
+    const channel = client.channel(`chat-invites-conversation:${conversationId}`).on("postgres_changes", { event: "*", schema: "public", table: "chat_invites", filter: `conversation_id=eq.${conversationId}` }, (payload)=>{if(disposed)return;const id=String((payload.old as any)?.id||"");if(payload.eventType==="DELETE")rows.delete(id);else apply(payload.new);emit();}).subscribe();
+    return () => { disposed = true; void client.removeChannel(channel); };
   }
 
   async sendInvite(request: {
@@ -162,14 +111,10 @@ class ChatInviteService {
     inviteeId: string;
     inviteeName: string;
   }): Promise<void> {
-    const conversationRef = doc(db, "conversations", request.conversationId);
-    const conversationSnap = await getDoc(conversationRef);
-    if (!conversationSnap.exists()) {
-      throw new Error("Conversation not found");
-    }
-
-    const conversation = conversationSnap.data();
-    const originalParticipantIds = getOriginalParticipantIds(conversation);
+    const client = getSupabaseBrowserClient();
+    const { data: members, error: membersError } = await client.from("conversation_members").select("user_id,role").eq("conversation_id", request.conversationId);
+    if (membersError) throw membersError;
+    const originalParticipantIds = (members ?? []).map((member) => member.user_id as string);
     if (!originalParticipantIds.includes(request.inviterId)) {
       throw new Error("Only the original chat members can invite friends");
     }
@@ -178,30 +123,18 @@ class ChatInviteService {
     }
 
     const id = inviteDocId(request.conversationId, request.inviteeId);
-    const inviteRef = doc(db, "chat_invites", id);
-    const existing = await getDoc(inviteRef);
-    const existingStatus = existing.exists()
-      ? String(existing.data()?.status || "")
-      : "";
+    const { data: existing } = await client.from("chat_invites").select("id,status").eq("legacy_key", id).maybeSingle();
+    const existingStatus = String(existing?.status || "").toLowerCase();
     if (existingStatus === "pending" || existingStatus === "accepted") {
       throw new Error("This friend already has an active invite");
     }
 
     const timestamp = nowIso();
-    await setDoc(inviteRef, {
-      conversation_id: request.conversationId,
-      inviter_id: request.inviterId,
-      inviter_name: request.inviterName,
-      invitee_id: request.inviteeId,
-      invitee_name: request.inviteeName,
-      original_participant_ids: originalParticipantIds,
-      status: "pending",
-      created_at: timestamp,
-      updated_at: timestamp,
-      joined_at: null,
-      entered_at: null,
-      ended_at: null,
-    });
+    const payload = { conversation_id: request.conversationId, sender_id: request.inviterId, recipient_id: request.inviteeId, inviter_name: request.inviterName, invitee_name: request.inviteeName, original_participant_ids: originalParticipantIds, status: "PENDING", updated_at: timestamp, joined_at: null, entered_at: null, ended_at: null };
+    const { error } = existing?.id
+      ? await client.from("chat_invites").update(payload).eq("id", existing.id)
+      : await client.from("chat_invites").insert({ legacy_key: id, ...payload, created_at: timestamp });
+    if (error) throw error;
 
     await createInviteEvent(
       request.conversationId,
@@ -212,12 +145,11 @@ class ChatInviteService {
     );
   }
 
-  async acceptInvite(inviteId: string, userId: string): Promise<void> {
-    const inviteRef = doc(db, "chat_invites", inviteId);
-    const inviteSnap = await getDoc(inviteRef);
-    if (!inviteSnap.exists()) throw new Error("Invite not found");
-
-    const invite = { id: inviteSnap.id, ...inviteSnap.data() } as ChatInvite;
+  async acceptInvite(inviteId: string, userId: string): Promise<ChatInvite> {
+    const client = getSupabaseBrowserClient();
+    const rawInvite = await findInvite(client, inviteId);
+    if (!rawInvite) throw new Error("Invite not found");
+    const invite = this.mapInvite(rawInvite);
     if (invite.invitee_id !== userId) {
       throw new Error("You can only accept invites sent to you");
     }
@@ -225,46 +157,15 @@ class ChatInviteService {
       throw new Error("This invite is no longer pending");
     }
 
-    const timestamp = nowIso();
-    const batch = writeBatch(db);
-    batch.update(inviteRef, {
-      status: "accepted",
-      joined_at: timestamp,
-      ended_at: null,
-      updated_at: timestamp,
-    });
-    batch.update(doc(db, "conversations", invite.conversation_id), {
-      temporary_participant_ids: arrayUnion(userId),
-      updated_at: timestamp,
-    });
-    await batch.commit();
+    const { data, error } = await (client as any).rpc("accept_chat_invite", { p_invite_id: inviteId });
+    if (error || !data) throw error || new Error("Invite acceptance failed");
+    return this.mapInvite(data);
   }
 
   async markInviteEntered(inviteId: string, userId: string): Promise<void> {
-    const inviteRef = doc(db, "chat_invites", inviteId);
-    const timestamp = nowIso();
-    const eventInvites: ChatInvite[] = [];
-
-    await runTransaction(db, async (transaction) => {
-      const inviteSnap = await transaction.get(inviteRef);
-      if (!inviteSnap.exists()) throw new Error("Invite not found");
-
-      const invite = { id: inviteSnap.id, ...inviteSnap.data() } as ChatInvite;
-      if (invite.invitee_id !== userId) {
-        throw new Error("You can only enter invites sent to you");
-      }
-      if (invite.status !== "accepted" || invite.entered_at) {
-        return;
-      }
-
-      eventInvites.push(invite);
-      transaction.update(inviteRef, {
-        entered_at: timestamp,
-        updated_at: timestamp,
-      });
-    });
-
-    const inviteForEvent = eventInvites[0];
+    const { data: rawInvite, error } = await (getSupabaseBrowserClient() as any).rpc("mark_chat_invite_entered_native", { p_invite_id: inviteId, p_user_id: userId });
+    if (error) throw error;
+    const inviteForEvent = rawInvite ? ({ id: inviteId, ...rawInvite } as ChatInvite) : null;
     if (!inviteForEvent) return;
 
     await createInviteEvent(
@@ -277,19 +178,16 @@ class ChatInviteService {
   }
 
   async rejectInvite(inviteId: string, userId: string): Promise<void> {
-    const inviteRef = doc(db, "chat_invites", inviteId);
-    const inviteSnap = await getDoc(inviteRef);
-    if (!inviteSnap.exists()) throw new Error("Invite not found");
-    const invite = inviteSnap.data() as ChatInvite;
+    const client = getSupabaseBrowserClient();
+    const rawInvite = await findInvite(client, inviteId);
+    if (!rawInvite) throw new Error("Invite not found");
+    const invite = this.mapInvite(rawInvite);
     if (invite.invitee_id !== userId) {
       throw new Error("You can only reject invites sent to you");
     }
 
-    await updateDoc(inviteRef, {
-      status: "rejected",
-      ended_at: nowIso(),
-      updated_at: nowIso(),
-    });
+    const { error } = await client.from("chat_invites").update({ status: "DECLINED", ended_at: nowIso(), updated_at: nowIso() }).eq("id", rawInvite.id);
+    if (error) throw error;
   }
 
   async endTemporaryAccess(request: {
@@ -297,11 +195,10 @@ class ChatInviteService {
     actorId: string;
     action: "removed" | "left";
   }): Promise<void> {
-    const inviteRef = doc(db, "chat_invites", request.inviteId);
-    const inviteSnap = await getDoc(inviteRef);
-    if (!inviteSnap.exists()) throw new Error("Invite not found");
-
-    const invite = { id: inviteSnap.id, ...inviteSnap.data() } as ChatInvite;
+    const client = getSupabaseBrowserClient();
+    const rawInvite = await findInvite(client, request.inviteId);
+    if (!rawInvite) throw new Error("Invite not found");
+    const invite = this.mapInvite(rawInvite);
     const isOriginal = invite.original_participant_ids.includes(request.actorId);
     const isInvitee = invite.invitee_id === request.actorId;
 
@@ -323,33 +220,31 @@ class ChatInviteService {
       [...invite.original_participant_ids, invite.invitee_id],
     );
 
-    const timestamp = nowIso();
-    const batch = writeBatch(db);
-    batch.update(inviteRef, {
-      status: request.action,
-      ended_at: timestamp,
-      updated_at: timestamp,
-    });
-    batch.update(doc(db, "conversations", invite.conversation_id), {
-      temporary_participant_ids: arrayRemove(invite.invitee_id),
-      updated_at: timestamp,
-    });
-    await batch.commit();
+    const { error } = await (client as any).rpc("end_chat_invite_access", { p_invite_id: request.inviteId, p_action: request.action });
+    if (error) throw error;
   }
 
   async getConversationForUser(conversationId: string, userId: string) {
-    const conversationSnap = await getDoc(doc(db, "conversations", conversationId));
-    if (!conversationSnap.exists()) return null;
-
-    const data = conversationSnap.data();
-    const originalParticipantIds = getOriginalParticipantIds(data);
-    const temporaryParticipantIds = Array.isArray(data.temporary_participant_ids)
-      ? data.temporary_participant_ids
-      : [];
-    const canAccess =
-      originalParticipantIds.includes(userId) ||
-      temporaryParticipantIds.includes(userId);
-    if (!canAccess) return null;
+    const client = getSupabaseBrowserClient();
+    const { data: membership, error: membershipError } = await client.from("conversation_members").select("user_id,role,joined_at").eq("conversation_id", conversationId);
+    if (membershipError) throw membershipError;
+    const participantIds = (membership ?? []).map((member) => member.user_id as string);
+    if (!participantIds.includes(userId)) return null;
+    const { data, error } = await client.from("conversations").select("id,created_at,updated_at,last_message_at,title").eq("id", conversationId).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const { data: inviteRow } = await client
+      .from("chat_invites")
+      .select("original_participant_ids")
+      .eq("conversation_id", conversationId)
+      .eq("recipient_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const originalParticipantIds = Array.isArray(inviteRow?.original_participant_ids)
+      ? inviteRow.original_participant_ids as string[]
+      : participantIds.filter((id) => id !== userId);
+    const temporaryParticipantIds: string[] = [userId];
 
     const otherOriginalIds = originalParticipantIds.filter((id) => id !== userId);
     const profiles = await Promise.all(
@@ -366,17 +261,18 @@ class ChatInviteService {
     });
 
     return {
-      id: conversationSnap.id,
-      user1_id: data.user1_id,
-      user2_id: data.user2_id,
+      id: data.id,
+      user1_id: originalParticipantIds[0],
+      user2_id: originalParticipantIds[1],
       temporary_participant_ids: temporaryParticipantIds,
-      created_at: data.created_at?.toDate?.().toISOString?.() || data.created_at || "",
-      updated_at: data.updated_at?.toDate?.().toISOString?.() || data.updated_at || "",
-      last_message_at:
-        data.last_message_at?.toDate?.().toISOString?.() || data.last_message_at || "",
-      last_message_content: data.last_message_content || "",
-      cleared_at: data.cleared_at_by_user?.[userId] || data.cleared_at || null,
-      unread_count: data.unread_count_by_user?.[userId] || 0,
+      created_at: data.created_at || "",
+      updated_at: data.updated_at || "",
+      last_message_at: data.last_message_at || "",
+      last_message_content: "",
+      last_seen_by_user: {},
+      last_seen_message_id_by_user: {},
+      cleared_at: null,
+      unread_count: 0,
       is_online: false,
       is_typing: false,
       other_user: {

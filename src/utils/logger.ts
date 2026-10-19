@@ -94,7 +94,7 @@ class Logger {
     const sensitiveKeys = [
       'password', 'token', 'apiKey', 'secret', 'credential',
       'email', 'phoneNumber', 'ssn', 'creditCard',
-      'firebase', 'auth', 'session'
+      'supabase', 'auth', 'session'
     ];
 
     const sanitized = { ...context };

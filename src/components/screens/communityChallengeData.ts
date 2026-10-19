@@ -11,6 +11,7 @@ export type CommunityChallenge = {
   countdown: string;
   batchStatus?: "open" | "waiting" | "started";
   minRequiredMembers?: number;
+  registrationStartedAtMs?: number | null;
   registrationEndsAtMs?: number | null;
   batchStartedAtMs?: number | null;
   titleTop: string;
@@ -33,14 +34,15 @@ export type CommunityChallenge = {
   creatorUsername: string;
   creatorAvatar?: string;
   sponsoredByDare?: boolean;
+  customDare?: boolean;
   proofLabel: string;
   proofFiles: string[];
-  icon: "flame" | "shield" | "trophy";
+  icon: "flame" | "shield" | "trophy" | "spark";
 };
 
 export const COMMUNITY_CHALLENGES: CommunityChallenge[] = [
   {
-    id: "community-read-10-pages",
+    id: "0f9f8ceb-5187-4e0f-99d9-0c1c269a6e01",
     typeLabel: "Created by Dare",
     countdown: "06:18:42",
     titleTop: "Read 10 pages every day",
@@ -69,7 +71,7 @@ export const COMMUNITY_CHALLENGES: CommunityChallenge[] = [
     icon: "shield",
   },
   {
-    id: "community-pushups-7-days",
+    id: "0f9f8ceb-5187-4e0f-99d9-0c1c269a6e02",
     typeLabel: "Created by Dare",
     countdown: "04:57:11",
     titleTop: "Do 10 push-ups every day",
@@ -98,7 +100,7 @@ export const COMMUNITY_CHALLENGES: CommunityChallenge[] = [
     icon: "flame",
   },
   {
-    id: "community-unfiltered-photo",
+    id: "0f9f8ceb-5187-4e0f-99d9-0c1c269a6e03",
     typeLabel: "Created by Dare",
     countdown: "09:24:05",
     titleTop: "Post one unfiltered casual photo",
@@ -127,7 +129,7 @@ export const COMMUNITY_CHALLENGES: CommunityChallenge[] = [
     icon: "trophy",
   },
   {
-    id: "community-wake-before-8",
+    id: "0f9f8ceb-5187-4e0f-99d9-0c1c269a6e04",
     typeLabel: "Created by Dare",
     countdown: "12:36:29",
     titleTop: "Wake up before 8 AM every day",
@@ -156,7 +158,7 @@ export const COMMUNITY_CHALLENGES: CommunityChallenge[] = [
     icon: "shield",
   },
   {
-    id: "community-nature-photo",
+    id: "0f9f8ceb-5187-4e0f-99d9-0c1c269a6e05",
     typeLabel: "Created by Dare",
     countdown: "08:11:33",
     titleTop: "Post a nature photo every day",

@@ -1,230 +1,70 @@
-import {
-  doc,
-  getDoc,
-  addDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  limit,
-  serverTimestamp,
-  deleteDoc,
-} from "firebase/firestore";
-import { db } from "@/backend/lib/firebase";
-import {
-  IFeedRepository,
-  FeedEvent,
-  EventType,
-  CreateFeedEventRequest,
-} from "@/backend/domain/interfaces/IFeedRepository";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { Database } from "@/backend/types/database";
+import { IFeedRepository, FeedEvent, EventType, CreateFeedEventRequest } from "@/backend/domain/interfaces/IFeedRepository";
+
+type FeedEventRow = Database["public"]["Tables"]["feed_events"]["Row"];
+const EVENT_COLUMNS = "id,user_id,event_type,related_post_id,related_dare_id,event_data,created_at";
 
 export class FeedRepository implements IFeedRepository {
+  private map(row: FeedEventRow): FeedEvent {
+    return { id: row.id, userId: row.user_id, eventType: row.event_type, relatedPostId: row.related_post_id, relatedDareId: row.related_dare_id, relatedTruthId: null, eventData: row.event_data, createdAt: row.created_at };
+  }
+
   async createFeedEvent(request: CreateFeedEventRequest): Promise<FeedEvent> {
-    try {
-      const eventRef = await addDoc(collection(db, "feed_events"), {
-        user_id: request.userId,
-        event_type: request.eventType,
-        related_post_id: request.relatedPostId || null,
-        related_dare_id: request.relatedDareId || null,
-        related_truth_id: request.relatedTruthId || null,
-        event_data: request.eventData || null,
-        created_at: serverTimestamp(),
-      });
-
-      const event = await this.getFeedEventById(eventRef.id);
-      if (!event) {
-        throw new Error("Failed to create feed event");
-      }
-      return event;
-    } catch (error) {
-      console.error("createFeedEvent error:", error);
-      throw error;
-    }
+    const { data, error } = await getSupabaseBrowserClient().from("feed_events").insert({ user_id: request.userId, event_type: request.eventType, related_post_id: request.relatedPostId ?? null, related_dare_id: request.relatedDareId ?? null, event_data: request.eventData ?? null }).select(EVENT_COLUMNS).single();
+    if (error) throw error;
+    return this.map(data as FeedEventRow);
   }
 
-  async getFeedEventsForUser(
-    userId: string,
-    limitCount: number = 50,
-  ): Promise<FeedEvent[]> {
-    try {
-      const eventsQuery = query(
-        collection(db, "feed_events"),
-        where("user_id", "==", userId),
-        orderBy("created_at", "desc"),
-        limit(limitCount),
-      );
-
-      const querySnapshot = await getDocs(eventsQuery);
-      const events: FeedEvent[] = [];
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        events.push(this.mapToFeedEvent(data));
-      });
-
-      return events;
-    } catch (error) {
-      console.error("getFeedEventsForUser error:", error);
-      throw error;
-    }
+  async getFeedEventsForUser(userId: string, limitCount = 50): Promise<FeedEvent[]> {
+    const { data, error } = await getSupabaseBrowserClient().from("feed_events").select(EVENT_COLUMNS).eq("user_id", userId).order("created_at", { ascending: false }).limit(Math.max(1, Math.min(limitCount, 100)));
+    if (error) throw error;
+    return ((data ?? []) as FeedEventRow[]).map((row) => this.map(row));
   }
 
-  async getFeedEventsByType(
-    eventType: EventType,
-    limitCount: number = 50,
-  ): Promise<FeedEvent[]> {
-    try {
-      const eventsQuery = query(
-        collection(db, "feed_events"),
-        where("event_type", "==", eventType),
-        orderBy("created_at", "desc"),
-        limit(limitCount),
-      );
-
-      const querySnapshot = await getDocs(eventsQuery);
-      const events: FeedEvent[] = [];
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        events.push(this.mapToFeedEvent(data));
-      });
-
-      return events;
-    } catch (error) {
-      console.error("getFeedEventsByType error:", error);
-      throw error;
-    }
+  async getFeedEventsByType(eventType: EventType, limitCount = 50): Promise<FeedEvent[]> {
+    const { data, error } = await getSupabaseBrowserClient().from("feed_events").select(EVENT_COLUMNS).eq("event_type", eventType).order("created_at", { ascending: false }).limit(Math.max(1, Math.min(limitCount, 100)));
+    if (error) throw error;
+    return ((data ?? []) as FeedEventRow[]).map((row) => this.map(row));
   }
 
   async deleteFeedEvent(eventId: string): Promise<void> {
-    try {
-      const eventRef = doc(db, "feed_events", eventId);
-      await deleteDoc(eventRef);
-    } catch (error) {
-      console.error("deleteFeedEvent error:", error);
-      throw error;
-    }
+    const { error } = await getSupabaseBrowserClient().from("feed_events").delete().eq("id", eventId);
+    if (error) throw error;
   }
 
-  async getFeedEventsForUserFriends(
-    userId: string,
-    limitCount: number = 50,
-  ): Promise<FeedEvent[]> {
-    try {
-      const friendshipsQuery = query(
-        collection(db, "friendships"),
-        where("requester_id", "==", userId),
-        where("status", "==", "accepted"),
-      );
-
-      const friendshipsSnapshot = await getDocs(friendshipsQuery);
-      const friendIds: string[] = [];
-
-      friendshipsSnapshot.forEach((doc) => {
-        const data = doc.data();
-        friendIds.push(data.addressee_id);
-      });
-
-      const addresseeQuery = query(
-        collection(db, "friendships"),
-        where("addressee_id", "==", userId),
-        where("status", "==", "accepted"),
-      );
-
-      const addresseeSnapshot = await getDocs(addresseeQuery);
-
-      addresseeSnapshot.forEach((doc) => {
-        const data = doc.data();
-        friendIds.push(data.requester_id);
-      });
-
-      if (friendIds.length === 0) {
-        return [];
-      }
-
-      const eventsQuery = query(
-        collection(db, "feed_events"),
-        where("user_id", "in", friendIds),
-        orderBy("created_at", "desc"),
-        limit(limitCount),
-      );
-
-      const eventsSnapshot = await getDocs(eventsQuery);
-      const events: FeedEvent[] = [];
-
-      eventsSnapshot.forEach((doc) => {
-        const data = doc.data();
-        events.push(this.mapToFeedEvent(data));
-      });
-
-      return events;
-    } catch (error) {
-      console.error("getFeedEventsForUserFriends error:", error);
-      throw error;
-    }
+  async getFeedEventsForUserFriends(userId: string, limitCount = 50): Promise<FeedEvent[]> {
+    const client = getSupabaseBrowserClient();
+    const { data: friendships, error: friendshipError } = await client.from("friendships").select("requester_id,addressee_id").eq("status", "accepted").or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+    if (friendshipError) throw friendshipError;
+    const friendIds = [...new Set((friendships ?? []).map((row) => row.requester_id === userId ? row.addressee_id : row.requester_id))];
+    if (friendIds.length === 0) return [];
+    const { data, error } = await client.from("feed_events").select(EVENT_COLUMNS).in("user_id", friendIds).order("created_at", { ascending: false }).limit(Math.max(1, Math.min(limitCount, 100)));
+    if (error) throw error;
+    return ((data ?? []) as FeedEventRow[]).map((row) => this.map(row));
   }
 
   async getFeedEventById(eventId: string): Promise<FeedEvent | null> {
-    try {
-      const eventDocRef = doc(db, "feed_events", eventId);
-      const eventDoc = await getDoc(eventDocRef);
-
-      if (!eventDoc.exists()) {
-        return null;
-      }
-
-      const data = eventDoc.data();
-      return this.mapToFeedEvent(data);
-    } catch (error) {
-      console.error("getFeedEventById error:", error);
-      return null;
-    }
+    const { data, error } = await getSupabaseBrowserClient().from("feed_events").select(EVENT_COLUMNS).eq("id", eventId).maybeSingle();
+    if (error) throw error;
+    return data ? this.map(data as FeedEventRow) : null;
   }
 
   async getPostById(postId: string): Promise<any> {
-    try {
-      const postDocRef = doc(db, "posts", postId);
-      const postDoc = await getDoc(postDocRef);
-      return postDoc.exists() ? postDoc.data() : null;
-    } catch (error) {
-      console.error("getPostById error:", error);
-      return null;
-    }
+    const { data, error } = await getSupabaseBrowserClient().from("posts").select("id,author_id,content,media_url,media_type,view_count,created_at,updated_at").eq("id", postId).maybeSingle();
+    if (error) throw error;
+    return data;
   }
 
   async getDareById(dareId: string): Promise<any> {
-    try {
-      const dareDocRef = doc(db, "dares", dareId);
-      const dareDoc = await getDoc(dareDocRef);
-      return dareDoc.exists() ? dareDoc.data() : null;
-    } catch (error) {
-      console.error("getDareById error:", error);
-      return null;
-    }
+    const { data, error } = await getSupabaseBrowserClient().from("dares").select("id,challenger_id,receiver_id,description,state,proof_media_url,proof_media_type,proof_thumbnail_url,created_at,updated_at").eq("id", dareId).maybeSingle();
+    if (error) throw error;
+    return data;
   }
 
   async getUserById(userId: string): Promise<any> {
-    try {
-      const userDocRef = doc(db, "users", userId);
-      const userDoc = await getDoc(userDocRef);
-      return userDoc.exists() ? userDoc.data() : null;
-    } catch (error) {
-      console.error("getUserById error:", error);
-      return null;
-    }
-  }
-
-  private mapToFeedEvent(data: any): FeedEvent {
-    return {
-      id: data.id || "",
-      userId: data.user_id,
-      eventType: data.event_type,
-      relatedPostId: data.related_post_id,
-      relatedDareId: data.related_dare_id,
-      relatedTruthId: data.related_truth_id,
-      eventData: data.event_data,
-      createdAt: data.created_at,
-    };
+    const { data, error } = await getSupabaseBrowserClient().from("profiles").select("id,username,display_name,bio,avatar_url,visibility").eq("id", userId).maybeSingle();
+    if (error) throw error;
+    return data;
   }
 }

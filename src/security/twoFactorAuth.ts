@@ -1,12 +1,4 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { auth } from "@/backend/lib/firebase";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface TwoFactorSettings {
   enabled: boolean;
@@ -18,77 +10,43 @@ interface TwoFactorSettings {
   lastUsedAt?: number;
 }
 
-/**
- * Two-Factor Authentication Service
- *
- * ⚠️ SECURITY NOTICE (§2.5): This module is a SCAFFOLD ONLY.
- * - `verifySetup` / `verifyCode` previously accepted ANY 6-digit numeric
- *   string, which made 2FA worse than useless (users would believe they
- *   were protected).
- * - Real TOTP validation requires a server-trusted path (Cloud Function /
- *   Next.js API route with a secret comparison via `otplib` or similar).
- * - Until a real server verifier exists, both verify methods FAIL CLOSED
- *   (reject every code). This guarantees that no flow in the app can be
- *   gated behind a "verified 2FA" check that is actually verifiable by an
- *   attacker just by typing 123456.
- *
- * Do NOT enable 2FA gating for any real security decision until this
- * module is replaced with a server-trusted implementation.
- */
 class TwoFactorAuthService {
-  private readonly COLLECTION = "two_factor_settings";
-
-  /**
-   * Get 2FA settings for a user
-   */
   async getSettings(userId: string): Promise<TwoFactorSettings | null> {
     try {
-      const settingsRef = doc(db, this.COLLECTION, userId);
-      const settingsDoc = await getDoc(settingsRef);
-
-      if (!settingsDoc.exists()) {
-        return null;
-      }
-
-      return settingsDoc.data() as TwoFactorSettings;
+      const { data, error } = await getSupabaseBrowserClient()
+        .from("two_factor_settings")
+        .select("enabled,method,phone_number,verified,secret,backup_codes,last_used_at")
+        .eq("user_id", userId).maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return {
+        enabled: data.enabled,
+        method: data.method as TwoFactorSettings["method"],
+        phoneNumber: data.phone_number ?? undefined,
+        verified: data.verified,
+        secret: data.secret ?? undefined,
+        backupCodes: data.backup_codes,
+        lastUsedAt: data.last_used_at ? Date.parse(data.last_used_at) : undefined,
+      };
     } catch (error) {
       console.error("Error getting 2FA settings:", error);
       return null;
     }
   }
 
-  /**
-   * Check if 2FA is enabled for a user
-   */
   async isEnabled(userId: string): Promise<boolean> {
     const settings = await this.getSettings(userId);
-    return !!(settings?.enabled && settings.verified === true);
+    return Boolean(settings?.enabled && settings.verified);
   }
 
-  /**
-   * Enable 2FA for a user (requires verification)
-   */
-  async enableTwoFactor(
-    userId: string,
-    method: "email" | "sms",
-    phoneNumber?: string,
-  ): Promise<{ success: boolean; error?: string }> {
+  async enableTwoFactor(userId: string, method: "email" | "sms", phoneNumber?: string) {
     try {
-      const settingsRef = doc(db, this.COLLECTION, userId);
-
-      // Generate a secret (in production, use proper TOTP library)
-      const secret = this.generateSecret();
-
-      await setDoc(settingsRef, {
-        enabled: true,
-        method,
-        phoneNumber: phoneNumber || null,
-        verified: false, // Requires verification before active
-        secret,
-        backupCodes: this.generateBackupCodes(),
-        createdAt: serverTimestamp(),
+      const { error } = await getSupabaseBrowserClient().from("two_factor_settings").upsert({
+        user_id: userId, enabled: true, method, phone_number: phoneNumber || null,
+        verified: false, secret: this.generateSecret(), backup_codes: this.generateBackupCodes(),
+        updated_at: new Date().toISOString(),
       });
-
+      if (error) throw error;
       return { success: true };
     } catch (error) {
       console.error("Error enabling 2FA:", error);
@@ -96,132 +54,49 @@ class TwoFactorAuthService {
     }
   }
 
-  /**
-   * Verify 2FA setup
-   */
-  async verifySetup(
-    userId: string,
-    code: string,
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const settings = await this.getSettings(userId);
-      if (!settings) {
-        return { success: false, error: "2FA not enabled" };
-      }
-
-      // SECURITY FIX (§2.5): Fail closed. Previously accepted any 6-digit
-      // code, which is worse than having no 2FA at all. Real verification
-      // needs a server-side TOTP comparison.
-      void code;
-      void settings;
-      return {
-        success: false,
-        error:
-          "2FA verification is not available (server-side verifier required)",
-      };
-    } catch (error) {
-      console.error("Error verifying 2FA setup:", error);
-      return { success: false, error: "Verification failed" };
-    }
+  async verifySetup(userId: string, code: string) {
+    void code;
+    if (!(await this.getSettings(userId))) return { success: false, error: "2FA not enabled" };
+    return { success: false, error: "2FA verification is not available (server-side verifier required)" };
   }
 
-  /**
-   * Verify 2FA during authentication
-   */
-  async verifyCode(
-    userId: string,
-    code: string,
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const settings = await this.getSettings(userId);
-      if (!settings || !settings.enabled || !settings.verified) {
-        // 2FA not required for this user
-        return { success: true };
-      }
-
-      // SECURITY FIX (§2.5): Fail closed. See class-level notice.
-      void code;
-      return {
-        success: false,
-        error:
-          "2FA verification is not available (server-side verifier required)",
-      };
-    } catch (error) {
-      console.error("Error verifying 2FA code:", error);
-      return { success: false, error: "Verification failed" };
-    }
+  async verifyCode(userId: string, code: string) {
+    void code;
+    const settings = await this.getSettings(userId);
+    if (!settings?.enabled || !settings.verified) return { success: true };
+    return { success: false, error: "2FA verification is not available (server-side verifier required)" };
   }
 
-  /**
-   * Disable 2FA for a user
-   */
-  async disableTwoFactor(
-    userId: string,
-  ): Promise<{ success: boolean; error?: string }> {
+  async disableTwoFactor(userId?: string) {
+    if (!userId) return { success: false, error: "Not authenticated" };
     try {
-      const settingsRef = doc(db, this.COLLECTION, userId);
-      await updateDoc(settingsRef, {
-        enabled: false,
-        verified: false,
-      });
+      const { error } = await getSupabaseBrowserClient().from("two_factor_settings")
+        .update({ enabled: false, verified: false, updated_at: new Date().toISOString() })
+        .eq("user_id", userId);
+      if (error) throw error;
       return { success: true };
     } catch (error) {
       console.error("Error disabling 2FA:", error);
-      return { success: false, error: "Failed to disable 2FA" };
+      return { success: false, error: "Failed to enable 2FA" };
     }
   }
 
-  /**
-   * Generate a secret for TOTP (placeholder - use proper TOTP library in production)
-   */
-  private generateSecret(): string {
-    const randomBytes = crypto.getRandomValues(new Uint8Array(32));
-    return Array.from(randomBytes)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-  }
-
-  /**
-   * Generate backup codes (placeholder - use proper implementation in production)
-   */
-  private generateBackupCodes(): string[] {
-    const codes: string[] = [];
-    for (let i = 0; i < 10; i++) {
-      const randomBytes = crypto.getRandomValues(new Uint8Array(4));
-      const code = Array.from(randomBytes)
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("")
-        .toUpperCase()
-        .substring(0, 8);
-      codes.push(code);
-    }
-    return codes;
-  }
-
-  /**
-   * Check if 2FA is required for a sensitive operation
-   */
-  async isRequiredForOperation(
-    userId: string,
-    operation: string,
-  ): Promise<boolean> {
-    // 2FA is optional by default - can be enforced per operation
+  async isRequiredForOperation(userId: string, operation: string): Promise<boolean> {
     const settings = await this.getSettings(userId);
-    if (!settings?.enabled || !settings.verified) {
-      return false;
-    }
+    return Boolean(settings?.enabled && settings.verified && [
+      "change_password", "change_email", "delete_account", "export_data",
+    ].includes(operation));
+  }
 
-    // Define operations that require 2FA
-    const sensitiveOperations = [
-      "change_password",
-      "change_email",
-      "delete_account",
-      "export_data",
-    ];
+  private generateSecret(): string {
+    return Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
 
-    return sensitiveOperations.includes(operation);
+  private generateBackupCodes(): string[] {
+    return Array.from({ length: 10 }, () => Array.from(crypto.getRandomValues(new Uint8Array(4)))
+      .map((byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase().slice(0, 8));
   }
 }
 
-// Singleton instance
 export const twoFactorAuthService = new TwoFactorAuthService();

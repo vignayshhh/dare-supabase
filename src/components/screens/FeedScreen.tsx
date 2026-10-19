@@ -10,6 +10,9 @@ import {
   useEffect,
   useMemo,
   useLayoutEffect,
+  useImperativeHandle,
+  forwardRef,
+  memo,
   type PointerEvent,
 } from "react";
 import {
@@ -56,6 +59,7 @@ import {
   Info,
 } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
+import { LikeTapBadge } from "../ui/LikeTapBadge";
 import { CommentSection, type CommentItem } from "../ui/CommentSection";
 import { useMessagingStore } from "../../stores/useMessagingStore";
 import { usePostsStore, type FeedPost } from "../../stores/usePostsStore";
@@ -79,17 +83,32 @@ import {
 } from "../../middleware/services/friends.service";
 import { useProfileDataStore } from "../../stores/profileDataStore";
 import { useAlertStore } from "../../stores/useAlertStore";
-import { useGhostModeStore } from "../../stores/useGhostModeStore";
+import { useJailStore } from "../../stores/useJailStore";
+import { loadDramaFeed } from "../../stores/dramaBackend";
+import {
+  usePredictionStore,
+  type PredictionPost,
+} from "../../stores/usePredictionStore";
+import { useDealStore, type DealPost } from "../../stores/useDealStore";
+import {
+  useDramaStore,
+  type CustomPost,
+  type PromisePost,
+  type RumourPost,
+} from "../../stores/useDramaStore";
+import { useVerdictsStore } from "../../stores/useVerdictsStore";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock";
-import { useUserGhostModes } from "../../hooks/useUserGhostModes";
+import type { VerdictChoice, VerdictDTO } from "../../types/verdict";
 import { commentLikePersistence } from "../../utils/commentLikePersistence";
-import { GhostModeTimer } from "../ui/GhostModeTimer";
+import { createFeedLikeFeedback, feedHeartColor, likeDanceVariant, LIKE_DANCE_INTERVAL } from "../../utils/feedLikeEffects";
 import { StoryViewer } from "../app/StoryViewer";
 import { CommunityChallengePreviewScreen } from "./CommunityChallengePreviewScreen";
 import { ChallengeHubScreen } from "./ChallengeHubScreen";
 import { DareEventsScreen } from "./DareEventsScreen";
 import { RoastJailScreen } from "./RoastJailScreen";
 import { FriendshipCourtScreen } from "./FriendshipCourtScreen";
+import { useCirclesStore } from "@/stores/useCirclesStore";
+import { CircleJailScreen } from "./CircleJailScreen";
 import {
   COMMUNITY_CHALLENGES,
   getCommunityChallengeTitle,
@@ -103,7 +122,6 @@ import {
   circleService,
   type CircleRecord,
 } from "../../middleware/services/circle.service";
-import { ghostModeService } from "../../middleware/services/ghost-mode.service";
 import { storyReactionService } from "../../middleware/services/story-reaction.service";
 import alertService from "../../middleware/services/alert.service.new";
 import {
@@ -139,7 +157,6 @@ interface HeartBurst {
   x: number;
   y: number;
   scale: number;
-  colorIdx: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,16 +165,19 @@ interface HeartBurst {
 
 const DOUBLE_TAP_DELAY = 320;
 const BURST_LIFETIME = 950;
+const LIKE_MILESTONE_CELEBRATION_MS = 8_200;
 const LIKE_PREVIEW_BATCH_SIZE = 12;
 const HEART_SIZES = [52, 68, 44, 60, 56];
-const HEART_COLORS = [
-  "#ff3b6b",
-  "#ff6b9d",
-  "#ff4d6d",
-  "#ff758c",
-  "#ff8fa3",
-  "#f43f5e",
-];
+const LIKE_MILESTONE_HEARTS = Array.from({ length: 28 }, (_, index) => ({
+  left: 28 + ((index * 37) % 45),
+  size: 8 + ((index * 7) % 8),
+  delay: 3600 + (index % 14) * 90 + Math.floor(index / 14) * 380,
+  duration: 900 + ((index * 83) % 360),
+  drift: -10 + ((index * 17) % 21),
+  driftMid: 4 - ((index * 11) % 9),
+  rotate: -28 + ((index * 29) % 57),
+  rotateMid: 12 - ((index * 19) % 25),
+}));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -194,9 +214,6 @@ const stripAtSymbol = (username?: string) =>
 const getLikeEntryName = (entry: UserLikeEntry) =>
   stripAtSymbol(entry.username).trim() || entry.name?.trim() || "Someone";
 
-const getLikeInitial = (entry: UserLikeEntry) =>
-  getLikeEntryName(entry).charAt(0).toUpperCase() || "U";
-
 const isDisplayableLikeEntry = (entry: UserLikeEntry) => {
   const name = entry.name?.trim().toLowerCase();
   const username = stripAtSymbol(entry.username).trim().toLowerCase();
@@ -210,37 +227,99 @@ const isDisplayableLikeEntry = (entry: UserLikeEntry) => {
   );
 };
 
-const buildLikeSocialProof = (post: FeedPost) => {
-  const totalPeople = totalLikes(post);
-  if (totalPeople <= 0) return null;
-
-  const entries = Object.values(getLikesByUser(post))
-    .filter(isDisplayableLikeEntry)
-    .sort((a, b) => b.tapCount - a.tapCount);
-  const totalTaps = Math.max(totalLikeTaps(post), totalPeople);
-
-  if (entries.length === 0) return null;
-
-  const visible = entries.slice(0, 3);
-  const primary = visible[0];
-  const primaryName = getLikeEntryName(primary);
-  const remainingPeople = Math.max(totalPeople - 1, 0);
-  const primaryTapText = `liked ${formatNumber(primary.tapCount)} ${
-    primary.tapCount === 1 ? "time" : "times"
-  }`;
-
-  return {
-    avatars: visible,
-    lead: primaryName,
-    rest:
-      remainingPeople > 0
-        ? `${primaryTapText} with ${formatNumber(remainingPeople)} ${remainingPeople === 1 ? "other" : "others"}`
-        : primary.tapCount > 1
-          ? primaryTapText
-          : totalTaps > 1
-            ? `liked ${formatNumber(totalTaps)} times`
-            : "liked this",
+const getTopLikeTapper = (
+  post: FeedPost,
+  optimisticLike?: UserLikeEntry,
+) => {
+  const persistedLikes = getLikesByUser(post);
+  const persistedOptimisticUserLike = optimisticLike
+    ? persistedLikes[optimisticLike.userId]
+    : undefined;
+  const mergedOptimisticLike = optimisticLike
+    ? {
+        ...persistedOptimisticUserLike,
+        ...optimisticLike,
+        tapCount: Math.max(
+          optimisticLike.tapCount,
+          persistedOptimisticUserLike?.tapCount || 0,
+        ),
+      }
+    : undefined;
+  const likesByUser = {
+    ...persistedLikes,
+    ...(mergedOptimisticLike
+      ? { [mergedOptimisticLike.userId]: mergedOptimisticLike }
+      : {}),
   };
+
+  return Object.values(likesByUser)
+    .filter(isDisplayableLikeEntry)
+    .sort((a, b) => b.tapCount - a.tapCount)[0];
+};
+
+const getNumericPostMeta = (post: FeedPost, keys: string[]) => {
+  const data = post as FeedPost & Record<string, unknown>;
+
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, value);
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return Math.max(0, parsed);
+    }
+  }
+
+  return 0;
+};
+
+const getPostSparkParts = (post: FeedPost) =>
+  [
+    {
+      label: "predictions",
+      singular: "prediction",
+      tone: "text-[#7dd3fc]",
+      count: getNumericPostMeta(post, [
+        "startedPredictions",
+        "started_predictions",
+        "predictionsStarted",
+        "predictions_started",
+        "predictionCount",
+        "prediction_count",
+        "predictionsCount",
+        "predictions_count",
+      ]),
+    },
+    {
+      label: "rumours",
+      singular: "rumour",
+      tone: "text-[#f0abfc]",
+      count: getNumericPostMeta(post, [
+        "startedRumours",
+        "startedRumors",
+        "started_rumours",
+        "started_rumors",
+        "rumoursStarted",
+        "rumorsStarted",
+        "rumourCount",
+        "rumorCount",
+        "rumours_count",
+        "rumors_count",
+      ]),
+    },
+  ];
+
+const getFeedPostCaption = (post: FeedPost) => {
+  const postData = post as FeedPost & Record<string, unknown>;
+  const candidates = [post.content, postData.body, postData.caption, postData.text];
+
+  return (
+    candidates.find(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    )?.trim() || ""
+  );
 };
 
 const getStoryCreatedAtTime = (story: StoryDTO) => {
@@ -260,7 +339,7 @@ const STORY_TEXT_COLORS = [
   "#ffffff",
   "#4ade80",
   "#facc15",
-  "#fb7185",
+  "#777777",
   "#38bdf8",
 ];
 const STORY_TEXT_FONTS = ["Bubble", "Deco", "Squeeze", "Typewriter", "Classic"];
@@ -273,6 +352,67 @@ const STORY_MEDIA_VERTICAL_SNAP_THRESHOLD = 18;
 type StoryComposerStage = "audience" | "capture" | "editor";
 type StoryGallerySnap = 25 | 60 | 100;
 type StoryBrushId = (typeof STORY_BRUSHES)[number];
+
+type FeedStickmanProps = {
+  label: string;
+  avatar?: string;
+  accent: string;
+  placement: "top" | "bottom";
+  animate?: boolean;
+};
+
+const TEMP_FEED_STICKMEN = [
+  { label: "mock 01", accent: "#4ade80", placement: "bottom" as const },
+  { label: "mock 02", accent: "#38bdf8", placement: "top" as const },
+  { label: "mock 03", accent: "#fb7185", placement: "bottom" as const },
+  { label: "mock 04", accent: "#facc15", placement: "top" as const },
+  { label: "mock 05", accent: "#c084fc", placement: "bottom" as const },
+  { label: "mock 06", accent: "#4ade80", placement: "top" as const },
+  { label: "mock 07", accent: "#38bdf8", placement: "bottom" as const },
+  { label: "mock 08", accent: "#fb7185", placement: "top" as const },
+];
+
+function FeedStickman({
+  label,
+  avatar,
+  accent,
+  placement,
+  animate = true,
+}: FeedStickmanProps) {
+  const [failedAvatarSrc, setFailedAvatarSrc] = useState<string | null>(null);
+  const avatarSrc = typeof avatar === "string" ? avatar.trim() : "";
+  const showAvatar = Boolean(avatarSrc) && avatarSrc !== failedAvatarSrc;
+  const motionVariant = Array.from(label).reduce(
+    (sum, character) => sum + character.charCodeAt(0),
+    0,
+  ) % 4;
+
+  return (
+    <div
+      className={`feed-stickman chat-stickman-motion feed-stickman-${placement}`}
+      data-animated={animate}
+      data-hand-motion={motionVariant}
+      aria-hidden="true"
+    >
+      <div
+        className="chat-stickman-head flex items-center justify-center overflow-hidden rounded-full border-2 bg-[#101611] text-[13px] font-black text-white"
+        style={{ borderColor: accent, width: "80px", height: "80px" }}
+      >
+        {showAvatar ? (
+          <img src={avatarSrc} alt="" className="h-full w-full object-cover" onError={() => setFailedAvatarSrc(avatarSrc)} />
+        ) : (
+          <span className="chat-stickman-face" />
+        )}
+      </div>
+      <div className="chat-stickman-body relative mt-[-1px]" style={{ width: "38px", height: "38px" }}>
+        <span className="feed-story-spine" />
+        <span className="feed-story-arm feed-story-arm-left" />
+        <span className="feed-story-arm feed-story-arm-right" />
+      </div>
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
 
 function smoothSnapToCenter(value: number, center: number, threshold: number) {
   const distance = value - center;
@@ -341,7 +481,7 @@ async function createStoryReplyPreviewUrl(story: StoryDTO): Promise<string> {
 // HeartBurstLayer
 // ---------------------------------------------------------------------------
 
-function HeartBurstLayer({ bursts }: { bursts: HeartBurst[] }) {
+function HeartBurstLayer({ bursts, color }: { bursts: HeartBurst[]; color: string }) {
   return (
     <div
       className="absolute inset-0 z-10 overflow-hidden pointer-events-none"
@@ -349,18 +489,18 @@ function HeartBurstLayer({ bursts }: { bursts: HeartBurst[] }) {
     >
       {bursts.map((burst) => {
         const size = HEART_SIZES[burst.id % HEART_SIZES.length];
-        const color = HEART_COLORS[burst.colorIdx % HEART_COLORS.length];
         return (
           <div
             key={burst.id}
-              style={{
-                position: "absolute",
-                left: burst.x - size / 2,
-                top: burst.y - size / 2,
-                width: size,
-                height: size,
-              }}
-            >
+            className="feed-heart-burst"
+            style={{
+              position: "absolute",
+              left: burst.x - size / 2,
+              top: burst.y - size / 2,
+              width: size,
+              height: size,
+            }}
+          >
             <div
               style={{
                 position: "absolute",
@@ -376,6 +516,7 @@ function HeartBurstLayer({ bursts }: { bursts: HeartBurst[] }) {
                 inset: -4,
                 borderRadius: "50%",
                 border: `2px solid ${color}80`,
+                transition: "border-color 650ms ease",
                 animation: `hbRing ${BURST_LIFETIME * 0.75}ms ease-out forwards`,
               }}
             />
@@ -391,6 +532,7 @@ function HeartBurstLayer({ bursts }: { bursts: HeartBurst[] }) {
                 width={size}
                 height={size}
                 style={{
+                  transition: "fill 650ms ease, filter 650ms ease",
                   filter: `drop-shadow(0 0 ${size * 0.18}px ${color}dd) drop-shadow(0 2px 6px #0008)`,
                   transform: `scale(${burst.scale})`,
                   transformOrigin: "center",
@@ -412,7 +554,7 @@ function HeartBurstLayer({ bursts }: { bursts: HeartBurst[] }) {
 
 function PostSkeleton() {
   return (
-    <div className="relative overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,22,18,0.97),rgba(6,9,8,0.99))] shadow-[0_22px_62px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.05)] animate-pulse">
+    <div className="feed-post-skeleton relative overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,22,18,0.97),rgba(6,9,8,0.99))] shadow-[0_22px_62px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.05)] animate-pulse">
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.68),rgba(14,165,233,0.38),rgba(74,222,128,0))]" />
       {/* Header skeleton */}
       <div className="flex items-center gap-3 px-3 pt-3 pb-2">
@@ -426,7 +568,7 @@ function PostSkeleton() {
       <div className="px-1">
         <div
           className="w-full bg-[#0a120a]/80 rounded-3xl"
-          style={{ height: "500px" }}
+          style={{ height: "525px" }}
         />
       </div>
       {/* Actions skeleton */}
@@ -521,25 +663,25 @@ function CommunityDareFeedRail({
   return (
     <section
       aria-label="Community dares"
-      className="relative overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,23,18,0.94),rgba(7,10,8,0.98))] py-3 shadow-[0_16px_38px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.055)]"
+      className="feed-editorial-rail relative overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,23,18,0.94),rgba(7,10,8,0.98))] py-3 shadow-[0_16px_38px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.055)]"
     >
       <style>{`
         .community-feed-rail::-webkit-scrollbar {
           display: none;
         }
       `}</style>
-      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(74,222,128,0.58),rgba(56,189,248,0.28),transparent)]" />
+      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.16),transparent)]" />
       <div className="mb-3 flex items-center justify-between gap-3 px-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#4ade80]/20 bg-[#4ade80]/12 text-[#86efac] shadow-[0_10px_24px_rgba(74,222,128,0.08)]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/[0.055] text-white/82 shadow-[0_10px_24px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.08)]">
               <Sparkles size={16} fill="currentColor" strokeWidth={0} />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-black uppercase tracking-[0.13em] text-[#bbf7d0]">
+              <p className="truncate text-[13px] font-black uppercase tracking-[0.13em] text-white/88">
                 Community dares
               </p>
-              <p className="truncate text-xs font-semibold text-[#7c8c80]">
+              <p className="truncate text-xs font-semibold text-white/38">
                 {joinPreviewText}
               </p>
             </div>
@@ -548,7 +690,7 @@ function CommunityDareFeedRail({
         <button
           type="button"
           onClick={onExploreAll}
-          className="app-pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-white transition-colors hover:border-[#4ade80]/30 hover:text-[#86efac]"
+          className="app-pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-white/76 transition-colors hover:border-white/18 hover:text-white"
           aria-label="Explore community dares"
         >
           <ArrowRight size={16} />
@@ -573,7 +715,7 @@ function CommunityDareFeedRail({
               key={challenge.id}
               type="button"
               onClick={() => onPreview(challenge)}
-              className="app-pressable relative flex h-[228px] w-[148px] shrink-0 snap-start flex-col justify-between overflow-hidden rounded-[24px] border text-left shadow-[0_18px_40px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.06)] transition-transform active:scale-[0.985]"
+              className="feed-rail-card app-pressable relative flex h-[228px] w-[148px] shrink-0 snap-start flex-col justify-between overflow-hidden rounded-[24px] border text-left shadow-[0_18px_40px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.06)] transition-transform active:scale-[0.985]"
               style={{
                 borderColor: `${challenge.accent}38`,
                 background:
@@ -620,7 +762,7 @@ function CommunityDareFeedRail({
                 <span className="mb-2 inline-flex rounded-full border border-[#4ade80]/18 bg-[#4ade80]/12 px-2 py-0.5 text-[8.5px] font-black uppercase tracking-[0.12em] text-[#bbf7d0]">
                   Dare official
                 </span>
-                <p className="line-clamp-4 text-[14px] font-black uppercase leading-[1.08] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]">
+                <p className="feed-rail-title line-clamp-4 text-[14px] font-black uppercase leading-[1.08] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]">
                   {challengeTitle}
                 </p>
                 <p className="mt-1.5 truncate text-[10px] font-bold text-white/68">
@@ -651,22 +793,22 @@ function SocialDaresFeedRail({
   return (
     <section
       aria-label="Social dares"
-      className="relative overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,23,20,0.94),rgba(7,9,8,0.98))] py-3 shadow-[0_16px_38px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.055)]"
+      className="feed-editorial-rail relative overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,23,20,0.94),rgba(7,9,8,0.98))] py-3 shadow-[0_16px_38px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.055)]"
     >
       <style>{`
         .feed-inline-rail::-webkit-scrollbar { display: none; }
       `}</style>
-      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(74,222,128,0.62),rgba(56,189,248,0.34),transparent)]" />
+      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.16),transparent)]" />
       <div className="mb-3 flex items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#4ade80]/22 bg-[#4ade80]/12 text-[#86efac] shadow-[0_10px_24px_rgba(74,222,128,0.1)]">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/[0.055] text-white/82 shadow-[0_10px_24px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.08)]">
             <Trophy size={16} />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-black uppercase tracking-[0.13em] text-[#bbf7d0]">
+            <p className="truncate text-[13px] font-black uppercase tracking-[0.13em] text-white/88">
               Social dares
             </p>
-            <p className="truncate text-xs font-semibold text-[#7c8c80]">
+            <p className="truncate text-xs font-semibold text-white/38">
               Challenges your friends completed
             </p>
           </div>
@@ -674,7 +816,7 @@ function SocialDaresFeedRail({
         <button
           type="button"
           onClick={onExploreAll}
-          className="app-pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-white transition-colors hover:border-[#4ade80]/30 hover:text-[#86efac]"
+          className="app-pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-white/76 transition-colors hover:border-white/18 hover:text-white"
           aria-label="Explore social dares"
         >
           <ArrowRight size={16} />
@@ -697,7 +839,7 @@ function SocialDaresFeedRail({
               key={dare.id}
               type="button"
               onClick={() => onOpenDare(dare)}
-              className="app-pressable relative flex h-[224px] w-[188px] shrink-0 snap-start flex-col justify-end overflow-hidden rounded-[24px] border border-white/10 bg-[#030403] p-3 text-left shadow-[0_16px_34px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.06)] transition-transform active:scale-[0.985]"
+              className="feed-rail-card app-pressable relative flex h-[224px] w-[188px] shrink-0 snap-start flex-col justify-end overflow-hidden rounded-[24px] border border-white/10 bg-[#030403] p-3 text-left shadow-[0_16px_34px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.06)] transition-transform active:scale-[0.985]"
               aria-label={`Open dare ${dare.description}`}
             >
               {thumbnailUrl ? (
@@ -721,7 +863,7 @@ function SocialDaresFeedRail({
                 <span className="absolute inset-0 bg-[linear-gradient(135deg,rgba(74,222,128,0.16),rgba(56,189,248,0.1),rgba(8,12,10,0.98))]" />
               )}
               <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.2)_44%,rgba(0,0,0,0.9))]" />
-              <span className="relative z-[1] line-clamp-3 text-[14px] font-black uppercase leading-[1.08] text-white">
+              <span className="feed-rail-title relative z-[1] line-clamp-3 text-[14px] font-black uppercase leading-[1.08] text-white">
                 {dare.description}
               </span>
               <div className="relative z-[1] mt-2 flex min-w-0 items-center gap-1 text-[10.5px] font-bold leading-none text-white/72">
@@ -732,7 +874,6 @@ function SocialDaresFeedRail({
                     size={17}
                     userId={dare.challengerId}
                     username={dare.challenger.nickname}
-                    disableGhostMode
                     className="shrink-0 border border-white/12 bg-black/35"
                   />
                   <span className="truncate">{dare.challenger.nickname}</span>
@@ -747,7 +888,6 @@ function SocialDaresFeedRail({
                     size={17}
                     userId={dare.receiverId}
                     username={dare.receiver.nickname}
-                    disableGhostMode
                     className="shrink-0 border border-white/12 bg-black/35"
                   />
                   <span className="truncate">{dare.receiver.nickname}</span>
@@ -761,44 +901,493 @@ function SocialDaresFeedRail({
   );
 }
 
-function TruthsFeedRail({
-  truths,
+type FeedHotTakeItem =
+  | { type: "truth"; id: string; createdAt: string; truth: TruthPost }
+  | {
+      type: "prediction";
+      id: string;
+      createdAt: string;
+      prediction: PredictionPost;
+    }
+  | { type: "deal"; id: string; createdAt: string; deal: DealPost }
+  | { type: "rumour"; id: string; createdAt: string; rumour: RumourPost }
+  | { type: "promise"; id: string; createdAt: string; promise: PromisePost }
+  | { type: "custom"; id: string; createdAt: string; custom: CustomPost };
+
+type FeedHotTakeCard = {
+  key: string;
+  type: FeedHotTakeItem["type"];
+  label: string;
+  action: string;
+  title: string;
+  kicker: string;
+  actorName: string;
+  actorAvatar: string;
+  actorId?: string;
+  stat: string;
+  accent: string;
+  accentSoft: string;
+  onOpen: () => void;
+};
+
+function voteCount(votes?: Record<string, unknown>) {
+  return Object.keys(votes || {}).length;
+}
+
+// ---------------------------------------------------------------------------
+// LikeMilestoneStickman — per-user 50-tap celebration.
+// Mirrors the avatar-headed, rounded-limb character language used by the
+// birthday room and roast jail, then turns the post header avatar into the
+// character instead of introducing a separate mascot.
+// ---------------------------------------------------------------------------
+
+function LikeMilestoneStickman({
+  author,
+  postId,
+  heartColor,
+  milestone,
+}: {
+  author: FeedPost["author"];
+  postId: string;
+  heartColor: string;
+  milestone: number;
+}) {
+  const layerRef = useRef<HTMLDivElement>(null);
+  const stickmanRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const layer = layerRef.current;
+    const stickman = stickmanRef.current;
+    if (!layer || !stickman) return;
+    const media = layer.parentElement?.querySelector<HTMLElement>(
+      "[data-feed-post-media]",
+    );
+    const avatar = layer.parentElement?.querySelector<HTMLElement>(
+      "[data-feed-author-avatar]",
+    );
+
+    const measure = () => {
+      const layerRect = layer.getBoundingClientRect();
+      const { height, width } = layerRect;
+      const mediaBottom = media
+        ? media.getBoundingClientRect().bottom - layerRect.top
+        : height;
+      const jumpX = Math.max(0, width * 0.5 - 36);
+      const heartTravel = Math.max(70, mediaBottom - 90);
+      layer.style.setProperty("--like-milestone-heart-travel", `${heartTravel}px`);
+      layer.style.setProperty(
+        "--like-milestone-heart-travel-mid",
+        `${heartTravel * 0.46}px`,
+      );
+
+      const avatarRect = avatar?.getBoundingClientRect();
+      const head = stickman.querySelector<HTMLElement>(".like-milestone-head");
+      const headSize = head?.offsetWidth || 50;
+      stickman.style.transformOrigin = `36px ${headSize / 2}px`;
+      return {
+        jumpX,
+        travel: Math.max(0, mediaBottom - 112),
+        homeX: avatarRect ? avatarRect.left + avatarRect.width / 2 - layerRect.left - 36 : -4,
+        homeY: avatarRect ? avatarRect.top + avatarRect.height / 2 - layerRect.top - 11 - headSize / 2 : -4,
+        homeScale: avatarRect ? avatarRect.width / headSize : 0.8,
+      };
+    };
+
+    // Shared choreography timeline:
+    // 0–11.5% anatomy reveal + anticipation, 11.5–52% jump arc,
+    // 52–61% impact + recovery, 61–88% party-style groove,
+    // 88–98% continuous eased return; the final hold makes the avatar handoff seamless.
+    const jumpFrames = ({
+      jumpX,
+      travel,
+      homeX,
+      homeY,
+      homeScale,
+    }: {
+      jumpX: number;
+      travel: number;
+      homeX: number;
+      homeY: number;
+      homeScale: number;
+    }): Keyframe[] => [
+      { offset: 0, transform: `translate3d(${homeX}px, ${homeY}px, 0) scale(${homeScale})` },
+      { offset: 0.08, transform: "translate3d(0px, 0px, 0px)" },
+      {
+        offset: 0.115,
+        transform: "translate3d(0px, 5px, 0px)",
+        easing: "cubic-bezier(0.23, 1, 0.32, 1)",
+      },
+      {
+        offset: 0.2,
+        transform: `translate3d(${jumpX * 0.28}px, -28px, 0px)`,
+      },
+      {
+        offset: 0.32,
+        transform: `translate3d(${jumpX * 0.56}px, -72px, 0px)`,
+        easing: "cubic-bezier(0.77, 0, 0.175, 1)",
+      },
+      {
+        offset: 0.43,
+        transform: `translate3d(${jumpX * 0.82}px, ${travel - 76}px, 0px)`,
+      },
+      {
+        offset: 0.52,
+        transform: `translate3d(${jumpX}px, ${travel + 7}px, 0px)`,
+        easing: "cubic-bezier(0.23, 1, 0.32, 1)",
+      },
+      {
+        offset: 0.565,
+        transform: `translate3d(${jumpX}px, ${travel - 5}px, 0px)`,
+      },
+      {
+        offset: 0.61,
+        transform: `translate3d(${jumpX}px, ${travel}px, 0px)`,
+      },
+      ...Array.from({ length: 31 }, (_, index) => {
+        const t = index / 30;
+        // Quintic easing has zero velocity and acceleration at both ends.
+        const progress = t * t * t * (t * (6 * t - 15) + 10);
+        const x = jumpX + (homeX - jumpX) * progress;
+        const y = travel + (homeY - travel) * progress - 24 * Math.sin(Math.PI * progress);
+        const scale = 1 + (homeScale - 1) * progress;
+        return { offset: 0.88 + t * 0.1, transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})` };
+      }),
+      { offset: 1, transform: `translate3d(${homeX}px, ${homeY}px, 0) scale(${homeScale})` },
+    ];
+
+    let metrics = measure();
+    stickman.style.transform = `translate3d(${metrics.homeX}px, ${metrics.homeY}px, 0) scale(${metrics.homeScale})`;
+    let jumpAnimation: Animation | null = null;
+    const danceAnimations: Animation[] = [];
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const animationFrame = window.requestAnimationFrame(() => {
+      if (reduceMotion) {
+        stickman.style.transform = `translate3d(${metrics.homeX}px, ${metrics.homeY}px, 0) scale(${metrics.homeScale})`;
+        return;
+      }
+
+      jumpAnimation = stickman.animate(jumpFrames(metrics), {
+        duration: LIKE_MILESTONE_CELEBRATION_MS,
+        easing: "linear",
+        fill: "both",
+      });
+
+      if (likeDanceVariant(milestone) === "shuffle") {
+        // Replace only the grounded dance phrase. Entry, landing, and the
+        // measured return to the avatar keep their existing choreography.
+        const phrases: Array<[string, string[]]> = [
+          [".like-milestone-puppet", [
+            "translate3d(0,0,0) rotate(0deg)",
+            "translate3d(-12px,-5px,0) rotate(-12deg)",
+            "translate3d(-6px,0,0) rotate(4deg)",
+            "translate3d(12px,-7px,0) rotate(12deg)",
+            "translate3d(6px,0,0) rotate(-4deg)",
+            "translate3d(-9px,-9px,0) rotate(-10deg)",
+            "translate3d(9px,-4px,0) rotate(10deg)",
+            "translate3d(0,0,0) rotate(0deg)",
+          ]],
+          [".like-milestone-head", [
+            "rotate(0deg)", "rotate(9deg)", "rotate(-5deg)", "rotate(-9deg)",
+            "rotate(5deg)", "rotate(8deg)", "rotate(-8deg)", "rotate(0deg)",
+          ]],
+          [".like-milestone-arm-left", [
+            "rotate(-32deg)", "rotate(125deg)", "rotate(145deg)", "rotate(-12deg)",
+            "rotate(-45deg)", "rotate(130deg)", "rotate(115deg)", "rotate(-32deg)",
+          ]],
+          [".like-milestone-arm-right", [
+            "rotate(32deg)", "rotate(12deg)", "rotate(45deg)", "rotate(-125deg)",
+            "rotate(-145deg)", "rotate(-130deg)", "rotate(-115deg)", "rotate(32deg)",
+          ]],
+          [".like-milestone-leg-left", [
+            "rotate(-58deg)", "rotate(-18deg)", "rotate(-72deg)", "rotate(-90deg)",
+            "rotate(-58deg)", "rotate(-12deg)", "rotate(-85deg)", "rotate(-58deg)",
+          ]],
+          [".like-milestone-leg-right", [
+            "rotate(58deg)", "rotate(90deg)", "rotate(58deg)", "rotate(18deg)",
+            "rotate(72deg)", "rotate(85deg)", "rotate(12deg)", "rotate(58deg)",
+          ]],
+        ];
+        for (const [selector, transforms] of phrases) {
+          const part = stickman.querySelector<HTMLElement>(selector);
+          if (!part) continue;
+          danceAnimations.push(part.animate(transforms.map((transform) => ({ transform })), {
+            delay: LIKE_MILESTONE_CELEBRATION_MS * 0.61,
+            duration: LIKE_MILESTONE_CELEBRATION_MS * 0.27,
+            easing: "cubic-bezier(0.37, 0, 0.63, 1)",
+            fill: "none",
+          }));
+        }
+      }
+    });
+
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            metrics = measure();
+            const effect = jumpAnimation?.effect as KeyframeEffect | null;
+            effect?.setKeyframes(jumpFrames(metrics));
+          });
+    observer?.observe(layer);
+    if (media) observer?.observe(media);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      jumpAnimation?.cancel();
+      danceAnimations.forEach((animation) => animation.cancel());
+      observer?.disconnect();
+    };
+  }, [postId, milestone]);
+
+  return (
+    <div
+      ref={layerRef}
+      className="like-milestone-layer pointer-events-none absolute inset-0 z-40 overflow-hidden"
+      style={{ pointerEvents: "none" }}
+      aria-hidden="true"
+      data-dance={likeDanceVariant(milestone)}
+    >
+      <div className="like-milestone-shower absolute inset-0">
+        {LIKE_MILESTONE_HEARTS.map((heart, index) => (
+          <Heart
+            key={index}
+            className="like-milestone-heart absolute -top-5"
+            size={heart.size}
+            fill={heartColor}
+            strokeWidth={0}
+            style={
+              {
+                left: `${heart.left}%`,
+                color: heartColor,
+                transition: "fill 650ms ease, color 650ms ease",
+                animationDelay: `${heart.delay}ms`,
+                animationDuration: `${heart.duration}ms`,
+                "--like-milestone-heart-drift": `${heart.drift}px`,
+                "--like-milestone-heart-drift-mid": `${heart.driftMid}px`,
+                "--like-milestone-heart-rotate": `${heart.rotate}deg`,
+                "--like-milestone-heart-rotate-mid": `${heart.rotateMid}deg`,
+              } as React.CSSProperties
+            }
+          />
+        ))}
+      </div>
+
+      <div
+        ref={stickmanRef}
+        className="like-milestone-stickman absolute left-0 top-[11px] flex w-[72px] flex-col items-center"
+      >
+        <div className="like-milestone-puppet relative flex flex-col items-center">
+          <div className="like-milestone-head relative rounded-full bg-[linear-gradient(135deg,#666,#3f3f3f,#8a8a8a)] p-[2px] shadow-[0_12px_24px_rgba(0,0,0,0.42)]">
+            <Avatar
+              src={author.avatar}
+              alt={author.name}
+              fallbackText={author.name.charAt(0)}
+              size={46}
+              userId={author.id}
+              username={author.username}
+            />
+          </div>
+          <div className="like-milestone-body relative mt-[-2px] h-[58px] w-[58px]">
+            <span className="like-milestone-arm-left absolute right-1/2 top-[10px] z-0 h-[4px] w-[22px] origin-right rotate-[-32deg]">
+              <span className="like-milestone-bone-left absolute inset-0 rounded-full bg-white/75" />
+            </span>
+            <span className="like-milestone-arm-right absolute left-1/2 top-[10px] z-0 h-[4px] w-[22px] origin-left rotate-[32deg]">
+              <span className="like-milestone-bone-right absolute inset-0 rounded-full bg-white/75" />
+            </span>
+            <span className="like-milestone-leg-left absolute right-1/2 top-[30px] z-0 h-[4px] w-[26px] origin-right rotate-[-58deg]">
+              <span className="like-milestone-bone-left absolute inset-0 rounded-full bg-white/75" />
+            </span>
+            <span className="like-milestone-leg-right absolute left-1/2 top-[30px] z-0 h-[4px] w-[26px] origin-left rotate-[58deg]">
+              <span className="like-milestone-bone-right absolute inset-0 rounded-full bg-white/75" />
+            </span>
+            <span className="like-milestone-torso absolute left-1/2 top-0 z-10 h-[33px] w-[4px] -translate-x-1/2 rounded-full bg-white/80" />
+          </div>
+        </div>
+        <span className="like-milestone-shadow absolute bottom-[3px] left-1/2 h-2 w-14 -translate-x-1/2 rounded-full bg-black/60 blur-[2px]" />
+        <span className="like-milestone-impact absolute -bottom-1 left-1/2 h-5 w-16 -translate-x-1/2 rounded-[50%] border-2 border-white/30" />
+      </div>
+    </div>
+  );
+}
+
+function getSubjectName(subject: PredictionPost["subject"]) {
+  return subject.type === "friend"
+    ? subject.name || subject.username || "someone"
+    : subject.name;
+}
+
+function buildFeedHotTakeCards({
+  items,
   onExploreAll,
   onOpenTruth,
 }: {
-  truths: TruthPost[];
+  items: FeedHotTakeItem[];
+  onExploreAll: () => void;
+  onOpenTruth: (truth: TruthPost) => void;
+}): FeedHotTakeCard[] {
+  return items.map((item) => {
+    if (item.type === "truth") {
+      const actor = getTruthRailActor(item.truth);
+      const action = getTruthRailAction(item.truth);
+      const actorName = actor.nickname || "Someone";
+      const question =
+        item.truth.question?.trim() || getTruthPreviewText(item.truth);
+
+      return {
+        key: `truth-${item.id}`,
+        type: "truth",
+        label: "Truth",
+        action,
+        title: question,
+        kicker: `Question from ${item.truth.challenger.nickname}`,
+        actorName,
+        actorAvatar: actor.avatar,
+        actorId: item.truth.receiverId || item.truth.challengerId,
+        stat: item.truth.state === "ANSWERED" ? "answered" : "waiting",
+        accent: "#4ade80",
+        accentSoft: "rgba(74,222,128,0.14)",
+        onOpen: () => onOpenTruth(item.truth),
+      };
+    }
+
+    if (item.type === "prediction") {
+      const votes = voteCount(item.prediction.votes);
+      return {
+        key: `prediction-${item.id}`,
+        type: "prediction",
+        label: "Prediction",
+        action: `called it on ${getSubjectName(item.prediction.subject)}`,
+        title: item.prediction.text,
+        kicker: item.prediction.verdict ? "verdict dropped" : "room is voting",
+        actorName: item.prediction.poster.name || "Someone",
+        actorAvatar: item.prediction.poster.avatar || "",
+        actorId: item.prediction.poster.id,
+        stat: `${votes} vote${votes === 1 ? "" : "s"}`,
+        accent: "#a78bfa",
+        accentSoft: "rgba(167,139,250,0.15)",
+        onOpen: onExploreAll,
+      };
+    }
+
+    if (item.type === "deal") {
+      const votes = voteCount(item.deal.votes);
+      return {
+        key: `deal-${item.id}`,
+        type: "deal",
+        label: "Stake",
+        action: `bet on ${getSubjectName(item.deal.subject)}`,
+        title: item.deal.event,
+        kicker: `${item.deal.winOutcome} or ${item.deal.loseOutcome}`,
+        actorName: item.deal.creator.name || "Someone",
+        actorAvatar: item.deal.creator.avatar || "",
+        actorId: item.deal.creator.id,
+        stat: item.deal.result || `${votes} vote${votes === 1 ? "" : "s"}`,
+        accent: "#38bdf8",
+        accentSoft: "rgba(56,189,248,0.14)",
+        onOpen: onExploreAll,
+      };
+    }
+
+    if (item.type === "rumour") {
+      const votes = voteCount(item.rumour.votes);
+      return {
+        key: `rumour-${item.id}`,
+        type: "rumour",
+        label: "Rumour",
+        action: item.rumour.subject
+          ? `about ${item.rumour.subject.name}`
+          : item.rumour.sourceLabel,
+        title: item.rumour.statement,
+        kicker: item.rumour.heatLabel || item.rumour.status,
+        actorName: item.rumour.poster.name || "Someone",
+        actorAvatar: item.rumour.poster.avatar || "",
+        actorId: item.rumour.poster.id,
+        stat: `${votes} vote${votes === 1 ? "" : "s"}`,
+        accent: "#777777",
+        accentSoft: "rgba(251,113,133,0.15)",
+        onOpen: onExploreAll,
+      };
+    }
+
+    if (item.type === "promise") {
+      const votes = voteCount(item.promise.votes);
+      return {
+        key: `promise-${item.id}`,
+        type: "promise",
+        label: "Promise",
+        action: `promised ${item.promise.targetLabel || "the room"}`,
+        title: item.promise.promise,
+        kicker: item.promise.status === "open" ? "receipts pending" : item.promise.status,
+        actorName: item.promise.maker.name || "Someone",
+        actorAvatar: item.promise.maker.avatar || "",
+        actorId: item.promise.maker.id,
+        stat: `${votes} watcher${votes === 1 ? "" : "s"}`,
+        accent: "#facc15",
+        accentSoft: "rgba(250,204,21,0.14)",
+        onOpen: onExploreAll,
+      };
+    }
+
+    const votes = voteCount(item.custom.votes);
+    return {
+      key: `custom-${item.id}`,
+      type: "custom",
+      label: "Pick",
+      action: item.custom.toneLabel || "choose sides",
+      title: item.custom.statement,
+      kicker: `${item.custom.choiceOneText} vs ${item.custom.choiceTwoText}`,
+      actorName: item.custom.creator.name || "Someone",
+      actorAvatar: item.custom.creator.avatar || "",
+      actorId: item.custom.creator.id,
+      stat: `${votes} tap${votes === 1 ? "" : "s"}`,
+      accent: "#f97316",
+      accentSoft: "rgba(249,115,22,0.15)",
+      onOpen: onExploreAll,
+    };
+  });
+}
+
+function HotTakesFeedRail({
+  items,
+  onExploreAll,
+  onOpenTruth,
+}: {
+  items: FeedHotTakeItem[];
   onExploreAll: () => void;
   onOpenTruth: (truth: TruthPost) => void;
 }) {
-  if (truths.length === 0) return null;
+  if (items.length === 0) return null;
+
+  const cards = buildFeedHotTakeCards({ items, onExploreAll, onOpenTruth });
 
   return (
     <section
-      aria-label="Truths"
-      className="relative overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,22,19,0.94),rgba(6,9,8,0.98))] py-3 shadow-[0_16px_38px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.055)]"
+      aria-label="Hot takes"
+      className="feed-editorial-rail relative overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,18,22,0.95),rgba(6,7,10,0.98))] py-3 shadow-[0_16px_38px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.055)]"
     >
       <style>{`
         .feed-inline-rail::-webkit-scrollbar { display: none; }
       `}</style>
-      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(74,222,128,0.62),rgba(56,189,248,0.34),transparent)]" />
       <div className="mb-3 flex items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#4ade80]/20 bg-[#4ade80]/12 text-[#86efac] shadow-[0_10px_24px_rgba(74,222,128,0.08)]">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/[0.055] text-white/82 shadow-[0_10px_24px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.08)]">
             <MessageSquare size={16} />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-black uppercase tracking-[0.13em] text-[#bbf7d0]">
-              Truths
+            <p className="truncate text-[13px] font-black uppercase tracking-[0.13em] text-white/88">
+              Hot Takes
             </p>
-            <p className="truncate text-xs font-semibold text-[#7c8c80]">
-              Fresh answers from friends
+            <p className="truncate text-xs font-semibold text-white/38">
+              Truths, stakes, rumours, promises
             </p>
           </div>
         </div>
         <button
           type="button"
           onClick={onExploreAll}
-          className="app-pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-white transition-colors hover:border-[#4ade80]/30 hover:text-[#86efac]"
+          className="app-pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-white/76 transition-colors hover:border-white/18 hover:text-white"
           aria-label="Explore truths"
         >
           <ArrowRight size={16} />
@@ -813,80 +1402,80 @@ function TruthsFeedRail({
           scrollPaddingInline: "16px",
         }}
       >
-        {truths.map((truth) => {
-          const actor = getTruthRailActor(truth);
-          const action = getTruthRailAction(truth);
-          const actorName = actor.nickname || "Someone";
-          const question = truth.question?.trim() || getTruthPreviewText(truth);
-
+        {cards.map((card) => {
           return (
             <button
-              key={truth.id}
+              key={card.key}
               type="button"
-              onClick={() => onOpenTruth(truth)}
-              className="app-pressable relative flex h-[156px] w-[286px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] border border-[#4ade80]/16 bg-[linear-gradient(145deg,rgba(74,222,128,0.12),rgba(255,255,255,0.045)_48%,rgba(56,189,248,0.1)),linear-gradient(180deg,rgba(9,15,12,0.98),rgba(5,8,6,0.99))] p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)] transition-transform active:scale-[0.985]"
-              aria-label={`${actorName} ${action} ${question}`}
+              onClick={card.onOpen}
+              className="feed-rail-card app-pressable relative flex h-[168px] w-[292px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] border bg-[linear-gradient(145deg,rgba(255,255,255,0.055),rgba(255,255,255,0.026)_46%,rgba(255,255,255,0.045)),linear-gradient(180deg,rgba(9,15,12,0.98),rgba(5,8,6,0.99))] p-3.5 text-left shadow-[0_16px_34px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)] transition-transform active:scale-[0.985]"
+              style={{
+                borderColor: `${card.accent}2c`,
+                ["--hot-take-accent" as string]: card.accent,
+                ["--hot-take-soft" as string]: card.accentSoft,
+              }}
+              aria-label={`${card.actorName} ${card.action} ${card.title}`}
             >
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute -right-8 -top-12 h-28 w-28 rounded-full bg-[#4ade80] opacity-16 blur-2xl"
+                className="pointer-events-none absolute -right-8 -top-12 h-28 w-28 rounded-full opacity-20 blur-2xl"
+                style={{ background: card.accent }}
               />
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-x-4 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(74,222,128,0.6),rgba(56,189,248,0.3),transparent)]"
+                className="pointer-events-none absolute inset-x-4 top-0 h-px"
+                style={{
+                  background: `linear-gradient(90deg,transparent,${card.accent}cc,rgba(255,255,255,0.24),transparent)`,
+                }}
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-0 right-0 h-16 w-28 rounded-tl-full"
+                style={{ background: card.accentSoft }}
               />
 
               <div className="relative z-[1] flex items-start gap-3">
                 <Avatar
-                  src={actor.avatar}
-                  alt={actorName}
+                  src={card.actorAvatar}
+                  alt={card.actorName}
                   size={40}
-                  fallbackText={actorName.charAt(0)}
+                  userId={card.actorId}
+                  username={card.actorName}
+                  fallbackText={card.actorName.charAt(0)}
                   style={{
                     border: "2px solid rgba(3,4,3,0.94)",
-                    boxShadow:
-                      "0 0 0 1px rgba(74,222,128,0.24), 0 10px 24px rgba(0,0,0,0.34)",
+                    boxShadow: `0 0 0 1px ${card.accent}66, 0 10px 24px rgba(0,0,0,0.34)`,
                   }}
                 />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 pr-1">
                   <p className="truncate text-[14px] font-black leading-tight text-white">
-                    {actorName}
+                    {card.actorName}
                   </p>
-                  <p className="mt-0.5 truncate text-[10.5px] font-black uppercase tracking-[0.14em] text-[#86efac]">
-                    {action}
+                  <p
+                    className="mt-0.5 truncate text-[10.5px] font-black uppercase tracking-[0.14em]"
+                    style={{ color: card.accent }}
+                  >
+                    {card.action}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full border border-white/10 bg-black/28 px-2 py-1 text-[9.5px] font-black uppercase tracking-[0.12em] text-[#bbf7d0]">
-                  Truth
+              </div>
+
+              <div className="feed-rail-title relative z-[1] mt-3 line-clamp-3 text-[16px] font-black leading-[1.16] text-white">
+                {card.title}
+              </div>
+
+              <div className="relative z-[1] mt-auto flex min-w-0 items-center justify-between gap-2 pt-2">
+                <p className="min-w-0 truncate text-[11px] font-bold text-white/48">
+                  {card.kicker}
+                </p>
+                <span
+                  className="shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em]"
+                  style={{ background: card.accentSoft, color: card.accent }}
+                >
+                  {card.stat}
                 </span>
               </div>
 
-              <div className="relative z-[1] mt-2.5 line-clamp-4 text-[15px] font-black leading-[1.22] text-white">
-                <span className="inline-flex max-w-full items-center gap-1.5 align-middle text-[#94a3b8]">
-                  <Avatar
-                    src={actor.avatar}
-                    alt={actorName}
-                    size={18}
-                    fallbackText={actorName.charAt(0)}
-                    className="shrink-0 border border-white/12 bg-black/35"
-                  />
-                  <span className="truncate">{actorName}</span>
-                  <span>{action}</span>
-                </span>{" "}
-                {question}
-              </div>
-
-              <div className="relative z-[1] mt-1.5 flex min-w-0 items-center gap-1.5 text-[10.5px] font-black uppercase tracking-[0.12em] text-white/54">
-                <span className="shrink-0">Question from</span>
-                <Avatar
-                  src={truth.challenger.avatar}
-                  alt={truth.challenger.nickname}
-                  size={16}
-                  fallbackText={truth.challenger.nickname.charAt(0)}
-                  className="shrink-0 border border-white/10 bg-black/35"
-                />
-                <span className="truncate">{truth.challenger.nickname}</span>
-              </div>
             </button>
           );
         })}
@@ -984,7 +1573,7 @@ function CircleScrapbookScreen({
           dare.proof?.url ||
           mediaPosts[0]?.media?.url ||
           "",
-        accent: "from-[#fb7185]/18",
+        accent: "from-white/10",
       });
     });
 
@@ -1035,7 +1624,7 @@ function CircleScrapbookScreen({
         value: `${truths.length}`,
         note: "Debate cards",
         icon: MessageSquare,
-        accent: "#fb7185",
+        accent: "#777777",
       },
     ],
     [
@@ -1099,7 +1688,7 @@ function CircleScrapbookScreen({
             <button
               type="button"
               onClick={onManage}
-              className="inline-flex items-center gap-2 rounded-full border border-rose-500/18 bg-rose-500/10 px-4 py-2 text-xs font-black text-rose-100"
+              className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-xs font-black text-white/72"
             >
               <Trash2 size={14} />
               Delete circle
@@ -1285,56 +1874,61 @@ function CircleScrapbookScreen({
 // FeedVerdictCard — inline verdict teaser card inserted every N feed posts
 // ---------------------------------------------------------------------------
 
-const FEED_VERDICT_POOL = [
-  {
-    id: "fv-haircut",
-    authorAvatar: "https://i.pravatar.cc/120?img=12",
-    authorName: "Aakash",
-    authorUsername: "aakash",
-    question: "Keep the haircut?",
-    description: "Fresh cut before Monday. Be honest before this becomes the new personality.",
-    choiceOne: "Keep it",
-    choiceTwo: "Change it",
-    imageUrl:
-      "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1200&q=86",
-    totalVotes: 48,
-    oneVotes: 37,
-    twoVotes: 11,
-    commentsCount: 6,
-  },
-  {
-    id: "fv-shoes",
-    authorAvatar: "https://i.pravatar.cc/120?img=33",
-    authorName: "Vignesh",
-    authorUsername: "vignesh",
-    question: "Worth buying?",
-    description: "Sale ends tonight. The wallet is scared. The outfit is ready.",
-    choiceOne: "Buy it",
-    choiceTwo: "Skip",
-    imageUrl:
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=86",
-    totalVotes: 71,
-    oneVotes: 52,
-    twoVotes: 19,
-    commentsCount: 9,
-  },
-  {
-    id: "fv-meme",
-    authorAvatar: "https://i.pravatar.cc/120?img=47",
-    authorName: "Varsha",
-    authorUsername: "varshhh",
-    question: "Facts or cap?",
-    description: "This meme attacked three people in the group chat directly.",
-    choiceOne: "Facts",
-    choiceTwo: "Cap",
-    imageUrl:
-      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=86",
-    totalVotes: 126,
-    oneVotes: 94,
-    twoVotes: 32,
-    commentsCount: 14,
-  },
-];
+function mergeFeedVerdicts(friends: VerdictDTO[], topics: VerdictDTO[]) {
+  const seen = new Set<string>();
+  return [...friends, ...topics]
+    .filter((verdict) => {
+      if (!verdict.id || seen.has(verdict.id)) return false;
+      seen.add(verdict.id);
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime() ||
+        b.id.localeCompare(a.id),
+    );
+}
+
+type FeedVerdictPreview = {
+  id: string;
+  verdictId: string;
+  authorAvatar: string;
+  authorName: string;
+  authorUsername: string;
+  question: string;
+  description: string;
+  choiceOne: string;
+  choiceTwo: string;
+  imageUrl: string;
+  mediaType: VerdictDTO["media_type"];
+  totalVotes: number;
+  oneVotes: number;
+  twoVotes: number;
+  commentsCount: number;
+  myVote: VerdictChoice | null;
+};
+
+function toFeedVerdictPreview(verdict: VerdictDTO): FeedVerdictPreview {
+  return {
+    id: `fv-${verdict.id}`,
+    verdictId: verdict.id,
+    authorAvatar: verdict.author.avatar_url,
+    authorName:
+      verdict.author.display_name || verdict.author.username || "Someone",
+    authorUsername: verdict.author.username || "verdict",
+    question: verdict.question,
+    description: verdict.description,
+    choiceOne: verdict.choice_one_text,
+    choiceTwo: verdict.choice_two_text,
+    imageUrl: verdict.media_url,
+    mediaType: verdict.media_type,
+    totalVotes: verdict.total_votes,
+    oneVotes: verdict.choice_one_votes,
+    twoVotes: verdict.choice_two_votes,
+    commentsCount: verdict.comments_count,
+    myVote: verdict.my_vote,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // PostActionSheet — bottom sheet for per-post actions
@@ -1347,6 +1941,9 @@ function PostActionSheet({
   onClose,
   onDare,
   onTruth,
+  onPrediction,
+  onRumour,
+  onDelete,
   onNavigateToProfile,
 }: {
   post: FeedPost;
@@ -1365,6 +1962,9 @@ function PostActionSheet({
     username: string;
     avatar: string;
   }) => void;
+  onPrediction?: () => void;
+  onRumour?: () => void;
+  onDelete?: () => void | Promise<void>;
   onNavigateToProfile?: (userId: string) => void;
 }) {
   const [closing, setClosing] = useState(false);
@@ -1380,14 +1980,20 @@ function PostActionSheet({
       label: "Make a prediction",
       color: "#818cf8",
       bg: "rgba(129,140,248,0.15)",
-      action: dismiss,
+      action: () => {
+        onPrediction?.();
+        dismiss();
+      },
     },
     {
       icon: <MessageSquare size={18} />,
       label: "Start a rumour",
       color: "#f472b6",
       bg: "rgba(244,114,182,0.15)",
-      action: dismiss,
+      action: () => {
+        onRumour?.();
+        dismiss();
+      },
     },
     {
       icon: <Target size={18} />,
@@ -1471,6 +2077,24 @@ function PostActionSheet({
     },
   ];
 
+  if (isOwn) {
+    section2.splice(
+      3,
+      2,
+      {
+        icon: <Trash2 size={18} />,
+        label: "Delete post",
+        color: "#f87171",
+        bg: "rgba(248,113,113,0.13)",
+        warning: true,
+        action: async () => {
+          await onDelete?.();
+          dismiss();
+        },
+      },
+    );
+  }
+
   const quickActions = [
     {
       label: "Prediction",
@@ -1508,8 +2132,9 @@ function PostActionSheet({
 
   return (
     <div
-      className="fixed inset-0 z-[160] flex items-end"
+      className="app-modal-backdrop fixed inset-0 z-[10000] flex items-end"
       style={{
+        zIndex: 10000,
         backgroundColor: closing ? "rgba(0,0,0,0)" : "rgba(0,0,0,0.78)",
         backdropFilter: closing ? "blur(0px)" : "blur(10px)",
         transition: "background-color 0.26s ease, backdrop-filter 0.26s ease",
@@ -1540,7 +2165,7 @@ function PostActionSheet({
         onClick={(e) => e.stopPropagation()}
       >
         {/* shimmer top edge */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(74,222,128,0.5),rgba(56,189,248,0.25),transparent)]" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(74,222,128,0.62),rgba(56,189,248,0.34),transparent)]" />
 
         {/* handle */}
         <div className="flex justify-center pt-3.5 pb-4">
@@ -1555,7 +2180,7 @@ function PostActionSheet({
             size={40}
             userId={author.id}
             username={author.username}
-            style={{ border: "1.5px solid rgba(74,222,128,0.26)" }}
+            style={{ border: "2px solid rgba(74,222,128,0.26)" }}
           />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-black leading-tight text-white">
@@ -1636,32 +2261,59 @@ function PostActionSheet({
   );
 }
 
-function FeedVerdictCard({ data }: { data: (typeof FEED_VERDICT_POOL)[0] }) {
-  const [myVote, setMyVote] = useState<"one" | "two" | null>(null);
+function FeedVerdictCard({
+  data,
+  onNavigate,
+  onVote,
+  voting,
+}: {
+  data: FeedVerdictPreview;
+  onNavigate?: () => void;
+  onVote?: (choice: VerdictChoice) => void;
+  voting?: boolean;
+}) {
   const [counts, setCounts] = useState({
     one: data.oneVotes,
     two: data.twoVotes,
     total: data.totalVotes,
   });
+  const [localVote, setLocalVote] = useState<VerdictChoice | null>(data.myVote);
+  const myVote = localVote;
+
+  useEffect(() => {
+    setCounts({
+      one: data.oneVotes,
+      two: data.twoVotes,
+      total: data.totalVotes,
+    });
+    setLocalVote(data.myVote);
+  }, [data.oneVotes, data.twoVotes, data.totalVotes, data.myVote]);
 
   const onePct = Math.round((counts.one / Math.max(counts.total, 1)) * 100);
   const twoPct = 100 - onePct;
 
   const handleVote = (choice: "one" | "two") => {
-    if (myVote !== null) return;
-    setMyVote(choice);
+    if (myVote === choice || voting) return;
+    setLocalVote(choice);
+    onVote?.(choice);
     setCounts((v) => ({
-      one: v.one + (choice === "one" ? 1 : 0),
-      two: v.two + (choice === "two" ? 1 : 0),
-      total: v.total + 1,
+      one:
+        v.one +
+        (choice === "one" ? 1 : 0) -
+        (myVote === "one" ? 1 : 0),
+      two:
+        v.two +
+        (choice === "two" ? 1 : 0) -
+        (myVote === "two" ? 1 : 0),
+      total: myVote ? v.total : v.total + 1,
     }));
   };
 
   const btnBase =
-    "relative min-h-[56px] overflow-hidden rounded-full border-2 px-4 text-center transition-transform duration-200 active:scale-[0.95]";
+    "relative min-h-[56px] overflow-hidden rounded-full border-2 px-4 text-center transition-transform duration-200 active:scale-[0.95] disabled:opacity-60";
 
   return (
-    <div className="relative overflow-hidden rounded-[30px]">
+    <div className="feed-verdict-card relative overflow-hidden rounded-[20px]">
       <div className="premium-card-glow" />
       <div className="premium-card-ring" />
 
@@ -1683,36 +2335,49 @@ function FeedVerdictCard({ data }: { data: (typeof FEED_VERDICT_POOL)[0] }) {
             </p>
           </div>
         </div>
-        <div className="shrink-0 flex items-center gap-1.5 rounded-full border border-[#fb7185]/30 bg-[#fb7185]/10 px-2.5 py-1 text-[10.5px] font-black uppercase tracking-[0.14em] text-[#fb7185] shadow-[0_0_14px_rgba(251,113,133,0.12)]">
+        <div className="shrink-0 flex items-center gap-1.5 rounded-full border border-white/14 bg-white/[0.06] px-2.5 py-1 text-[10.5px] font-black uppercase tracking-[0.14em] text-white/72">
           <Scale size={11} />
           Verdict
         </div>
       </div>
 
-      {/* Media with overlaid question */}
-      <div className="relative mx-1 overflow-hidden rounded-[22px]">
-        <img
-          src={data.imageUrl}
-          alt={data.question}
-          className="h-[420px] w-full object-cover"
-          loading="lazy"
-          decoding="async"
-          onError={(e) => {
-            e.currentTarget.src =
-              "https://picsum.photos/seed/verdict/800/600.jpg";
-          }}
-        />
+      {/* Media with overlaid question — tap to open in Verdicts */}
+      <div
+        className="relative mx-1 overflow-hidden rounded-[22px] cursor-pointer"
+        onClick={onNavigate}
+      >
+        {data.mediaType === "VIDEO" ? (
+          <video
+            src={data.imageUrl}
+            className="h-[190px] w-full object-cover"
+            muted
+            playsInline
+            preload="metadata"
+          />
+        ) : (
+          <img
+            src={data.imageUrl}
+            alt={data.question}
+            className="h-[190px] w-full object-cover"
+            loading="lazy"
+            decoding="async"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        )}
         {/* top sheen */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[linear-gradient(180deg,rgba(255,255,255,0.13),transparent)]" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),transparent)]" />
         {/* bottom scrim */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-44 bg-[linear-gradient(0deg,rgba(0,0,0,0.90)_0%,rgba(0,0,0,0.48)_52%,transparent_82%)]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(0deg,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.48)_58%,transparent_100%)]" />
         {/* Question + meta */}
         <div className="absolute inset-x-4 bottom-4">
-          <h2 className="text-[21px] font-black leading-tight tracking-[-0.03em] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">
+          <h2 className="text-[18px] font-semibold leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">
             {data.question}
           </h2>
           <p className="mt-1 text-[11.5px] font-bold text-white/52">
-            {counts.total.toLocaleString()} votes · {data.commentsCount} comments
+            {counts.total.toLocaleString()} votes · {data.commentsCount}{" "}
+            comments
           </p>
         </div>
       </div>
@@ -1725,19 +2390,21 @@ function FeedVerdictCard({ data }: { data: (typeof FEED_VERDICT_POOL)[0] }) {
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {/* Choice one — green */}
           <button
             type="button"
             onClick={() => handleVote("one")}
+            disabled={voting || myVote === "one"}
             className={btnBase}
             style={{
-              borderColor: myVote === "one" ? "#4ade80" : "rgba(74,222,128,0.35)",
+              borderColor:
+                myVote === "one" ? "#4ade80" : "rgba(74,222,128,0.35)",
               background:
-                "radial-gradient(circle at 18% 0%,rgba(134,239,172,0.22),transparent 60%),linear-gradient(150deg,rgba(74,222,128,0.14),rgba(34,197,94,0.05))",
+                "radial-gradient(circle at 12% 0%,rgba(74,222,128,0.24),transparent 58%),linear-gradient(150deg,rgba(74,222,128,0.16),rgba(255,255,255,0.035))",
               boxShadow:
                 myVote === "one"
-                  ? "0 0 0 1px #4ade80, 0 14px 32px rgba(74,222,128,0.24), inset 0 1px 0 rgba(255,255,255,0.14)"
+                  ? "0 0 0 1px #4ade80, 0 14px 32px rgba(74,222,128,0.16), inset 0 1px 0 rgba(255,255,255,0.14)"
                   : "inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 22px rgba(74,222,128,0.08)",
             }}
           >
@@ -1748,12 +2415,14 @@ function FeedVerdictCard({ data }: { data: (typeof FEED_VERDICT_POOL)[0] }) {
                 style={{
                   width: `${onePct}%`,
                   background:
-                    "linear-gradient(90deg,rgba(74,222,128,0.42),rgba(34,197,94,0.12))",
+                    "linear-gradient(90deg,rgba(74,222,128,0.32),rgba(74,222,128,0.08))",
                 }}
               />
             )}
             <span className="relative z-10 flex items-center justify-center gap-2">
-              <span className="text-[15px] font-black text-white">{data.choiceOne}</span>
+              <span className="text-[15px] font-black text-white">
+                {data.choiceOne}
+              </span>
               {myVote && (
                 <span className="shrink-0 text-[13px] font-black tabular-nums text-[#4ade80]">
                   {onePct}%
@@ -1766,14 +2435,16 @@ function FeedVerdictCard({ data }: { data: (typeof FEED_VERDICT_POOL)[0] }) {
           <button
             type="button"
             onClick={() => handleVote("two")}
+            disabled={voting || myVote === "two"}
             className={btnBase}
             style={{
-              borderColor: myVote === "two" ? "#fb7185" : "rgba(251,113,133,0.35)",
+              borderColor:
+                myVote === "two" ? "#fb7185" : "rgba(251,113,133,0.35)",
               background:
-                "radial-gradient(circle at 82% 0%,rgba(251,113,133,0.22),transparent 60%),linear-gradient(210deg,rgba(251,113,133,0.14),rgba(244,63,94,0.05))",
+                "radial-gradient(circle at 88% 0%,rgba(251,113,133,0.24),transparent 58%),linear-gradient(210deg,rgba(251,113,133,0.15),rgba(255,255,255,0.03))",
               boxShadow:
                 myVote === "two"
-                  ? "0 0 0 1px #fb7185, 0 14px 32px rgba(251,113,133,0.24), inset 0 1px 0 rgba(255,255,255,0.14)"
+                  ? "0 0 0 1px #fb7185, 0 14px 32px rgba(251,113,133,0.16), inset 0 1px 0 rgba(255,255,255,0.14)"
                   : "inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 22px rgba(251,113,133,0.08)",
             }}
           >
@@ -1784,14 +2455,16 @@ function FeedVerdictCard({ data }: { data: (typeof FEED_VERDICT_POOL)[0] }) {
                 style={{
                   width: `${twoPct}%`,
                   background:
-                    "linear-gradient(270deg,rgba(251,113,133,0.42),rgba(244,63,94,0.12))",
+                    "linear-gradient(270deg,rgba(251,113,133,0.32),rgba(251,113,133,0.08))",
                 }}
               />
             )}
             <span className="relative z-10 flex items-center justify-center gap-2">
-              <span className="text-[15px] font-black text-white">{data.choiceTwo}</span>
+              <span className="text-[15px] font-black text-white">
+                {data.choiceTwo}
+              </span>
               {myVote && (
-                <span className="shrink-0 text-[13px] font-black tabular-nums text-[#fb7185]">
+                <span className="shrink-0 text-[13px] font-black tabular-nums text-white/72">
                   {twoPct}%
                 </span>
               )}
@@ -1819,20 +2492,149 @@ function FeedVerdictCard({ data }: { data: (typeof FEED_VERDICT_POOL)[0] }) {
 // CarouselMedia — swipeable multi-image carousel for feed posts
 // ---------------------------------------------------------------------------
 
-function CarouselMedia({
-  urls,
-  postId,
-  onTap,
-}: {
-  urls: string[];
-  postId: string;
-  onTap: (
-    id: string,
-    clientX: number,
-    clientY: number,
-    element: HTMLElement,
-  ) => void;
-}) {
+function HorizontalCarouselMedia({ urls }: { urls: string[] }) {
+  const [index, setIndex] = useState(0);
+  const mediaRef = useRef<HTMLDivElement>(null);
+  const n = urls.length;
+  const isCarousel = n > 1;
+  const cardHeight = 525;
+  const sidePeek = 10;
+  const gap = 12;
+  const cardOverlap = 6;
+
+  const goTo = useCallback(
+    (next: number) => {
+      const targetIndex = Math.max(0, Math.min(n - 1, next));
+      const rail = mediaRef.current;
+      const firstCard = rail?.querySelector<HTMLElement>("[data-carousel-slide]");
+      const step = firstCard
+        ? firstCard.offsetWidth + gap - (isCarousel ? cardOverlap : 0)
+        : rail?.clientWidth ?? 0;
+      rail?.scrollTo({ left: targetIndex * step, behavior: "smooth" });
+      setIndex(targetIndex);
+    },
+    [n],
+  );
+
+  useEffect(() => {
+    setIndex((current) => Math.min(current, Math.max(0, n - 1)));
+  }, [n]);
+
+  useEffect(() => {
+    const rail = mediaRef.current;
+    if (!rail || !isCarousel) return;
+
+    const updateIndex = () => {
+      const firstCard = rail.querySelector<HTMLElement>(
+        "[data-carousel-slide]",
+      );
+      if (!firstCard) return;
+      const step = firstCard.offsetWidth + gap - cardOverlap;
+      const nextIndex = Math.max(
+        0,
+        Math.min(n - 1, Math.round(rail.scrollLeft / step)),
+      );
+      setIndex((current) => (current === nextIndex ? current : nextIndex));
+    };
+
+    rail.addEventListener("scrollend", updateIndex);
+    return () => rail.removeEventListener("scrollend", updateIndex);
+  }, [cardOverlap, gap, isCarousel, n]);
+
+  return (
+    <div className="relative w-full select-none" style={{ height: `${cardHeight}px` }}>
+      <div
+        ref={mediaRef}
+        className="flex h-full w-full gap-3 overflow-x-auto scrollbar-hide"
+        style={{
+          paddingLeft: 0,
+          paddingRight: isCarousel ? `${sidePeek}px` : 0,
+          scrollSnapType: isCarousel ? "x mandatory" : "none",
+          touchAction: "pan-x pan-y",
+          overflowX: isCarousel ? "scroll" : "hidden",
+          overflowY: "hidden",
+          overscrollBehaviorX: "contain",
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+        }}
+      >
+        {urls.map((url, i) => (
+          <div
+            key={i}
+            data-carousel-slide
+            className="relative h-full shrink-0 overflow-hidden rounded-[28px] border border-white/[0.08]"
+            style={{
+              width: isCarousel ? `calc(100% - ${sidePeek}px)` : "100%",
+              marginLeft: isCarousel && i > 0 ? `-${cardOverlap}px` : 0,
+              scrollSnapAlign: isCarousel ? "start" : "none",
+              scrollSnapStop: "normal",
+              boxShadow: "none",
+            }}
+          >
+            <img
+              src={url}
+              alt={`Slide ${i + 1}`}
+              className="pointer-events-none h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
+              fetchPriority="auto"
+              draggable={false}
+              onError={(event) => {
+                event.currentTarget.src =
+                  "https://picsum.photos/seed/fallback/800/600.jpg";
+              }}
+            />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[linear-gradient(180deg,rgba(255,255,255,0.11),transparent)]" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.60))]" />
+          </div>
+        ))}
+      </div>
+
+      {n > 1 && (
+        <>
+          <button
+            type="button"
+            aria-label="Previous image"
+            disabled={index === 0}
+            onClick={(event) => {
+              event.stopPropagation();
+              goTo(index - 1);
+            }}
+            className="absolute left-3 top-1/2 z-20 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/35 text-white backdrop-blur-md transition hover:bg-black/55 disabled:pointer-events-none disabled:opacity-0"
+          >
+            <ChevronLeft size={18} strokeWidth={2.5} />
+          </button>
+          <button
+            type="button"
+            aria-label="Next image"
+            disabled={index === n - 1}
+            onClick={(event) => {
+              event.stopPropagation();
+              goTo(index + 1);
+            }}
+            className="absolute right-3 top-1/2 z-20 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/35 text-white backdrop-blur-md transition hover:bg-black/55 disabled:pointer-events-none disabled:opacity-0"
+          >
+            <ChevronRight size={18} strokeWidth={2.5} />
+          </button>
+          <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            {urls.map((_, i) => (
+              <div
+                key={i}
+                className={`h-1 rounded-full transition-all duration-300 ${
+                  i === index
+                    ? "w-4 bg-white shadow-[0_0_8px_rgba(255,255,255,0.55)]"
+                    : "w-1 bg-white/30"
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LegacyCarouselMedia({ urls }: { urls: string[] }) {
   const [index, setIndex] = useState(0);
   const [dragDX, setDragDX] = useState(0); // live horizontal drag offset (px)
   const [isDragging, setIsDragging] = useState(false);
@@ -1842,13 +2644,13 @@ function CarouselMedia({
   const startT = useRef(0);
   const dragging = useRef(false);
   const movedH = useRef(false);
+  const ignoreMouseUntil = useRef(0);
   // rAF-coalesced drag offset: touchmove fires faster than the screen paints,
   // so we stash the latest value and flush at most once per frame. One render
   // per frame = no backlog no matter how fast/often you swipe back and forth.
   const pendingDX = useRef(0);
   const rafId = useRef<number | null>(null);
   const n = urls.length;
-  const CARD_W = 100; // percent — full-bleed, same footprint as a normal post
 
   const flushDrag = () => {
     rafId.current = null;
@@ -1856,7 +2658,8 @@ function CarouselMedia({
   };
   const queueDrag = (v: number) => {
     pendingDX.current = v;
-    if (rafId.current === null) rafId.current = requestAnimationFrame(flushDrag);
+    if (rafId.current === null)
+      rafId.current = requestAnimationFrame(flushDrag);
   };
   const cancelDrag = () => {
     if (rafId.current !== null) {
@@ -1884,14 +2687,11 @@ function CarouselMedia({
     setIsDragging(false);
     setDragDX(0);
     const width = mediaRef.current?.clientWidth ?? 1;
-    const passed = Math.abs(dx) > width * 0.18 || (Math.abs(dx) > 40 && dt < 300);
-    if (movedH.current) {
-      if (passed) {
-        const dir = dx < 0 ? 1 : -1;
-        setIndex((i) => Math.max(0, Math.min(n - 1, i + dir)));
-      }
-    } else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && mediaRef.current) {
-      onTap(postId, cx, cy, mediaRef.current);
+    const passed =
+      Math.abs(dx) > width * 0.18 || (Math.abs(dx) > 40 && dt < 300);
+    if (movedH.current && passed) {
+      const dir = dx < 0 ? 1 : -1;
+      setIndex((i) => Math.max(0, Math.min(n - 1, i + dir)));
     }
     startX.current = null;
   };
@@ -1927,7 +2727,8 @@ function CarouselMedia({
       if (movedH.current) {
         ev.preventDefault(); // block ancestor scroll-steal
         let eff = dx;
-        if ((index === 0 && dx > 0) || (index === n - 1 && dx < 0)) eff = dx * 0.35;
+        if ((index === 0 && dx > 0) || (index === n - 1 && dx < 0))
+          eff = dx * 0.35;
         queueDrag(eff);
       }
     };
@@ -1942,7 +2743,13 @@ function CarouselMedia({
     };
     const onTouchEnd = (e: TouchEvent) => {
       const t = e.changedTouches[0];
-      finish(t ? t.clientX : startX.current ?? 0, t ? t.clientY : startY.current);
+      // Mobile browsers may replay this touch as mouse events. Those events
+      // must not become a second tap and accidentally trigger a like.
+      ignoreMouseUntil.current = Date.now() + 500;
+      finish(
+        t ? t.clientX : (startX.current ?? 0),
+        t ? t.clientY : startY.current,
+      );
     };
     const onTouchCancel = () => {
       dragging.current = false;
@@ -1962,10 +2769,11 @@ function CarouselMedia({
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchCancel);
     };
-  }, [index, n, postId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [index, n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mouse (desktop) — no scroll-steal, plain React handlers suffice.
   const onMouseDown = (e: React.MouseEvent) => {
+    if (Date.now() < ignoreMouseUntil.current) return;
     startX.current = e.clientX;
     startY.current = e.clientY;
     startT.current = Date.now();
@@ -1985,112 +2793,172 @@ function CarouselMedia({
     }
     if (movedH.current) {
       let eff = dx;
-      if ((index === 0 && dx > 0) || (index === n - 1 && dx < 0)) eff = dx * 0.35;
+      if ((index === 0 && dx > 0) || (index === n - 1 && dx < 0))
+        eff = dx * 0.35;
       queueDrag(eff);
     }
   };
-  const onMouseUp = (e: React.MouseEvent) => finish(e.clientX, e.clientY);
+  const onMouseUp = (e: React.MouseEvent) => {
+    if (Date.now() < ignoreMouseUntil.current) return;
+    finish(e.clientX, e.clientY);
+  };
+
+  // ── Peek geometry ──────────────────────────────────────────────────────────
+  // Cards are top-anchored. Behind cards have a smaller `top` value so they
+  // sit higher in the container and peek out above the front card's top edge.
+  // A rightward x-nudge pushes the peek strip toward the top-right corner.
+  const CARD_H = 456; // front-card height (px)
+  const PEEK_Y = 20; // px — each depth level peeks this far above the previous
+  const PEEK_X = 10; // px — rightward nudge per depth level
+  const MAX_PEEK = 2; // cards visible behind front
+  // Container is taller than CARD_H by the total peek space so behind cards
+  // that sit higher in the container are not clipped at the top.
+  const CONTAINER_H = CARD_H + MAX_PEEK * PEEK_Y; // 508
 
   return (
     <div
       ref={mediaRef}
-      className="relative w-full touch-pan-y overflow-hidden rounded-3xl cursor-pointer select-none"
-      style={{ height: "500px", touchAction: "pan-y" }}
+      className="relative w-full cursor-pointer select-none"
+      style={{
+        height: `${CONTAINER_H}px`,
+        touchAction: "pan-y",
+        // Isolate painting so sibling elements never trigger carousel repaints.
+        isolation: "isolate",
+      }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
     >
-      {/* Stacked deck — cards piled on top of one another like a stack of    */}
-      {/* photos: the ones behind peek up with a slight tilt; swipe the top    */}
-      {/* card off to reveal the next.                                         */}
       {urls.map((url, i) => {
-        const pos = i - index; // 0 = front, >0 stacked behind, <0 already gone
+        const pos = i - index; // 0 = front · >0 = behind · <0 = gone
         const gone = pos < 0;
         const front = pos === 0;
-        const depth = Math.min(pos, 3);
-        // Alternating tilt gives the relaxed "tossed pile of files" feel.
-        const tilt = gone
-          ? dragDX < 0
-            ? -10
-            : 10
-          : (i % 2 === 0 ? 1 : -1) * depth * 2.4;
-        const dragRot = front ? dragDX * 0.045 : 0;
-        const txPx = front ? dragDX : 0;
-        const tx = gone ? "-135%" : `calc(-50% + ${txPx}px)`;
-        const ty = gone ? 0 : -depth * 13; // peek upward behind the front
-        const scale = gone ? 0.9 : 1 - depth * 0.05;
-        const opacity = gone || pos > 3 ? 0 : 1;
+        const depth = Math.min(Math.max(pos, 0), MAX_PEEK + 1);
+
+        // ── Vertical position (CSS `top`) ──
+        // Front card's top = MAX_PEEK * PEEK_Y so behind cards (lower top
+        // values) rise above it and peek.
+        // Gone cards keep the front top-value so they slide out horizontally
+        // without any vertical jump.
+        const topPx = gone ? MAX_PEEK * PEEK_Y : (MAX_PEEK - depth) * PEEK_Y;
+
+        // ── Horizontal ──
+        // Center all cards, then nudge behind cards right.
+        // During drag the front card follows the finger.
+        const txPx = front ? dragDX : depth * PEEK_X;
+
+        // Very gentle drag rotation on the front card only.
+        const dragRot = front ? dragDX * 0.025 : 0;
+
+        // Subtle scale recession (depth perception without exaggerating).
+        const scale = front ? 1 : 1 - depth * 0.022;
+
+        const opacity = pos < 0 || pos > MAX_PEEK + 1 ? 0 : 1;
+
+        // Front card casts a strong shadow; behind cards much lighter.
+        const shadow = front
+          ? "0 22px 56px -10px rgba(0,0,0,0.68), 0 0 0 1px rgba(255,255,255,0.08)"
+          : `0 ${10 + depth * 5}px 32px -14px rgba(0,0,0,0.42)`;
+
+        // Animate `top` + `transform` + `opacity` together.
+        // Disable all transitions during active drag to keep response instant.
+        const transition = isDragging
+          ? "none"
+          : [
+              "top 460ms cubic-bezier(0.22,1,0.36,1)",
+              "transform 460ms cubic-bezier(0.22,1,0.36,1)",
+              "opacity 280ms ease",
+            ].join(", ");
+
         return (
           <div
             key={i}
-            className="absolute top-1/2 left-1/2 touch-pan-y overflow-hidden rounded-3xl border border-white/15 ring-1 ring-inset ring-white/[0.06]"
+            className="absolute left-1/2 overflow-hidden rounded-[28px] border border-white/[0.08]"
             style={{
-              width: `${CARD_W}%`,
-              height: "100%",
+              // Fixed card size.
+              width: "100%",
+              height: `${CARD_H}px`,
               touchAction: "pan-y",
-              transform: `translate(${tx}, -50%) translateY(${ty}px) rotate(${
-                tilt + dragRot
-              }deg) scale(${scale}) translateZ(0)`,
-              transformOrigin: "center center",
-              // Promote front + neighbours to their own GPU layer so the swipe
-              // is a compositor-only transform (no per-frame repaint of the
-              // image or its shadow) — smooth on low-end devices and Safari.
-              willChange: Math.abs(pos) <= 1 ? "transform" : "auto",
+              // Position driven by `top` for peek; transform for drag + scale.
+              top: `${topPx}px`,
+              transform: gone
+                ? `translateX(calc(-50% + ${txPx}px - 200%)) scale(${scale}) translateZ(0)`
+                : `translateX(calc(-50% + ${txPx}px)) scale(${scale}) rotate(${dragRot}deg) translateZ(0)`,
+              // Promote front + next card to own GPU layer — compositor-only
+              // swipe = zero repaint on every touchmove frame.
+              willChange: pos >= 0 && pos <= 1 ? "transform, top" : "auto",
               backfaceVisibility: "hidden",
+              transformStyle: "flat",
               opacity,
               zIndex: urls.length - Math.abs(pos),
-              transition: isDragging
-                ? "none"
-                : "transform 460ms cubic-bezier(0.22,1,0.36,1), opacity 460ms ease",
-              boxShadow: front
-                ? "0 30px 70px -14px rgba(0,0,0,0.7)"
-                : "0 22px 48px -16px rgba(0,0,0,0.65)",
+              transition,
+              boxShadow: shadow,
               pointerEvents: front ? "auto" : "none",
             }}
           >
+            {/* ── Image ── */}
             <img
               src={url}
               alt={`Slide ${i + 1}`}
               className="h-full w-full touch-pan-y object-cover pointer-events-none"
               style={{ touchAction: "pan-y" }}
-              loading={i === 0 ? "eager" : "lazy"}
+              // Eagerly load current + next; defer everything else.
+              loading="lazy"
               decoding="async"
+              // Hint the network scheduler: current card is high-priority,
+              // next card low, rest auto — helps on slow connections.
+              fetchPriority="auto"
               draggable={false}
               onError={(e) => {
                 e.currentTarget.src =
                   "https://picsum.photos/seed/fallback/800/600.jpg";
               }}
             />
-            {/* Soft inner sheen along the top edge for a glassy finish.       */}
+
+            {/* Top-edge glassy sheen — front card only */}
             <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),transparent)]"
-              style={{ opacity: front ? 1 : 0 }}
+              className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[linear-gradient(180deg,rgba(255,255,255,0.11),transparent)]"
+              style={{
+                opacity: front ? 1 : 0,
+                transition: "opacity 300ms ease",
+              }}
             />
-            {/* Gradient floor on the front card for badge/dot legibility.    */}
+
+            {/* Bottom gradient for dot/badge legibility — front card only */}
             <div
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.32)_55%,rgba(0,0,0,0.66))]"
-              style={{ opacity: front ? 1 : 0 }}
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.60))]"
+              style={{
+                opacity: front ? 1 : 0,
+                transition: "opacity 300ms ease",
+              }}
             />
-            {/* Dim the cards behind so the front one pops.                   */}
+
+            {/* Progressive darkening on behind cards */}
             <div
-              className="pointer-events-none absolute inset-0 bg-black transition-opacity duration-300"
-              style={{ opacity: front ? 0 : 0.28 }}
+              className="pointer-events-none absolute inset-0 bg-black"
+              style={{
+                opacity: front ? 0 : Math.min(0.14 + depth * 0.09, 0.32),
+                transition: "opacity 300ms ease",
+              }}
             />
           </div>
         );
       })}
 
-      {/* Dot indicators — centred under the deck, in a glassy pill. */}
+      {/* ── Dot indicators ── anchored to the front card's bottom interior */}
       {n > 1 && (
-        <div className="pointer-events-none absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md">
+        <div
+          className="pointer-events-none absolute left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md"
+          style={{ bottom: "14px" }}
+        >
           {urls.map((_, i) => (
             <div
               key={i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
+              className={`h-1 rounded-full transition-all duration-300 ${
                 i === index
-                  ? "w-6 bg-[linear-gradient(90deg,#4ade80,#38bdf8)] shadow-[0_0_8px_rgba(74,222,128,0.5)]"
-                  : "w-1.5 bg-white/45"
+                  ? "w-4 bg-white shadow-[0_0_8px_rgba(255,255,255,0.55)]"
+                  : "w-1 bg-white/30"
               }`}
             />
           ))}
@@ -2101,8 +2969,365 @@ function CarouselMedia({
 }
 
 // ---------------------------------------------------------------------------
+// PostMedia — self-contained media + heart-burst layer.
+//
+// Owns its OWN burst state + double-tap detection so spawning a burst
+// re-renders only this one post's media subtree, never the whole feed list.
+// Exposes `burstAtCenter()` so the parent's heart-icon button can trigger a
+// burst here. The actual like write (onLike) is deferred a frame so the burst
+// paints instantly instead of waiting on the parent's heavy re-render.
+// ---------------------------------------------------------------------------
+
+interface PostMediaHandle {
+  burstAtCenter: () => void;
+}
+
+const mediaResourceKey = (url?: string) =>
+  typeof url === "string" ? url.split(/[?#]/, 1)[0] : "";
+
+const PostMedia = memo(
+  forwardRef<
+    PostMediaHandle,
+    {
+      post: FeedPost;
+      onLike: (postId: string) => void;
+      heartColor: string;
+      topLikeTapper?: UserLikeEntry;
+      topLikeBadgeSide?: "left" | "right";
+      onOpenLikes?: () => void;
+    }
+  >(function PostMedia(
+    {
+      post,
+      onLike,
+      heartColor,
+      topLikeTapper,
+      topLikeBadgeSide = "left",
+      onOpenLikes,
+    },
+    ref,
+  ) {
+    const [bursts, setBursts] = useState<HeartBurst[]>([]);
+    // Keep media mounted during optimistic/realtime like updates. Backend
+    // envelopes can briefly omit media while post likes refresh.
+    const stableMediaRef = useRef(post.media);
+    const stableMediaUrlsRef = useRef(post.media_urls);
+    if (
+      post.media?.url &&
+      mediaResourceKey(post.media.url) !==
+        mediaResourceKey(stableMediaRef.current?.url)
+    ) {
+      stableMediaRef.current = post.media;
+    }
+    if (
+      post.media_urls?.length &&
+      (post.media_urls.length !== stableMediaUrlsRef.current?.length ||
+        post.media_urls.some(
+          (url, index) =>
+            mediaResourceKey(url) !==
+            mediaResourceKey(stableMediaUrlsRef.current?.[index]),
+        ))
+    ) {
+      stableMediaUrlsRef.current = post.media_urls;
+    }
+    const resolvedMedia = stableMediaRef.current ?? post.media;
+    const resolvedMediaUrls = stableMediaUrlsRef.current ?? post.media_urls;
+    const pendingTapRef = useRef<{
+      time: number;
+      clientX: number;
+      clientY: number;
+    } | null>(null);
+    const burstIdCounter = useRef(0);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const pointerStartRef = useRef<{
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+    } | null>(null);
+
+    const spawnBurst = useCallback((x: number, y: number) => {
+      const id = ++burstIdCounter.current;
+      const burst: HeartBurst = {
+        id,
+        x: x + (Math.random() - 0.5) * 28,
+        y: y + (Math.random() - 0.5) * 18,
+        scale: 0.8 + Math.random() * 0.5,
+      };
+      setBursts((prev) => [...prev.slice(-23), burst]);
+      setTimeout(() => {
+        setBursts((prev) => prev.filter((b) => b.id !== id));
+      }, BURST_LIFETIME + 100);
+    }, []);
+
+    // Keep feedback inside the user gesture so mobile audio can unlock.
+    const fireLike = useCallback(() => {
+      onLike(post.id);
+    }, [onLike, post.id]);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        burstAtCenter: () => {
+          const el = containerRef.current;
+          spawnBurst(
+            el ? el.clientWidth / 2 : 160,
+            el ? el.clientHeight / 2 : 160,
+          );
+        },
+      }),
+      [spawnBurst],
+    );
+
+    const handleTap = useCallback(
+      (
+        clientX: number,
+        clientY: number,
+        element: HTMLElement,
+        eventTime: number,
+      ) => {
+        const pendingTap = pendingTapRef.current;
+        if (
+          !pendingTap ||
+          eventTime - pendingTap.time > DOUBLE_TAP_DELAY
+        ) {
+          pendingTapRef.current = { time: eventTime, clientX, clientY };
+          return;
+        }
+
+        // Consume a strict pair. The next physical tap always starts a fresh
+        // pair, even while earlier heart bursts are still animating.
+        pendingTapRef.current = null;
+        const rect = element.getBoundingClientRect();
+        spawnBurst(clientX - rect.left, clientY - rect.top);
+        fireLike();
+      },
+      [spawnBurst, fireLike],
+    );
+
+    const handlePointerDown = useCallback(
+      (event: PointerEvent<HTMLDivElement>) => {
+        if (event.target instanceof Element && event.target.closest('button,a,input,textarea,select,video,audio,[role="button"]')) {
+          pointerStartRef.current = null;
+          pendingTapRef.current = null;
+          return;
+        }
+        if (!event.isPrimary || event.button !== 0) return;
+        pointerStartRef.current = {
+          pointerId: event.pointerId,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        };
+      },
+      [],
+    );
+
+    const handlePointerUp = useCallback(
+      (event: PointerEvent<HTMLDivElement>) => {
+        const start = pointerStartRef.current;
+        pointerStartRef.current = null;
+        if (event.target instanceof Element && event.target.closest('button,a,input,textarea,select,video,audio,[role="button"]')) {
+          pendingTapRef.current = null;
+          return;
+        }
+
+        if (!start || start.pointerId !== event.pointerId) return;
+        if (
+          Math.hypot(
+            event.clientX - start.clientX,
+            event.clientY - start.clientY,
+          ) >= 10
+        ) {
+          return;
+        }
+
+        event.stopPropagation();
+        handleTap(
+          event.clientX,
+          event.clientY,
+          event.currentTarget,
+          event.timeStamp,
+        );
+      },
+      [handleTap],
+    );
+
+    const handlePointerCancel = useCallback(() => {
+      pointerStartRef.current = null;
+    }, []);
+
+    const topLikeBadge = topLikeTapper ? (
+      <LikeTapBadge
+        count={topLikeTapper.tapCount}
+        actorId={topLikeTapper.userId}
+        actorName={getLikeEntryName(topLikeTapper)}
+        color={heartColor}
+        side={topLikeBadgeSide}
+        onOpen={onOpenLikes}
+      />
+    ) : null;
+
+    if (resolvedMediaUrls && resolvedMediaUrls.length > 0) {
+      return (
+        <div className="feed-post-media-frame px-1 -mt-2">
+          <div
+            ref={containerRef}
+            id={`media-${post.id}`}
+            data-feed-post-media
+            className="relative"
+            style={{ touchAction: "auto" }}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+          >
+            <HorizontalCarouselMedia urls={resolvedMediaUrls} />
+            <HeartBurstLayer bursts={bursts} color={heartColor} />
+            {topLikeBadge}
+          </div>
+        </div>
+      );
+    }
+
+    if (resolvedMedia && resolvedMedia.url) {
+      return (
+        <div className="feed-post-media-frame feed-post-single-media-frame px-1">
+          <div
+            ref={containerRef}
+            id={`media-${post.id}`}
+            data-feed-post-media
+            className="w-full relative cursor-pointer rounded-3xl overflow-hidden"
+            style={{ touchAction: "pan-y" }}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+          >
+            {resolvedMedia.type === "image" ? (
+              <img
+                src={resolvedMedia.url}
+                alt="Post media"
+                className="w-full object-cover"
+                style={{
+                  aspectRatio: "4 / 5",
+                  maxHeight: "min(70dvh, 600px)",
+                }}
+                loading="lazy"
+                decoding="async"
+                onError={(e) => {
+                  e.currentTarget.src =
+                    "https://picsum.photos/seed/fallback/800/600.jpg";
+                }}
+              />
+            ) : resolvedMedia.type === "video" ? (
+              <video
+                src={resolvedMedia.url}
+                aria-label="Post video"
+                controls
+                playsInline
+                preload="metadata"
+                className="w-full bg-black object-contain rounded-3xl"
+                style={{
+                  aspectRatio: "4 / 5",
+                  maxHeight: "min(70dvh, 600px)",
+                }}
+              />
+            ) : (
+              <div
+                className="w-full bg-black flex flex-col items-center justify-center gap-4 rounded-3xl px-6"
+                style={{
+                  aspectRatio: "4 / 5",
+                  maxHeight: "min(70dvh, 600px)",
+                }}
+              >
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-gradient-to-br from-[#4ade80] to-[#22c55e] rounded-2xl flex items-center justify-center mb-3 mx-auto">
+                    <Music size={28} className="text-black" />
+                  </div>
+                  <p className="text-white font-medium">Audio File</p>
+                  {resolvedMedia.duration && (
+                    <p className="text-[#94a3b8] text-sm mt-1">
+                      {resolvedMedia.duration}
+                    </p>
+                  )}
+                </div>
+                <audio
+                  src={resolvedMedia.url}
+                  aria-label="Post audio"
+                  controls
+                  preload="metadata"
+                  className="w-full max-w-md"
+                />
+              </div>
+            )}
+            <HeartBurstLayer bursts={bursts} color={heartColor} />
+            {topLikeBadge}
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  }),
+  (previous, next) => {
+    const previousMedia = previous.post.media;
+    const nextMedia = next.post.media;
+    const previousUrls = previous.post.media_urls;
+    const nextUrls = next.post.media_urls;
+
+    return (
+      previous.onLike === next.onLike &&
+      previous.heartColor === next.heartColor &&
+      previous.post.id === next.post.id &&
+      previous.topLikeTapper?.userId === next.topLikeTapper?.userId &&
+      previous.topLikeTapper?.avatar === next.topLikeTapper?.avatar &&
+      previous.topLikeTapper?.tapCount === next.topLikeTapper?.tapCount &&
+      previous.topLikeBadgeSide === next.topLikeBadgeSide &&
+      previousUrls?.length === nextUrls?.length &&
+      (!previousUrls ||
+        !nextUrls ||
+        previousUrls.every((url, index) => url === nextUrls[index])) &&
+      previousMedia?.url === nextMedia?.url &&
+      previousMedia?.type === nextMedia?.type &&
+      previousMedia?.duration === nextMedia?.duration
+    );
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Main FeedScreen
 // ---------------------------------------------------------------------------
+
+function FeedHeaderJailIcon() {
+  return (
+    <span className="relative flex h-[30px] w-[30px] items-center justify-center rounded-[10px] border border-white/20 bg-black/34 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_8px_18px_rgba(0,0,0,0.28)]">
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 18 18"
+        fill="none"
+        aria-hidden="true"
+      >
+        <circle cx="9" cy="5.2" r="2.2" stroke="currentColor" strokeWidth="1.45" />
+        <path
+          d="M9 7.6v4.2M5.8 9.1 9 10.6l3.2-1.5M7.1 15l1.9-3.2L10.9 15"
+          stroke="currentColor"
+          strokeWidth="1.45"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {[3.6, 7.2, 10.8, 14.4].map((x) => (
+          <path
+            key={x}
+            d={`M${x} 2.1v13.8`}
+            stroke="currentColor"
+            strokeWidth="1.05"
+            strokeLinecap="round"
+            opacity="0.62"
+          />
+        ))}
+      </svg>
+      <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-white/70 shadow-[0_0_10px_rgba(255,255,255,0.42)]" />
+    </span>
+  );
+}
 
 export function FeedScreen({
   isActive = true,
@@ -2118,12 +3343,16 @@ export function FeedScreen({
   onNavigateToDareCenter,
   onNavigateToBirthdayRoom,
   onNavigateToProfile,
+  onNavigateToVerdict,
   onDareUser,
   onAskTruthUser,
+  onCreatePrediction,
+  onCreateRumour,
   onSendToDarren,
   onStoryComposerOpenChange,
   onStoryViewerOpenChange,
   onCommentsModalOpenChange,
+  onPostOptionsOpenChange,
 }: {
   isActive?: boolean;
   onBack: () => void;
@@ -2138,6 +3367,7 @@ export function FeedScreen({
   onNavigateToDareCenter: () => void;
   onNavigateToBirthdayRoom?: () => void;
   onNavigateToProfile?: (userId: string) => void;
+  onNavigateToVerdict?: (verdictId: string) => void;
   onDareUser?: (targetUser: {
     id: string;
     name: string;
@@ -2150,10 +3380,13 @@ export function FeedScreen({
     username: string;
     avatar: string;
   }) => void;
+  onCreatePrediction?: () => void;
+  onCreateRumour?: () => void;
   onSendToDarren?: () => void;
   onStoryComposerOpenChange?: (isOpen: boolean) => void;
   onStoryViewerOpenChange?: (isOpen: boolean) => void;
   onCommentsModalOpenChange?: (isOpen: boolean) => void;
+  onPostOptionsOpenChange?: (isOpen: boolean) => void;
 }) {
   const { getOrCreateConversation, sendRealTimeMessage } = useMessagingStore();
   const unreadCount = useMessagingStore((s) =>
@@ -2169,6 +3402,7 @@ export function FeedScreen({
     addLike: storeAddLike,
     addComment: storeAddComment,
     likeComment: storeLikeComment,
+    deletePost: storeDeletePost,
     incrementViews: storeIncrementViews,
     subscribeToPostComments,
     unsubscribeFromPostComments,
@@ -2176,6 +3410,7 @@ export function FeedScreen({
     unsubscribeFromPostLikes,
     loadPostLikePreviews,
     loadMorePosts,
+    pendingUpload,
   } = usePostsStore();
   const {
     truthPosts,
@@ -2193,33 +3428,129 @@ export function FeedScreen({
   const currentUsername = useProfileDataStore((s) => s.currentUsername);
   const currentProfileUserId = useProfileDataStore((s) => s.currentUserId);
   const alertUnreadCount = useAlertStore((s) => s.unreadCount);
-  const { subscribeToAlerts: subscribeAlerts, markAllAsRead } = useAlertStore();
-  const ghostModeIsActive = useGhostModeStore((s) => s.isActive);
-  const { checkGhostModeStatus, subscribeToGhostMode } = useGhostModeStore();
+  const predictions = usePredictionStore((s) => s.predictions);
+  const deals = useDealStore((s) => s.deals);
+  const rumours = useDramaStore((s) => s.rumours);
+  const promises = useDramaStore((s) => s.promises);
+  const customs = useDramaStore((s) => s.customs || []);
+  const feedVerdictFriends = useVerdictsStore((s) => s.friends);
+  const feedVerdictTopics = useVerdictsStore((s) => s.topics);
+  const verdictsLoading = useVerdictsStore((s) => s.loading);
+  const verdictsLoadingMore = useVerdictsStore((s) => s.loadingMore);
+  const verdictsError = useVerdictsStore((s) => s.error);
+  const votingByVerdictId = useVerdictsStore((s) => s.votingById);
+  const loadVerdicts = useVerdictsStore((s) => s.loadVerdicts);
+  const voteVerdict = useVerdictsStore((s) => s.vote);
+  const feedVerdicts = useMemo(
+    () => mergeFeedVerdicts(feedVerdictFriends, feedVerdictTopics),
+    [feedVerdictFriends, feedVerdictTopics],
+  );
+  const feedHotTakes = useMemo<FeedHotTakeItem[]>(() => {
+    const items: FeedHotTakeItem[] = [
+      ...truthPosts
+        .filter((truth) => truth.state === "APPROVED" && truth.answer?.trim())
+        .slice(0, 8)
+        .map((truth) => ({
+          type: "truth" as const,
+          id: truth.id,
+          createdAt: truth.createdAt,
+          truth,
+        })),
+      ...predictions.slice(0, 8).map((prediction) => ({
+        type: "prediction" as const,
+        id: prediction.id,
+        createdAt: prediction.createdAt,
+        prediction,
+      })),
+      ...deals.slice(0, 8).map((deal) => ({
+        type: "deal" as const,
+        id: deal.id,
+        createdAt: deal.createdAt,
+        deal,
+      })),
+      ...rumours.slice(0, 8).map((rumour) => ({
+        type: "rumour" as const,
+        id: rumour.id,
+        createdAt: rumour.createdAt,
+        rumour,
+      })),
+      ...promises.slice(0, 8).map((promise) => ({
+        type: "promise" as const,
+        id: promise.id,
+        createdAt: promise.createdAt,
+        promise,
+      })),
+      ...customs.slice(0, 8).map((custom) => ({
+        type: "custom" as const,
+        id: custom.id,
+        createdAt: custom.createdAt,
+        custom,
+      })),
+    ];
 
-  // Initialize ghost mode status and subscribe to updates
+    return items
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() ||
+          b.id.localeCompare(a.id),
+      )
+      .slice(0, 18);
+  }, [customs, deals, predictions, promises, rumours, truthPosts]);
+  const predictionMentionCount = useMemo(() => {
+    if (!user?.id) return 0;
+    const viewerId = String(user.id).trim();
+    return predictions.filter(
+      (prediction) =>
+        prediction.subject.type === "friend" &&
+        String(prediction.subject.id).trim() === viewerId &&
+        !prediction.subjectThought &&
+        !prediction.verdict,
+    ).length;
+  }, [predictions, user?.id]);
+  const { markAllAsRead } = useAlertStore();
+  const jailSession = useJailStore((s) => s.session);
+  const hasLiveJail = Boolean(jailSession && !jailSession.released);
+  const [showJailEventIcon, setShowJailEventIcon] = useState(false);
+
   useEffect(() => {
-    if (user?.id) {
-      // Check initial ghost mode status
-      checkGhostModeStatus(user.id);
-
-      // Subscribe to real-time ghost mode changes
-      const unsub = subscribeToGhostMode(user.id);
-      return () => {
-        if (unsub) unsub();
-      };
-    }
-  }, [user?.id, checkGhostModeStatus, subscribeToGhostMode]);
-
-  // Subscribe to alerts early so badge count is live
-  useEffect(() => {
-    if (isActive && user?.id) {
-      const unsub = subscribeAlerts(user.id);
-      return () => {
-        if (unsub) unsub();
-      };
-    }
+    if (!isActive || !user?.id) return;
+    void loadDramaFeed(false);
   }, [isActive, user?.id]);
+
+  useEffect(() => {
+    if (
+      !isActive ||
+      !user?.id ||
+      feedVerdicts.length > 0 ||
+      verdictsLoading ||
+      verdictsLoadingMore ||
+      verdictsError
+    ) {
+      return;
+    }
+    void loadVerdicts("friends");
+  }, [
+    feedVerdicts.length,
+    isActive,
+    loadVerdicts,
+    user?.id,
+    verdictsLoading,
+    verdictsLoadingMore,
+    verdictsError,
+  ]);
+
+  useEffect(() => {
+    if (!hasLiveJail || !isActive) {
+      setShowJailEventIcon(false);
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setShowJailEventIcon((current) => !current);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [hasLiveJail, isActive]);
 
   // Helper: resolve author display name and username from profileDataStore
   const resolveAuthor = useCallback(
@@ -2255,6 +3586,9 @@ export function FeedScreen({
 
   const [activeMenuPostId, setActiveMenuPostId] = useState<string | null>(null);
   const [activeMenuPost, setActiveMenuPost] = useState<FeedPost | null>(null);
+  const [locallyDeletedPostIds, setLocallyDeletedPostIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [activeMenuAuthor, setActiveMenuAuthor] = useState<{
     id?: string;
     name: string;
@@ -2264,11 +3598,23 @@ export function FeedScreen({
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [expandedSparkPostIds, setExpandedSparkPostIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [showDareCenterPrompt, setShowDareCenterPrompt] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
-  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const lastScrollYRef = useRef(0);
+  const headerScrollAnchorRef = useRef(0);
+  const headerScrollDirectionRef = useRef<"up" | "down" | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const optimisticLikeProofRef = useRef<Record<string, UserLikeEntry>>({});
   const [animatingPosts, setAnimatingPosts] = useState<Set<string>>(new Set());
+  const [likeMilestonePosts, setLikeMilestonePosts] = useState<Record<string, number>>(
+    {},
+  );
+  const likeMilestoneTimersRef = useRef<Record<string, number>>({});
+  const pendingLikeMilestonesRef = useRef<Record<string, number[]>>({});
+  const likeFeedbackRef = useRef<ReturnType<typeof createFeedLikeFeedback> | null>(null);
   const [showStoryTypeSheet, setShowStoryTypeSheet] = useState(false);
   const [showStoryUploadModal, setShowStoryUploadModal] = useState(false);
   const [storyComposerStage, setStoryComposerStage] =
@@ -2344,8 +3690,6 @@ export function FeedScreen({
   const [viewerStoryAuthorId, setViewerStoryAuthorId] = useState<string | null>(
     null,
   );
-  const [ghostDebugLoading, setGhostDebugLoading] = useState(false);
-  const [ghostDebugText, setGhostDebugText] = useState<string | null>(null);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const [sendingRecipientId, setSendingRecipientId] = useState<string | null>(
@@ -2361,6 +3705,7 @@ export function FeedScreen({
   const [showRoastJailScreen, setShowRoastJailScreen] = useState(false);
   const [showFriendshipCourtScreen, setShowFriendshipCourtScreen] =
     useState(false);
+  const [showCircleJailScreen, setShowCircleJailScreen] = useState(false);
   const [showCircleSelector, setShowCircleSelector] = useState(false);
   const [showCircleCreateModal, setShowCircleCreateModal] = useState(false);
   const [openCircleId, setOpenCircleId] = useState<string | null>(null);
@@ -2393,7 +3738,6 @@ export function FeedScreen({
     deleteStory,
     isUploading,
     uploadProgress,
-    cleanupExpiredStories,
     subscribeToFriendsStories,
     subscribeToUserStories,
     unsubscribeFromAllStories,
@@ -2410,10 +3754,10 @@ export function FeedScreen({
   const [likePreviewBatchTick, setLikePreviewBatchTick] = useState(0);
   const [hasMorePosts, setHasMorePosts] = useState(true);
 
-  const [bursts, setBursts] = useState<Record<string, HeartBurst[]>>({});
-  const lastTapTimeRef = useRef<Record<string, number>>({});
-  const burstIdCounter = useRef(0);
-  const colorCounterRef = useRef(0);
+  // Imperative handles to each post's PostMedia child so the heart-icon
+  // button can trigger a burst inside the media without lifting burst state
+  // up to this (heavy) parent component.
+  const postMediaRefs = useRef<Record<string, PostMediaHandle | null>>({});
   const storyDraftPreviewRef = useRef<HTMLDivElement | null>(null);
   const storyMediaMainRef = useRef<HTMLDivElement | null>(null);
   const storyTextLayerRef = useRef<HTMLDivElement | null>(null);
@@ -2465,6 +3809,18 @@ export function FeedScreen({
   const dareCenterLongPressTriggeredRef = useRef(false);
   const storyTextVerticalSnapActiveRef = useRef(false);
   const storyMediaVerticalSnapActiveRef = useRef(false);
+
+  useEffect(
+    () => () => {
+      Object.values(likeMilestoneTimersRef.current).forEach((timer) =>
+        window.clearTimeout(timer),
+      );
+      likeFeedbackRef.current?.dispose();
+      likeFeedbackRef.current = null;
+      pendingLikeMilestonesRef.current = {};
+    },
+    [],
+  );
 
   const clearDareCenterLongPressTimer = useCallback(() => {
     if (dareCenterLongPressTimerRef.current !== null) {
@@ -2537,7 +3893,7 @@ export function FeedScreen({
 
   const handleJoinCommunityChallenge = useCallback(
     async (challenge: CommunityChallenge) => {
-      if (!user?.id) return;
+      if (!user?.id) return false;
 
       setJoinedCommunityChallengeIds((current) => {
         if (current.has(challenge.id)) return current;
@@ -2559,7 +3915,10 @@ export function FeedScreen({
           next.delete(challenge.id);
           return next;
         });
+        return false;
       }
+
+      return true;
     },
     [user?.avatar, user?.displayName, user?.id, user?.username],
   );
@@ -2656,24 +4015,51 @@ export function FeedScreen({
 
   // ── Header hide/show logic ──
   useEffect(() => {
+    const scrollElement = scrollContainerRef.current;
+    if (!scrollElement) return;
+
     const handleScroll = () => {
-      const currentScrollY =
-        window.scrollY || document.documentElement.scrollTop;
-      const scrollDifference = currentScrollY - lastScrollY;
+      if (scrollRafRef.current !== null) return;
+      scrollRafRef.current = window.requestAnimationFrame(() => {
+        const currentScrollY = scrollElement.scrollTop;
+        const scrollDifference = currentScrollY - lastScrollYRef.current;
 
-      // Hide header when scrolling down, show when scrolling up
-      if (scrollDifference > 50) {
-        setIsHeaderVisible(false);
-      } else if (scrollDifference < -50) {
-        setIsHeaderVisible(true);
-      }
+        const direction =
+          scrollDifference > 0 ? "down" : scrollDifference < 0 ? "up" : null;
+        if (direction && direction !== headerScrollDirectionRef.current) {
+          headerScrollDirectionRef.current = direction;
+          headerScrollAnchorRef.current = lastScrollYRef.current;
+        }
 
-      setLastScrollY(currentScrollY);
+        const directionalTravel = Math.abs(
+          currentScrollY - headerScrollAnchorRef.current,
+        );
+        if (currentScrollY <= 8) {
+          setIsHeaderVisible(true);
+        } else if (
+          direction === "down" &&
+          currentScrollY >= 64 &&
+          directionalTravel >= 24
+        ) {
+          setIsHeaderVisible(false);
+        } else if (direction === "up" && directionalTravel >= 20) {
+          setIsHeaderVisible(true);
+        }
+
+        lastScrollYRef.current = currentScrollY;
+        scrollRafRef.current = null;
+      });
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [lastScrollY]);
+    scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      scrollElement.removeEventListener("scroll", handleScroll);
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
+  }, []);
 
   const currentUser = user
     ? {
@@ -2706,7 +4092,7 @@ export function FeedScreen({
     return () => {
       usePostsStore.getState().unsubscribeFromFeed();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isActive, currentUser.userId]);
 
   useEffect(() => {
@@ -2736,7 +4122,7 @@ export function FeedScreen({
 
   const sortedPosts = useMemo(
     () =>
-      [...posts].sort((a, b) => {
+      posts.filter((post) => !locallyDeletedPostIds.has(post.id)).sort((a, b) => {
         const aTime = new Date(a.timestamp).getTime();
         const bTime = new Date(b.timestamp).getTime();
         const normalizedATime = Number.isFinite(aTime) ? aTime : 0;
@@ -2748,7 +4134,7 @@ export function FeedScreen({
 
         return b.id.localeCompare(a.id);
       }),
-    [posts],
+    [locallyDeletedPostIds, posts],
   );
 
   const feedSocialDares = useMemo(
@@ -2760,17 +4146,6 @@ export function FeedScreen({
         )
         .slice(0, 8),
     [darePosts],
-  );
-
-  const feedTruths = useMemo(
-    () =>
-      [...truthPosts]
-        .filter((truth) => truth.state === "APPROVED" && truth.answer?.trim())
-        .sort(
-          (a, b) => getCreatedAtMs(b.createdAt) - getCreatedAtMs(a.createdAt),
-        )
-        .slice(0, 8),
-    [truthPosts],
   );
 
   // Derive selectedPost from live store data (not a stale snapshot)
@@ -2865,18 +4240,6 @@ export function FeedScreen({
       .filter((group) => Boolean(group.displayStory))
       .sort((a, b) => b.latestAt - a.latestAt);
   }, [stories]);
-  const ghostModesByUserId = useUserGhostModes([
-    ...stories.map((story) => story.author.id),
-    ...stories
-      .map((story) => story.dedicatedTo?.id)
-      .filter((id): id is string => Boolean(id)),
-    ...sortedPosts.map((post) => post.author.id),
-    ...friends.map((friend) => friend.user_id || friend.id),
-    ...(selectedPost
-      ? Object.values(getLikesByUser(selectedPost)).map((entry) => entry.userId)
-      : []),
-  ]);
-
   // Real-time story subscriptions — fire immediately and keep circles live
   useEffect(() => {
     if (isActive && currentUser.userId !== "me") {
@@ -2898,21 +4261,6 @@ export function FeedScreen({
         .catch(console.error);
     }
   }, [isActive, currentUser.userId]);
-
-  // Cleanup expired story docs from Firestore every 5 minutes.
-  // The onSnapshot subscription picks up the deletions automatically — no manual reload needed.
-  useEffect(() => {
-    if (currentUser.userId === "me") return;
-
-    const interval = setInterval(
-      () => {
-        useStoryStore.getState().cleanupExpiredStories(currentUser.userId);
-      },
-      5 * 60 * 1000,
-    );
-
-    return () => clearInterval(interval);
-  }, [currentUser.userId]);
 
   // Handle opening comments from alert navigation
   useEffect(() => {
@@ -2975,20 +4323,18 @@ export function FeedScreen({
 
   useEffect(() => {
     if (!isActive) return;
+    const scrollElement = scrollContainerRef.current;
+    if (!scrollElement) return;
 
     hasScrolledSinceFeedActivatedRef.current = false;
     const markScrolled = () => {
       hasScrolledSinceFeedActivatedRef.current = true;
     };
 
-    window.addEventListener("scroll", markScrolled, { passive: true });
-    window.addEventListener("wheel", markScrolled, { passive: true });
-    window.addEventListener("touchmove", markScrolled, { passive: true });
+    scrollElement.addEventListener("scroll", markScrolled, { passive: true });
 
     return () => {
-      window.removeEventListener("scroll", markScrolled);
-      window.removeEventListener("wheel", markScrolled);
-      window.removeEventListener("touchmove", markScrolled);
+      scrollElement.removeEventListener("scroll", markScrolled);
     };
   }, [isActive]);
 
@@ -3044,7 +4390,7 @@ export function FeedScreen({
     return () => {
       observer.disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [hasMorePosts, isActive, sortedPosts.length, loadMorePosts]);
 
   useBodyScrollLock(
@@ -3225,7 +4571,7 @@ export function FeedScreen({
   };
 
   const handleYourStoryPressStart = (
-    event: React.PointerEvent<HTMLDivElement>,
+    event: React.PointerEvent<HTMLElement>,
   ) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     clearStoryTypeLongPressTimer();
@@ -3974,6 +5320,10 @@ export function FeedScreen({
                 xPct: Math.round(storyDraftTextX),
                 yPct: Math.round(storyDraftTextY),
                 fontSize: Math.round(storyDraftTextSize * storyDraftTextScale),
+                rotation: storyDraftTextRotation,
+                font: storyDraftTextFont,
+                background: storyDraftTextBg,
+                align: storyDraftTextAlign,
               }
             : null,
           storyFilter: storyDraftFilter,
@@ -3984,6 +5334,11 @@ export function FeedScreen({
                   id: storyDraftMusicId,
                   label: getStoryMusicPreset(storyDraftMusicId).label,
                 },
+          storyDrawPaths,
+          visibility:
+            storyPublishAudience === "close-friends"
+              ? "CLOSE_FRIENDS"
+              : "FRIENDS",
         };
 
         const newStory = await storyService.createStory(
@@ -4000,7 +5355,10 @@ export function FeedScreen({
       );
 
       if (createdCount > 0) {
-        await useStoryStore.getState().loadUserStories(currentUser.userId);
+        const storyState = useStoryStore.getState();
+        if (!storyState._userUnsub) {
+          await storyState.loadUserStories(currentUser.userId);
+        }
         closeStoryComposer();
         triggerStoryPostedPulse();
       }
@@ -4119,8 +5477,8 @@ export function FeedScreen({
   ]);
 
   // ── Story reaction handler ──
-  // Uses a deterministic Firestore doc ID so no reads are needed —
-  // setDoc just overwrites on double-tap, and deleteDoc removes on toggle-off.
+  // Uses a deterministic Postgres doc ID so no reads are needed —
+  // The idempotent reaction mutation overwrites on double-tap and removes on toggle-off.
   const handleStoryReact = useCallback(
     async (storyId: string, authorId: string, type: "like" | "hate") => {
       if (!currentUser.userId || authorId === currentUser.userId) return null;
@@ -4203,116 +5561,88 @@ export function FeedScreen({
     [currentUser, getOrCreateConversation, sendRealTimeMessage, viewerStories],
   );
 
-  const handleGhostDebugCheck = useCallback(async () => {
-    if (!user?.id) return;
-
-    setGhostDebugLoading(true);
-
-    try {
-      const backendStatus = await ghostModeService.getGhostModeStatus(user.id);
-      setGhostDebugText(
-        `UI:${ghostModeIsActive ? "ON" : "OFF"} | backend:${
-          backendStatus.isActive ? "ON" : "OFF"
-        }${backendStatus.expiresAt ? ` | until ${new Date(backendStatus.expiresAt).toLocaleTimeString()}` : ""}`,
-      );
-    } catch (error) {
-      setGhostDebugText("UI check failed");
-    } finally {
-      setGhostDebugLoading(false);
-    }
-  }, [ghostModeIsActive, user?.id]);
-
-  // ── Heart burst spawner ──
-  const spawnBurst = useCallback((postId: string, x: number, y: number) => {
-    const id = ++burstIdCounter.current;
-    const colorIdx = colorCounterRef.current++ % HEART_COLORS.length;
-    const burst: HeartBurst = {
-      id,
-      x: x + (Math.random() - 0.5) * 28,
-      y: y + (Math.random() - 0.5) * 18,
-      scale: 0.8 + Math.random() * 0.5,
-      colorIdx,
-    };
-    setBursts((prev) => ({
-      ...prev,
-      [postId]: [...(prev[postId] ?? []), burst],
-    }));
-    setTimeout(() => {
-      setBursts((prev) => ({
-        ...prev,
-        [postId]: (prev[postId] ?? []).filter((b) => b.id !== id),
-      }));
-    }, BURST_LIFETIME + 100);
+  const startLikeMilestone = useCallback(function startCelebration(postId: string, milestone: number) {
+    setLikeMilestonePosts((prev) => ({ ...prev, [postId]: milestone }));
+    likeMilestoneTimersRef.current[postId] = window.setTimeout(() => {
+      delete likeMilestoneTimersRef.current[postId];
+      const nextMilestone = pendingLikeMilestonesRef.current[postId]?.shift();
+      if (nextMilestone !== undefined) {
+        startCelebration(postId, nextMilestone);
+      } else {
+        delete pendingLikeMilestonesRef.current[postId];
+        setLikeMilestonePosts((prev) => {
+          const next = { ...prev };
+          delete next[postId];
+          return next;
+        });
+      }
+    }, LIKE_MILESTONE_CELEBRATION_MS);
   }, []);
 
   const addLike = useCallback(
     (postId: string) => {
-      storeAddLike(postId, currentUser.userId);
+      const storedPost = usePostsStore
+        .getState()
+        .posts.find((post) => post.id === postId);
+      const existingEntry =
+        optimisticLikeProofRef.current[postId];
+      const persistedEntry = storedPost?.likesByUser[currentUser.userId];
 
-      // Track like count for animation trigger (every 10 likes)
-      setLikeCounts((prev) => {
-        const newCount = (prev[postId] || 0) + 1;
-        const updated = { ...prev, [postId]: newCount };
-        console.log(`Like count for post ${postId}: ${newCount}`);
+      const nextTapCount =
+        Math.max(
+          existingEntry?.tapCount || 0,
+          persistedEntry?.tapCount || 0,
+        ) + 1;
 
-        // Trigger animation every 10 likes
-        if (newCount % 10 === 0) {
-          console.log(
-            `Triggering animation for post ${postId} at count ${newCount}`,
-          );
-          setAnimatingPosts((prev) => {
-            const newSet = new Set(prev).add(postId);
-            console.log(`Animating posts:`, Array.from(newSet));
-            return newSet;
-          });
-          // Remove animation class after animation completes
-          setTimeout(() => {
-            setAnimatingPosts((prev) => {
-              const next = new Set(prev);
-              next.delete(postId);
-              console.log(`Removing animation for post ${postId}`);
-              return next;
-            });
-          }, 1800); // Animation duration
+      optimisticLikeProofRef.current[postId] = {
+        userId: currentUser.userId,
+        name: currentUser.name,
+        username: currentUser.username,
+        avatar: currentUser.avatar,
+        tapCount: nextTapCount,
+      };
+
+      likeFeedbackRef.current ??= createFeedLikeFeedback();
+      likeFeedbackRef.current.play(nextTapCount);
+      void storeAddLike(postId, currentUser.userId);
+
+      // Reaching another milestone during a dance queues its new routine;
+      // every like still registers immediately and the current dance can finish.
+      if (nextTapCount % LIKE_DANCE_INTERVAL === 0) {
+        if (likeMilestoneTimersRef.current[postId]) {
+          (pendingLikeMilestonesRef.current[postId] ??= []).push(nextTapCount);
+          return;
         }
+        setAnimatingPosts((prev) => new Set(prev).add(postId));
+        setTimeout(() => {
+          setAnimatingPosts((prev) => {
+            const next = new Set(prev);
+            next.delete(postId);
+            return next;
+          });
+        }, 1800); // Animation duration
 
-        return updated;
-      });
+        startLikeMilestone(postId, nextTapCount);
+      }
     },
-    [storeAddLike, currentUser.userId],
-  );
-
-  const handleMediaTap = useCallback(
-    (
-      postId: string,
-      clientX: number,
-      clientY: number,
-      mediaElement: HTMLElement,
-    ) => {
-      const now = Date.now();
-      const last = lastTapTimeRef.current[postId] ?? 0;
-      const isDoubleTap = now - last < DOUBLE_TAP_DELAY;
-      lastTapTimeRef.current[postId] = isDoubleTap ? 0 : now;
-      if (!isDoubleTap) return;
-      const rect = mediaElement.getBoundingClientRect();
-      spawnBurst(postId, clientX - rect.left, clientY - rect.top);
-      addLike(postId);
-    },
-    [spawnBurst, addLike],
+    [
+      storeAddLike,
+      startLikeMilestone,
+      currentUser.avatar,
+      currentUser.name,
+      currentUser.userId,
+      currentUser.username,
+    ],
   );
 
   const handleHeartIconClick = useCallback(
     (postId: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      const mediaEl = document.getElementById(`media-${postId}`);
-      spawnBurst(
-        postId,
-        mediaEl ? mediaEl.clientWidth / 2 : 160,
-        mediaEl ? mediaEl.clientHeight / 2 : 160,
-      );
+      // Burst is owned by the PostMedia child — fire it there, then like.
+      postMediaRefs.current[postId]?.burstAtCenter();
       addLike(postId);
     },
-    [spawnBurst, addLike],
+    [addLike],
   );
 
   const handleSubmitComment = useCallback(
@@ -4396,13 +5726,13 @@ export function FeedScreen({
 
   return (
     <div
-      className="screen-container"
+      className="feed-screen-premium screen-container"
       style={{
         /* ORIGINAL BG (green gradient):
            "radial-gradient(circle at 50% -12%, rgba(74,222,128,0.16), transparent 34%), radial-gradient(circle at 12% 18%, rgba(14,165,233,0.10), transparent 28%), linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%)"
         */
         background:
-          "linear-gradient(180deg, #141414 0%, #0e0e0e 52%, #0a0a0a 100%)",
+          "#000000",
       }}
     >
       <style>{`
@@ -4424,20 +5754,17 @@ export function FeedScreen({
             box-shadow:
               0 18px 44px rgba(0, 0, 0, 0.34),
               0 0 0 1px rgba(74, 222, 128, 0.08);
-            transform: translateY(0);
           }
           35% {
             box-shadow:
               0 22px 52px rgba(0, 0, 0, 0.4),
               0 0 0 1px rgba(74, 222, 128, 0.22),
               0 0 34px rgba(34, 197, 94, 0.18);
-            transform: translateY(-2px);
           }
           100% {
             box-shadow:
               0 18px 44px rgba(0, 0, 0, 0.34),
               0 0 0 1px rgba(74, 222, 128, 0.08);
-            transform: translateY(0);
           }
         }
         .premium-card-burst {
@@ -4480,6 +5807,275 @@ export function FeedScreen({
         .premium-card-burst .premium-card-glow {
           animation: premiumBorderSweep 1.65s cubic-bezier(0.22, 1, 0.36, 1);
         }
+        @keyframes likeMilestoneTorsoReveal {
+          0% {
+            opacity: 0;
+            clip-path: inset(0 0 100% 0);
+            transform: translateX(-50%) scale(0.96);
+          }
+          4% {
+            opacity: 0.74;
+            clip-path: inset(0 0 46% 0);
+          }
+          8%, 94% {
+            opacity: 1;
+            clip-path: inset(0 0 0 0);
+            transform: translateX(-50%) scale(1);
+          }
+          97% { opacity: 0.72; clip-path: inset(0 0 52% 0); }
+          100% { opacity: 0; clip-path: inset(0 0 100% 0); transform: translateX(-50%) scale(0.96); }
+        }
+        @keyframes likeMilestoneHeadChoreography {
+          0%, 8% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+          11.5% { transform: translate3d(0, 4px, 0) rotate(-2deg) scale(1.04, 0.95); }
+          20% { transform: translate3d(0, -2px, 0) rotate(3deg) scale(0.97, 1.04); }
+          32% { transform: translate3d(1px, -1px, 0) rotate(5deg) scale(1); }
+          43% { transform: translate3d(-1px, 0, 0) rotate(-4deg) scale(1); }
+          52% { transform: translate3d(0, 5px, 0) rotate(0deg) scale(1.08, 0.91); }
+          56.5% { transform: translate3d(0, -2px, 0) rotate(0deg) scale(0.97, 1.04); }
+          61% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+          69% { transform: translate3d(-1px, -2px, 0) rotate(-5deg) scale(1.01); }
+          77% { transform: translate3d(1px, 0, 0) rotate(4deg) scale(1); }
+          85% { transform: translate3d(-1px, -2px, 0) rotate(-4deg) scale(1.01); }
+          88% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+          93% { transform: translate3d(0, -1px, 0) rotate(-2deg) scale(1); }
+          98% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+          100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+        }
+        @keyframes likeMilestoneBodyChoreography {
+          0%, 8% {
+            transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+          }
+          11.5% { transform: translate3d(0, 5px, 0) rotate(-3deg) scale(1.06, 0.9); }
+          20% { transform: translate3d(0, -3px, 0) rotate(5deg) scale(0.95, 1.07); }
+          32% { transform: translate3d(0, 0, 0) rotate(10deg) scale(0.98, 1.03); }
+          43% { transform: translate3d(0, 1px, 0) rotate(-7deg) scale(1); }
+          52% { transform: translate3d(0, 7px, 0) rotate(0deg) scale(1.11, 0.86); }
+          56.5% { transform: translate3d(0, -3px, 0) rotate(0deg) scale(0.97, 1.04); }
+          61% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+          69% { transform: translate3d(-3px, -3px, 0) rotate(-7deg) scale(1.02); }
+          77% { transform: translate3d(3px, 0, 0) rotate(6deg) scale(0.99); }
+          85% { transform: translate3d(-2px, -4px, 0) rotate(-8deg) scale(1.03); }
+          88% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+          93% { transform: translate3d(0, -1px, 0) rotate(-2deg) scale(1); }
+          98% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+          100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+        }
+        @keyframes likeMilestoneLeftArmChoreography {
+          0% { opacity: 0; transform: rotate(-32deg); }
+          4% { opacity: 0.72; }
+          8% { opacity: 1; transform: rotate(-32deg); }
+          11.5% { transform: rotate(-18deg); }
+          20% { transform: rotate(-124deg); }
+          32% { transform: rotate(-150deg); }
+          43% { transform: rotate(-112deg); }
+          52% { transform: rotate(-28deg); }
+          56.5% { transform: rotate(-84deg); }
+          61% { transform: rotate(-32deg); }
+          69% { transform: rotate(-82deg); }
+          77% { transform: rotate(-24deg); }
+          85% { transform: rotate(-96deg); }
+          88% { transform: rotate(-32deg); }
+          89.5% { transform: rotate(-18deg); }
+          93% { transform: rotate(-142deg); }
+          97% { opacity: 1; transform: rotate(-104deg); }
+          100% { opacity: 0; transform: rotate(-32deg); }
+        }
+        @keyframes likeMilestoneRightArmChoreography {
+          0% { opacity: 0; transform: rotate(32deg); }
+          4.8% { opacity: 0.72; }
+          8.8% { opacity: 1; transform: rotate(32deg); }
+          11.5% { transform: rotate(18deg); }
+          20% { transform: rotate(124deg); }
+          32% { transform: rotate(150deg); }
+          43% { transform: rotate(112deg); }
+          52% { transform: rotate(28deg); }
+          56.5% { transform: rotate(84deg); }
+          61% { transform: rotate(32deg); }
+          69% { transform: rotate(26deg); }
+          77% { transform: rotate(86deg); }
+          85% { transform: rotate(18deg); }
+          88% { transform: rotate(32deg); }
+          89.5% { transform: rotate(18deg); }
+          93% { transform: rotate(142deg); }
+          97% { opacity: 1; transform: rotate(104deg); }
+          100% { opacity: 0; transform: rotate(32deg); }
+        }
+        @keyframes likeMilestoneLeftLegChoreography {
+          0%, 2% { opacity: 0; transform: rotate(-58deg); }
+          6% { opacity: 0.72; }
+          10% { opacity: 1; transform: rotate(-58deg); }
+          11.5% { transform: rotate(-72deg); }
+          20% { transform: rotate(-94deg); }
+          32% { transform: rotate(-24deg); }
+          43% { transform: rotate(-108deg); }
+          52% { transform: rotate(-72deg); }
+          56.5%, 61% { transform: rotate(-58deg); }
+          69% { transform: rotate(-74deg); }
+          77% { transform: rotate(-42deg); }
+          85% { transform: rotate(-78deg); }
+          88% { transform: rotate(-58deg); }
+          89.5% { transform: rotate(-76deg); }
+          93% { transform: rotate(-92deg); }
+          97% { opacity: 1; transform: rotate(-42deg); }
+          100% { opacity: 0; transform: rotate(-58deg); }
+        }
+        @keyframes likeMilestoneRightLegChoreography {
+          0%, 2.8% { opacity: 0; transform: rotate(58deg); }
+          6.8% { opacity: 0.72; }
+          10.8% { opacity: 1; transform: rotate(58deg); }
+          11.5% { transform: rotate(72deg); }
+          20% { transform: rotate(94deg); }
+          32% { transform: rotate(108deg); }
+          43% { transform: rotate(24deg); }
+          52% { transform: rotate(72deg); }
+          56.5%, 61% { transform: rotate(58deg); }
+          69% { transform: rotate(42deg); }
+          77% { transform: rotate(76deg); }
+          85% { transform: rotate(40deg); }
+          88% { transform: rotate(58deg); }
+          89.5% { transform: rotate(76deg); }
+          93% { transform: rotate(92deg); }
+          97% { opacity: 1; transform: rotate(42deg); }
+          100% { opacity: 0; transform: rotate(58deg); }
+        }
+        @keyframes likeMilestoneLeftBoneReveal {
+          0% { clip-path: inset(0 0 0 100%); }
+          5% { clip-path: inset(0 0 0 46%); }
+          10%, 100% { clip-path: inset(0 0 0 0); }
+        }
+        @keyframes likeMilestoneRightBoneReveal {
+          0% { clip-path: inset(0 100% 0 0); }
+          5.8% { clip-path: inset(0 46% 0 0); }
+          10.8%, 100% { clip-path: inset(0 0 0 0); }
+        }
+        @keyframes likeMilestoneLandingShadow {
+          0%, 49% { opacity: 0; transform: translateX(-50%) scaleX(0.3); }
+          52% { opacity: 0.8; transform: translateX(-50%) scaleX(1.2); }
+          56.5% { opacity: 0.42; transform: translateX(-50%) scaleX(0.84); }
+          61%, 86% { opacity: 0.32; transform: translateX(-50%) scaleX(0.9); }
+          89%, 100% { opacity: 0; transform: translateX(-50%) scaleX(0.7); }
+        }
+        @keyframes likeMilestoneImpactRing {
+          0%, 51% { opacity: 0; transform: translateX(-50%) scale(0.84); }
+          52% { opacity: 0.84; transform: translateX(-50%) scale(0.92); }
+          59%, 100% { opacity: 0; transform: translateX(-50%) scale(1.82); }
+        }
+        @keyframes likeMilestoneHeartFall {
+          0% {
+            opacity: 0;
+            transform: translate3d(0, 0, 0) rotate(0deg) scale(0.9);
+          }
+          9% { opacity: 1; }
+          46% {
+            opacity: 1;
+            transform: translate3d(var(--like-milestone-heart-drift-mid), var(--like-milestone-heart-travel-mid), 0)
+              rotate(var(--like-milestone-heart-rotate-mid)) scale(1.04);
+          }
+          82% { opacity: 1; }
+          100% {
+            opacity: 0;
+            transform: translate3d(var(--like-milestone-heart-drift), var(--like-milestone-heart-travel), 0)
+              rotate(var(--like-milestone-heart-rotate)) scale(1.12);
+          }
+        }
+        .like-milestone-stickman {
+          animation: none;
+          transform-origin: 36px 25px;
+          backface-visibility: hidden;
+          will-change: transform;
+        }
+        .like-milestone-puppet {
+          animation: likeMilestoneBodyChoreography ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.77, 0, 0.175, 1) both;
+          backface-visibility: hidden;
+          transform-origin: 50% 18%;
+          will-change: transform;
+        }
+        .like-milestone-head {
+          animation: likeMilestoneHeadChoreography ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.77, 0, 0.175, 1) both;
+          backface-visibility: hidden;
+          transform-origin: center bottom;
+          will-change: transform;
+        }
+        .like-milestone-torso {
+          animation: likeMilestoneTorsoReveal ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.23, 1, 0.32, 1) both;
+          transform-origin: center top;
+          will-change: transform, opacity, clip-path;
+        }
+        .like-milestone-arm-left {
+          animation: likeMilestoneLeftArmChoreography ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.77, 0, 0.175, 1) both;
+          will-change: transform, opacity;
+        }
+        .like-milestone-arm-right {
+          animation: likeMilestoneRightArmChoreography ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.77, 0, 0.175, 1) both;
+          will-change: transform, opacity;
+        }
+        .like-milestone-leg-left {
+          animation: likeMilestoneLeftLegChoreography ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.77, 0, 0.175, 1) both;
+          will-change: transform, opacity;
+        }
+        .like-milestone-leg-right {
+          animation: likeMilestoneRightLegChoreography ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.77, 0, 0.175, 1) both;
+          will-change: transform, opacity;
+        }
+        .like-milestone-bone-left {
+          animation: likeMilestoneLeftBoneReveal ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.23, 1, 0.32, 1) both;
+          will-change: clip-path;
+        }
+        .like-milestone-bone-right {
+          animation: likeMilestoneRightBoneReveal ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.23, 1, 0.32, 1) both;
+          will-change: clip-path;
+        }
+        .like-milestone-shadow {
+          opacity: 0;
+          animation: likeMilestoneLandingShadow ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+        .like-milestone-impact {
+          opacity: 0;
+          animation: likeMilestoneImpactRing ${LIKE_MILESTONE_CELEBRATION_MS}ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+        .like-milestone-heart {
+          opacity: 0;
+          animation-name: likeMilestoneHeartFall;
+          animation-timing-function: linear;
+          animation-fill-mode: both;
+          filter: drop-shadow(0 2px 5px rgba(244, 63, 94, 0.42));
+          will-change: transform, opacity;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .feed-heart-burst div {
+            animation: none !important;
+          }
+          .feed-heart-burst > div:not(:last-child) {
+            display: none;
+          }
+          .premium-card-burst,
+          .premium-card-burst .premium-card-ring,
+          .premium-card-burst .premium-card-glow {
+            animation: none;
+          }
+          .like-milestone-stickman {
+            animation: none;
+            transform: translate3d(0, 0, 0);
+          }
+          .like-milestone-puppet,
+          .like-milestone-head,
+          .like-milestone-body,
+          .like-milestone-torso,
+          .like-milestone-arm-left,
+          .like-milestone-arm-right,
+          .like-milestone-leg-left,
+          .like-milestone-leg-right,
+          .like-milestone-bone-left,
+          .like-milestone-bone-right,
+          .like-milestone-shadow,
+          .like-milestone-impact {
+            animation: none;
+          }
+          .like-milestone-heart {
+            display: none;
+          }
+        }
         @keyframes ownStoryPostedRing {
           0% {
             opacity: 0;
@@ -4500,15 +6096,997 @@ export function FeedScreen({
           transform-origin: center;
           will-change: transform, opacity;
         }
+
+        /* Feed visual layer: Yope intimacy + Retro's quiet, photo-first rhythm. */
+        .feed-screen-premium {
+          --feed-ink: #f4f5f2;
+          --feed-muted: #8b8b8b;
+          --feed-line: rgba(236, 240, 234, 0.075);
+          --feed-surface: rgba(22, 22, 22, 0.9);
+          --feed-accent: #d2d2d2;
+          position: relative;
+          color: var(--feed-ink);
+          font-family: var(--font-ui);
+          background:
+            radial-gradient(circle at 20% 30%, rgba(255,255,255,0.018) 0 0.45px, transparent 0.6px) 0 0 / 7px 7px,
+            radial-gradient(circle at 70% 65%, rgba(255,255,255,0.014) 0 0.4px, transparent 0.55px) 0 0 / 9px 9px,
+            radial-gradient(circle at 18% -8%, rgba(255, 255, 255, 0.035), transparent 28%),
+            radial-gradient(circle at 92% 18%, rgba(255, 255, 255, 0.025), transparent 22%),
+            linear-gradient(180deg, #171717 0%, #111111 52%, #0b0b0b 100%) !important;
+        }
+        .feed-main-header {
+          border-bottom: 1px solid var(--feed-line);
+          background: rgba(18, 18, 18, 0.94) !important;
+          box-shadow: none !important;
+          backdrop-filter: blur(22px) saturate(1.18);
+          -webkit-backdrop-filter: blur(22px) saturate(1.18);
+          opacity: 1;
+          transition:
+            transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+            opacity 180ms ease;
+          will-change: transform, opacity;
+        }
+        .feed-main-header.feed-main-header--hidden {
+          background: transparent !important;
+          border-bottom-color: transparent !important;
+          box-shadow: none !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .feed-main-header button {
+          border-radius: 14px;
+          color: rgba(236, 240, 234, 0.62);
+        }
+        .feed-main-header button:active {
+          background: rgba(255,255,255,0.06);
+          transform: scale(0.94);
+        }
+        .feed-scroll-surface {
+          scrollbar-width: none;
+          overscroll-behavior-y: contain;
+          -webkit-overflow-scrolling: touch;
+        }
+        .feed-scroll-surface::-webkit-scrollbar {
+          display: none;
+        }
+        .feed-post-card {
+          content-visibility: auto;
+          contain: layout paint style;
+          contain-intrinsic-size: 680px;
+        }
+        .feed-stickman-shell {
+          width: min(100%, 540px);
+          margin: 0 auto 10px;
+          overflow: hidden;
+          border-top: 1px solid rgba(244,246,244,.12);
+          border-bottom: 1px solid var(--feed-line);
+          background: transparent;
+        }
+        .feed-stickman-row {
+          display: flex;
+          height: 148px;
+          align-items: stretch;
+          justify-content: flex-start;
+          gap: 14px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding: 0 14px;
+          scrollbar-width: none;
+        }
+        .feed-stickman-row::-webkit-scrollbar { display: none; }
+        .feed-stickman-item {
+          position: relative;
+          width: calc((100% - 42px) / 4);
+          min-width: calc((100% - 42px) / 4);
+          height: 148px;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+          isolation: isolate;
+        }
+        .feed-stickman-item-top { z-index: 2; }
+        .feed-stickman-item-bottom { z-index: 1; }
+        .feed-stickman-button { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+        /* Keep the figure itself free to sit outside the item; the old inset rule made every pose collapse to the bottom edge. */
+        .feed-stickman-item-top > .feed-stickman { position: absolute; top: -12px !important; right: auto; bottom: auto; left: 50%; width: 80px; border: 0; background: transparent; }
+        .feed-stickman-button:focus-visible,
+        .feed-stickman-item-top:focus-visible { outline: 2px solid #4ade80; outline-offset: -3px; border-radius: 14px; }
+        .feed-stickman-button:hover .feed-stickman,
+        .feed-stickman-item-top:hover .feed-stickman { filter: brightness(1.08); }
+        .feed-stickman {
+          --stick-head: 80px;
+          --stick-body: 38px;
+          --stick-line: 2px;
+          --stick-spine: 22px;
+          --stick-limb: 15px;
+          --stick-arm-y: 8px;
+          position: absolute;
+          left: 50%;
+          display: flex;
+          width: 80px;
+          align-items: center;
+          flex-direction: column;
+          transform: translateX(-50%);
+          transform-origin: 50% 72%;
+          will-change: transform;
+        }
+        /* Top figures hang in upside-down, with their torso and arms entering first. */
+        .feed-stickman-top {
+          top: -12px !important;
+          transform: translateX(-50%);
+        }
+        .feed-stickman-top .chat-stickman-body {
+          order: -1;
+          height: 42px !important;
+          margin-top: 0 !important;
+          margin-bottom: -1px;
+          transform: rotate(180deg);
+        }
+        /* Bottom figures peek upward; only the head, torso, and arms can enter the strip. */
+        .feed-stickman-bottom,
+        .feed-stickman-button .feed-stickman-bottom { top: 48px; right: auto; bottom: auto; left: 50%; }
+        .feed-stickman .chat-stickman-head { width: var(--stick-head); height: var(--stick-head); font-size: 13px; }
+        .feed-stickman .chat-stickman-body { width: var(--stick-body); height: var(--stick-body); }
+        .feed-stickman .chat-stickman-face { position: relative; width: 3px; height: 3px; margin-right: 9px; border-radius: 50%; background: #e8f1eb; box-shadow: 9px 0 #e8f1eb; }
+        .feed-stickman .chat-stickman-face::after { content: ""; position: absolute; top: 5px; left: 3px; width: 7px; height: 4px; border-bottom: 1.5px solid #e8f1eb; border-radius: 50%; }
+        .feed-stickman .feed-story-spine {
+          position: absolute;
+          top: 0;
+          left: 50%;
+          width: var(--stick-line);
+          height: var(--stick-spine);
+          border-radius: 999px;
+          background: rgba(255,255,255,.8);
+          transform: translateX(-50%);
+        }
+        .feed-stickman .feed-story-arm {
+          position: absolute;
+          top: var(--stick-arm-y);
+          width: var(--stick-limb);
+          height: var(--stick-line);
+          border-radius: 999px;
+          background: rgba(255,255,255,.75);
+          animation-timing-function: ease-in-out !important;
+          animation-iteration-count: infinite !important;
+          animation-play-state: running !important;
+          will-change: transform;
+        }
+        .feed-stickman .feed-story-arm-left {
+          left: 50%;
+          margin-left: calc(-1 * var(--stick-limb));
+          transform: rotate(-8deg);
+          transform-origin: right center;
+        }
+        .feed-stickman .feed-story-arm-right {
+          left: 50%;
+          transform: rotate(30deg);
+          transform-origin: left center;
+        }
+        .feed-stickman[data-animated="false"] .feed-story-arm { animation: none !important; }
+        .feed-stickman[data-animated="true"][data-hand-motion="0"] .feed-story-arm-left { animation-name: feedStoryLeftA !important; animation-duration: 1.25s !important; }
+        .feed-stickman[data-animated="true"][data-hand-motion="0"] .feed-story-arm-right { animation-name: feedStoryRightA !important; animation-duration: 1.55s !important; }
+        .feed-stickman[data-animated="true"][data-hand-motion="1"] .feed-story-arm-left { animation-name: feedStoryLeftB !important; animation-duration: 1.7s !important; animation-delay: -.45s !important; }
+        .feed-stickman[data-animated="true"][data-hand-motion="1"] .feed-story-arm-right { animation-name: feedStoryRightB !important; animation-duration: 1.35s !important; animation-delay: -.2s !important; }
+        .feed-stickman[data-animated="true"][data-hand-motion="2"] .feed-story-arm-left { animation-name: feedStoryLeftC !important; animation-duration: 1.9s !important; animation-delay: -.8s !important; }
+        .feed-stickman[data-animated="true"][data-hand-motion="2"] .feed-story-arm-right { animation-name: feedStoryRightC !important; animation-duration: 1.6s !important; animation-delay: -.55s !important; }
+        .feed-stickman[data-animated="true"][data-hand-motion="3"] .feed-story-arm-left { animation-name: feedStoryLeftD !important; animation-duration: 1.45s !important; animation-delay: -.25s !important; }
+        .feed-stickman[data-animated="true"][data-hand-motion="3"] .feed-story-arm-right { animation-name: feedStoryRightD !important; animation-duration: 1.85s !important; animation-delay: -.7s !important; }
+        .feed-stickman-mock { pointer-events: none; opacity: .78; }
+        .feed-stickman[data-animated="true"] { animation: feedStickmanFloat 5.8s ease-in-out infinite; }
+        .feed-stickman-item:nth-child(3n) .feed-stickman[data-animated="true"] { animation-delay: -1.1s; }
+        .feed-stickman-item:nth-child(4n) .feed-stickman[data-animated="true"] { animation-delay: -2.1s; }
+        .feed-stickman-item:active { transform: scale(.96); }
+        .feed-stickman-label { position: absolute; left: 50%; width: 88px; transform: translateX(-50%); color: rgba(244,246,244,.48); font-size: 10px; font-weight: 600; line-height: 1.1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .feed-stickman-item-top .feed-stickman-label { bottom: 4px; }
+        .feed-stickman-item-bottom .feed-stickman-label { top: 4px; }
+        .feed-stickman-item:not(:first-child) .feed-stickman-label { display: none; }
+        .feed-stickman-plus { position: absolute; top: 59px; left: calc(50% + 24px); z-index: 4; display: grid; width: 24px; height: 24px; place-items: center; border: 2px solid #070807; border-radius: 50%; background: #4ade80; color: #070807; }
+        .feed-stickman-skeleton { display: grid; place-items: start center; padding-top: 2px; }
+        .feed-stickman-skeleton-head { width: 80px; height: 80px; border: 2px solid rgba(255,255,255,.08); border-radius: 50%; background: #1b211e; }
+        @keyframes feedStickmanFloat { 0%,100% { margin-top: 0; } 50% { margin-top: 1px; } }
+        @keyframes feedStoryLeftA { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(-17deg); } }
+        @keyframes feedStoryRightA { 0%,100% { transform: rotate(30deg); } 50% { transform: rotate(20deg); } }
+        @keyframes feedStoryLeftB { 0%,100% { transform: rotate(-8deg); } 35% { transform: rotate(1deg); } 70% { transform: rotate(-13deg); } }
+        @keyframes feedStoryRightB { 0%,100% { transform: rotate(30deg); } 45% { transform: rotate(38deg); } 75% { transform: rotate(25deg); } }
+        @keyframes feedStoryLeftC { 0%,100% { transform: rotate(-8deg); } 40% { transform: rotate(-20deg); } 65% { transform: rotate(-4deg); } }
+        @keyframes feedStoryRightC { 0%,100% { transform: rotate(30deg); } 30% { transform: rotate(17deg); } 70% { transform: rotate(34deg); } }
+        @keyframes feedStoryLeftD { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(-2deg); } }
+        @keyframes feedStoryRightD { 0%,100% { transform: rotate(30deg); } 35% { transform: rotate(21deg); } 68% { transform: rotate(36deg); } }
+        @media (prefers-reduced-motion: reduce) {
+          .feed-stickman[data-animated="true"] { animation: none; }
+        }
+
+        .feed-stories-shell {
+          margin: 4px auto 12px;
+          width: min(100%, 500px);
+          padding: 0 10px !important;
+        }
+        .feed-stories-row {
+          gap: 14px !important;
+          padding: 14px 6px 13px !important;
+          border-bottom: 1px solid var(--feed-line);
+          scroll-padding-inline: 6px;
+        }
+        .feed-stories-row > * {
+          scroll-snap-align: start;
+        }
+        .feed-story-item {
+          width: 76px;
+        }
+        .feed-story-avatar {
+          width: 76px !important;
+          height: 76px !important;
+        }
+        .feed-story-ring {
+          width: 100% !important;
+          height: 100% !important;
+          padding: 2.5px !important;
+          filter: grayscale(1) saturate(0.12) brightness(0.84);
+          box-shadow: 0 13px 30px rgba(0,0,0,0.32) !important;
+        }
+        .feed-story-item > span,
+        .feed-story-item > button:not(.feed-story-avatar),
+        .feed-story-item > div:last-child {
+          max-width: 76px;
+        }
+        .feed-stories-row img {
+          filter: saturate(0.94) contrast(1.025);
+        }
+        .feed-post-list {
+          width: min(100%, 540px);
+          margin-inline: auto;
+          padding-inline: 10px !important;
+        }
+        .feed-post-card,
+        .feed-verdict-card {
+          border-radius: 0 !important;
+          border-bottom: 1px solid var(--feed-line);
+          background: transparent;
+          box-shadow: none;
+          padding-bottom: 7px;
+        }
+        .feed-post-header {
+          padding: 13px 6px 11px !important;
+        }
+        .feed-post-header h3 {
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: -0.015em;
+        }
+        .feed-post-header p {
+          color: var(--feed-muted);
+          font-size: 12px;
+          font-weight: 500;
+        }
+        .feed-post-media-frame {
+          margin-top: 0 !important;
+          padding-inline: 0 !important;
+        }
+        .feed-post-single-media-frame {
+          width: calc(100% + 16px);
+          margin-inline: -8px;
+        }
+        .feed-post-media-frame [data-feed-post-media] {
+          overflow: hidden;
+          border-radius: 24px;
+          background: #000000;
+          box-shadow: 0 16px 44px rgba(0,0,0,0.25);
+        }
+        .feed-post-media-frame img,
+        .feed-post-media-frame video {
+          filter: saturate(0.96) contrast(1.018);
+        }
+        .feed-post-actions {
+          padding: 8px 4px 0 !important;
+        }
+        .feed-post-actions > div {
+          min-height: 44px;
+          padding: 7px 3px !important;
+          border-bottom: 1px solid rgba(236, 240, 234, 0.055);
+        }
+        .feed-post-actions button {
+          min-height: 36px;
+        }
+        .feed-post-actions button:active {
+          transform: scale(0.92);
+        }
+        .feed-post-actions svg {
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .feed-like-proof {
+          padding: 8px 7px 0 !important;
+        }
+        .feed-like-proof button {
+          border-radius: 12px !important;
+          padding-inline: 0 !important;
+        }
+        .feed-like-proof p {
+          color: #a8afa6;
+          font-weight: 500;
+        }
+        .feed-post-caption {
+          padding: 9px 7px 17px !important;
+        }
+        .feed-post-caption > p:first-child {
+          color: #e9ece7;
+          font-size: 14px;
+          font-weight: 500;
+          line-height: 1.48;
+          letter-spacing: -0.006em;
+        }
+        .feed-post-caption > p:last-child {
+          margin-top: 6px;
+          color: #727970;
+          font-size: 11px;
+          font-weight: 500;
+          font-variant-numeric: tabular-nums;
+        }
+        .feed-editorial-rail {
+          margin-block: 5px 17px;
+          border: 0 !important;
+          border-top: 1px solid var(--feed-line) !important;
+          border-bottom: 1px solid var(--feed-line) !important;
+          border-radius: 0 !important;
+          background: #000000 !important;
+          box-shadow: none !important;
+          padding-block: 14px !important;
+        }
+        .feed-editorial-rail > div.mb-3 p:first-child {
+          font-weight: 600;
+          letter-spacing: 0.025em;
+          text-transform: none;
+        }
+        .feed-rail-card {
+          border-color: rgba(255,255,255,0.075) !important;
+          border-radius: 21px !important;
+          box-shadow: 0 13px 32px rgba(0,0,0,0.24) !important;
+        }
+        .feed-rail-card:active {
+          transform: scale(0.975) !important;
+        }
+        .feed-rail-title {
+          font-weight: 600 !important;
+          line-height: 1.18 !important;
+          letter-spacing: -0.012em !important;
+          text-transform: none !important;
+          text-wrap: pretty;
+        }
+        .feed-verdict-card {
+          padding-top: 3px;
+        }
+        .feed-post-skeleton {
+          border: 0 !important;
+          border-bottom: 1px solid var(--feed-line) !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        .feed-screen-premium .app-modal-backdrop {
+          background: rgba(0,0,0,0.72) !important;
+          backdrop-filter: blur(9px);
+          -webkit-backdrop-filter: blur(9px);
+        }
+        .feed-screen-premium .app-modal-sheet {
+          border-color: rgba(255,255,255,0.085) !important;
+          background: linear-gradient(180deg, rgba(20,23,20,0.99), rgba(8,10,8,1)) !important;
+          box-shadow: 0 -22px 70px rgba(0,0,0,0.52) !important;
+        }
+        .feed-screen-premium .app-modal-sheet h2,
+        .feed-screen-premium .app-modal-sheet h3 {
+          font-weight: 600 !important;
+          letter-spacing: -0.025em;
+        }
+        .feed-screen-premium .app-modal-sheet input,
+        .feed-screen-premium .app-modal-sheet textarea {
+          caret-color: var(--feed-accent);
+        }
+        .feed-screen-premium .app-modal-sheet button {
+          transition-duration: 180ms;
+        }
+        .feed-screen-premium button,
+        .feed-screen-premium [role="button"] {
+          -webkit-tap-highlight-color: transparent;
+        }
+        .feed-screen-premium button:focus-visible,
+        .feed-screen-premium [role="button"]:focus-visible {
+          outline: 2px solid rgba(255, 255, 255, 0.72);
+          outline-offset: 3px;
+        }
+        /* Matte mode: quiet ink surfaces, no red/green UI accents. */
+        .feed-screen-premium .feed-editorial-rail,
+        .feed-screen-premium .feed-rail-card,
+        .feed-screen-premium .feed-post-skeleton,
+        .feed-screen-premium .feed-verdict-card,
+        .feed-screen-premium .circle-paper-tile {
+          border-color: rgba(255,255,255,.1) !important;
+          background-color: #171717 !important;
+          box-shadow: 0 16px 34px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.035) !important;
+        }
+        .feed-screen-premium .feed-story-ring {
+          background: transparent !important;
+          border: 0 !important;
+          box-shadow: none !important;
+        }
+        .feed-screen-premium {
+          --feed-ink: #F4F6F4;
+          --feed-muted: #858C86;
+          --feed-line: rgba(255,255,255,.07);
+          --feed-surface: #101210;
+          --feed-raised: #151815;
+          --feed-accent: #4ADE80;
+          background: #000000 !important;
+        }
+        .feed-main-header {
+          background: rgba(0,0,0,.96) !important;
+          border-bottom-color: var(--feed-line) !important;
+          box-shadow: none !important;
+        }
+        .feed-title-mark > * {
+          pointer-events: none;
+        }
+        .feed-scroll-surface > .pointer-events-none {
+          display: none;
+        }
+        .feed-stories-shell {
+          margin: 0 auto 10px !important;
+          width: min(100%, 540px) !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+        }
+        .feed-stories-row {
+          gap: 0 !important;
+          padding: 18px 26px 16px !important;
+          border-bottom: 1px solid var(--feed-line) !important;
+          scroll-padding-inline: 26px !important;
+        }
+        .feed-stories-row > :not([hidden]) ~ :not([hidden]) {
+          margin-left: -17px !important;
+        }
+        .feed-story-item {
+          width: 100px !important;
+          min-width: 100px !important;
+          align-items: flex-start !important;
+          isolation: isolate !important;
+        }
+        .feed-story-avatar,
+        .feed-story-avatar .feed-story-ring,
+        .feed-story-ring {
+          width: 100px !important;
+          height: 132px !important;
+          border-radius: 26px !important;
+        }
+        .feed-story-avatar .rounded-full,
+        .feed-story-ring .rounded-full {
+          border-radius: 23px !important;
+        }
+        .feed-story-ring {
+          padding: 0 !important;
+          border: 0 !important;
+          outline: 0 !important;
+          filter: none !important;
+          box-shadow: none !important;
+          overflow: hidden !important;
+        }
+        .feed-story-avatar,
+        .feed-story-avatar > div,
+        .feed-story-ring > div,
+        .feed-story-ring > div > div {
+          background: transparent !important;
+          border: 0 !important;
+          outline: 0 !important;
+          box-shadow: none !important;
+        }
+        .feed-story-avatar [class*="ring-"] {
+          border: 0 !important;
+          box-shadow: none !important;
+        }
+        .feed-story-ring::after,
+        .feed-story-avatar::after {
+          display: none !important;
+          content: none !important;
+        }
+        .feed-story-ring::before,
+        .feed-story-avatar::before {
+          display: none !important;
+          content: none !important;
+        }
+        .feed-story-item button + div,
+        .feed-story-item > span,
+        .feed-story-item > button:not(.feed-story-avatar),
+        .feed-story-item > div:last-child {
+          width: 100px !important;
+          max-width: 100px !important;
+          margin-top: 8px !important;
+          font-size: 11px !important;
+          font-weight: 500 !important;
+          color: rgba(244,246,244,.46) !important;
+          text-align: center !important;
+          opacity: .55 !important;
+        }
+        .feed-story-item > div:first-child,
+        .feed-story-item > .feed-story-avatar {
+          transform: translateY(0) rotate(0deg);
+          transform-origin: 50% 90%;
+          transition: transform 220ms ease, opacity 220ms ease;
+        }
+        .feed-story-item:nth-child(1) {
+          z-index: 5;
+        }
+        .feed-story-item:nth-child(2) {
+          z-index: 7;
+        }
+        .feed-story-item:nth-child(3) {
+          z-index: 9;
+        }
+        .feed-story-item:nth-child(4) {
+          z-index: 8;
+        }
+        .feed-story-item:nth-child(5) {
+          z-index: 6;
+        }
+        .feed-story-item:nth-child(1) > div:first-child,
+        .feed-story-item:nth-child(1) > .feed-story-avatar,
+        .feed-story-item:nth-child(5n + 1) > .feed-story-avatar .feed-story-ring {
+          background: transparent !important;
+        }
+        .feed-story-item:nth-child(5n + 2) > .feed-story-avatar .feed-story-ring {
+          background: transparent !important;
+        }
+        .feed-story-item:nth-child(5n + 3) > .feed-story-avatar .feed-story-ring {
+          background: transparent !important;
+        }
+        .feed-story-item:nth-child(5n + 4) > .feed-story-avatar .feed-story-ring {
+          background: transparent !important;
+        }
+        .feed-story-item:nth-child(5n) > .feed-story-avatar .feed-story-ring {
+          background: transparent !important;
+        }
+        .feed-story-item .feed-story-avatar img {
+          opacity: 1 !important;
+          filter: none !important;
+        }
+        .feed-story-item .feed-story-avatar [class*="bg-[#4ade80]"] {
+          background: rgba(244,246,244,.1) !important;
+          color: rgba(244,246,244,.9) !important;
+        }
+        .feed-story-item .feed-story-avatar svg {
+          color: rgba(244,246,244,.86) !important;
+          filter: drop-shadow(0 2px 8px rgba(0,0,0,.32)) !important;
+        }
+        .feed-story-item:nth-child(1) > div:first-child,
+        .feed-story-item:nth-child(1) > .feed-story-avatar {
+          transform: translateY(8px) rotate(-6deg);
+        }
+        .feed-story-item:nth-child(2) > div:first-child,
+        .feed-story-item:nth-child(2) > .feed-story-avatar {
+          transform: translateY(-10px) rotate(3deg);
+        }
+        .feed-story-item:nth-child(3) > div:first-child,
+        .feed-story-item:nth-child(3) > .feed-story-avatar {
+          transform: translateY(4px) rotate(-2deg);
+        }
+        .feed-story-item:nth-child(4) > div:first-child,
+        .feed-story-item:nth-child(4) > .feed-story-avatar {
+          transform: translateY(-4px) rotate(6deg);
+        }
+        .feed-story-item:nth-child(5) > div:first-child,
+        .feed-story-item:nth-child(5) > .feed-story-avatar {
+          transform: translateY(10px) rotate(-4deg);
+        }
+        .feed-story-item:nth-child(6) > div:first-child,
+        .feed-story-item:nth-child(6) > .feed-story-avatar {
+          transform: translateY(-6px) rotate(2deg);
+        }
+        .feed-story-item:hover > div:first-child,
+        .feed-story-item:hover > .feed-story-avatar,
+        .feed-story-item:focus-within > div:first-child,
+        .feed-story-item:focus-within > .feed-story-avatar {
+          transform: translateY(-10px) rotate(0deg) scale(1.035);
+        }
+        .feed-story-item.is-viewed .feed-story-avatar {
+          opacity: 1;
+        }
+        .feed-story-item:first-child .own-story-posted-ring {
+          display: none !important;
+        }
+        .feed-story-item:first-child .feed-story-avatar + button {
+          right: 10px !important;
+          bottom: 10px !important;
+          width: 24px !important;
+          height: 24px !important;
+          border: 2px solid #070807 !important;
+          background: rgba(244,246,244,.92) !important;
+          color: #070807 !important;
+        }
+        .feed-story-item.is-viewed .feed-story-ring {
+          opacity: 1;
+        }
+        .feed-story-item.is-viewed .feed-story-ring::after,
+        .feed-story-item.is-viewed .feed-story-avatar::after {
+          opacity: 0;
+        }
+        .feed-story-item.is-dedication .feed-story-ring::before {
+          display: none !important;
+          content: none !important;
+        }
+        .feed-story-item:first-child .feed-story-avatar {
+          border-color: transparent !important;
+          outline: 0 !important;
+          box-shadow: none !important;
+        }
+        .feed-story-item:first-child .feed-story-avatar + button {
+          box-shadow: none !important;
+        }
+        .feed-post-list {
+          width: min(100%, 560px) !important;
+          padding-inline: 14px !important;
+          gap: 18px !important;
+        }
+        .feed-post-card {
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: visible !important;
+          border-radius: 0 !important;
+          border: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          filter: none !important;
+          padding: 0 !important;
+          margin-bottom: 0 !important;
+        }
+        .feed-post-card::before,
+        .feed-post-card::after,
+        .feed-post-card > .premium-card-glow,
+        .feed-post-card > .premium-card-ring {
+          display: none !important;
+          box-shadow: none !important;
+        }
+        .feed-post-card .premium-card-glow,
+        .feed-post-card .premium-card-ring,
+        .feed-verdict-card .premium-card-glow,
+        .feed-verdict-card .premium-card-ring,
+        .feed-editorial-rail .pointer-events-none.absolute.inset-x-5.top-0 {
+          display: none !important;
+        }
+        .feed-post-header {
+          margin: 0 2px 4px !important;
+          padding: 13px 6px 11px !important;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+        }
+        .feed-post-caption {
+          order: 1;
+        }
+        .feed-post-actions {
+          order: 2;
+        }
+        .feed-spark-summary {
+          order: 3;
+        }
+        .feed-post-header h3 {
+          font-size: 16px !important;
+          font-weight: 800 !important;
+          letter-spacing: 0 !important;
+          color: #f7fff9 !important;
+        }
+        .feed-post-header p {
+          display: none !important;
+        }
+        .feed-post-media-frame {
+          padding-inline: 0 !important;
+          margin-top: 0 !important;
+        }
+        .feed-post-single-media-frame {
+          width: calc(100% + 18px);
+          margin-inline: -9px !important;
+        }
+        .feed-post-media-frame [data-feed-post-media],
+        .feed-post-media-frame [data-feed-post-media] > div:first-child {
+          overflow: hidden !important;
+          border-radius: 32px !important;
+          background: #000000 !important;
+          box-shadow:
+            0 12px 30px rgba(0,0,0,.28) !important;
+        }
+        .feed-post-media-frame [data-feed-post-media] > div {
+          box-shadow: none !important;
+        }
+        .feed-post-media-frame [data-feed-post-media] [class*="rounded-"] {
+          border-radius: 32px !important;
+        }
+        .feed-post-media-frame img,
+        .feed-post-media-frame video {
+          filter: none !important;
+        }
+        .feed-post-card {
+          contain: layout paint style;
+          content-visibility: auto;
+          contain-intrinsic-size: auto 650px;
+        }
+        .feed-post-actions {
+          padding: 8px 4px 1px !important;
+        }
+        .feed-post-actions > div {
+          display: flex !important;
+          grid-template-columns: none !important;
+          justify-content: flex-start !important;
+          gap: 16px !important;
+          min-height: 40px !important;
+          padding: 0 !important;
+          border: 0 !important;
+        }
+        .feed-post-actions > div > div {
+          justify-content: flex-start !important;
+          flex: 0 0 auto !important;
+        }
+        .feed-post-actions button {
+          min-height: 40px !important;
+          font-weight: 500 !important;
+          color: #F4F6F4 !important;
+        }
+        .feed-post-actions button:hover {
+          color: #F4F6F4 !important;
+        }
+        .feed-post-actions button[aria-label="Add another like"] svg,
+        .feed-post-actions button[aria-label="Like post"]:active svg {
+          color: #ef4444 !important;
+          fill: #ef4444 !important;
+          stroke-width: 0 !important;
+        }
+        .feed-like-proof {
+          display: none !important;
+        }
+        .feed-post-caption {
+          padding: 12px 4px 0 !important;
+        }
+        .feed-post-caption > p:first-child {
+          font-size: 14px !important;
+          font-weight: 560 !important;
+          line-height: 1.48 !important;
+          color: rgba(244,246,244,.92) !important;
+          text-wrap: pretty;
+        }
+        /* Caption cards currently contain one primary paragraph. Keep this
+           legacy metadata selector scoped so it cannot hide that caption. */
+        .feed-post-caption > p.feed-post-caption-meta:last-child {
+          display: none !important;
+        }
+        .feed-spark-summary {
+          padding-inline: 4px !important;
+          padding-top: 4px !important;
+          padding-bottom: 16px !important;
+        }
+        .feed-spark-pill {
+          display: inline-flex;
+          max-width: 100%;
+          align-items: center;
+          gap: 4px;
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          padding: 9px 0;
+          color: #f5f3ff;
+          white-space: nowrap;
+          scrollbar-width: none;
+        }
+        .feed-spark-pill::-webkit-scrollbar {
+          display: none;
+        }
+        .feed-spark-word,
+        .feed-spark-count {
+          flex: 0 0 auto;
+          font-size: 14px;
+          font-weight: 850;
+          line-height: 1;
+          letter-spacing: 0;
+        }
+        .feed-spark-word {
+          color: #ffffff;
+          margin-right: 0;
+        }
+        .feed-spark-count {
+          color: #ffffff !important;
+        }
+        .feed-spark-dot {
+          flex: 0 0 auto;
+          color: rgba(244,246,244,.28);
+          font-weight: 900;
+        }
+        @keyframes feedFanFloat {
+          0%, 100% {
+            transform: translateY(0) rotate(-2deg);
+          }
+          50% {
+            transform: translateY(-5px) rotate(2deg);
+          }
+        }
+        .feed-editorial-rail {
+          margin: 8px 0 18px !important;
+          padding: 14px 0 16px !important;
+          border: 0 !important;
+          border-top: 1px solid var(--feed-line) !important;
+          border-bottom: 1px solid var(--feed-line) !important;
+          border-radius: 0 !important;
+          background: #000000 !important;
+          box-shadow: none !important;
+        }
+        .feed-editorial-rail > div.mb-3 {
+          padding-inline: 0 !important;
+        }
+        .feed-editorial-rail > div.mb-3 span:first-child {
+          width: 7px !important;
+          height: 7px !important;
+          align-self: flex-start !important;
+          margin-top: 7px !important;
+          border: 0 !important;
+          background: #4ADE80 !important;
+          color: transparent !important;
+          box-shadow: none !important;
+        }
+        .feed-editorial-rail > div.mb-3 span:first-child svg {
+          display: none !important;
+        }
+        .feed-editorial-rail > div.mb-3 p:first-child {
+          color: #F4F6F4 !important;
+          font-size: 13px !important;
+          font-weight: 600 !important;
+          letter-spacing: 0 !important;
+          text-transform: lowercase !important;
+        }
+        .feed-editorial-rail > div.mb-3 p:last-child {
+          color: #858C86 !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+        }
+        .feed-inline-rail,
+        .community-feed-rail {
+          padding-inline: 0 !important;
+          gap: 10px !important;
+        }
+        .feed-rail-card {
+          border-color: rgba(255,255,255,.08) !important;
+          border-radius: 18px !important;
+          box-shadow: none !important;
+          background: #000000 !important;
+          background-color: #000000 !important;
+        }
+        .feed-screen-premium .feed-editorial-rail,
+        .feed-screen-premium .feed-rail-card {
+          background: #000000 !important;
+          background-color: #000000 !important;
+        }
+        .feed-rail-card:active {
+          transform: scale(.98) !important;
+        }
+        .feed-rail-title {
+          font-weight: 600 !important;
+          letter-spacing: 0 !important;
+          text-transform: none !important;
+        }
+        .community-feed-rail .feed-rail-card,
+        .feed-inline-rail .feed-rail-card {
+          width: 150px !important;
+          height: 190px !important;
+        }
+        .feed-inline-rail .feed-rail-card[aria-label*="answered"],
+        .feed-inline-rail .feed-rail-card[aria-label*="was asked"],
+        .feed-inline-rail .feed-rail-card[aria-label*="predicted"],
+        .feed-inline-rail .feed-rail-card[aria-label*="promised"],
+        .feed-inline-rail .feed-rail-card[aria-label*="started"] {
+          width: 250px !important;
+          height: 140px !important;
+        }
+        .feed-verdict-card {
+          margin: 8px 0 18px !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          border: 1px solid var(--feed-line) !important;
+          border-radius: 20px !important;
+          background: #151815 !important;
+          box-shadow: none !important;
+        }
+        .feed-verdict-card > div:first-of-type:not(.premium-card-glow):not(.premium-card-ring) {
+          padding: 9px 10px !important;
+        }
+        .feed-verdict-card h3 {
+          font-size: 14px !important;
+          font-weight: 600 !important;
+        }
+        .feed-verdict-card h2 {
+          font-size: 18px !important;
+          font-weight: 600 !important;
+          letter-spacing: 0 !important;
+        }
+        .feed-verdict-card button {
+          min-height: 42px !important;
+          border-width: 1px !important;
+          border-radius: 14px !important;
+          box-shadow: none !important;
+          background-image: none !important;
+        }
+        .feed-screen-premium .app-modal-sheet {
+          border: 1px solid rgba(255,255,255,.07) !important;
+          border-bottom: 0 !important;
+          border-radius: 26px 26px 0 0 !important;
+          background: #101210 !important;
+          box-shadow: none !important;
+        }
+        .feed-screen-premium .app-modal-sheet [class*="bg-[linear-gradient"],
+        .feed-screen-premium .app-modal-sheet [class*="shadow-"] {
+          background-image: none !important;
+          box-shadow: none !important;
+        }
+        .feed-screen-premium .app-modal-sheet h3,
+        .feed-screen-premium .app-modal-sheet h2 {
+          font-weight: 600 !important;
+          letter-spacing: 0 !important;
+        }
+        .feed-screen-premium .app-modal-sheet .rounded-2xl,
+        .feed-screen-premium .app-modal-sheet [class*="rounded-[22px]"] {
+          border-radius: 14px !important;
+        }
+        .feed-screen-premium .app-modal-sheet .space-y-2\\.5 > div,
+        .feed-screen-premium .app-modal-sheet .space-y-2 > div,
+        .feed-screen-premium .app-modal-sheet-scroll > div {
+          border-color: rgba(255,255,255,.07) !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        .feed-screen-premium .app-modal-sheet [class*="size=xl"],
+        .feed-screen-premium .app-modal-sheet img {
+          max-width: 40px;
+          max-height: 40px;
+        }
+        .feed-screen-premium .app-modal-sheet button {
+          min-height: 40px;
+        }
+        @media (max-width: 390px) {
+          .feed-stories-shell,
+          .feed-post-list {
+            padding-inline: 7px !important;
+          }
+          .feed-stories-row {
+            gap: 11px !important;
+          }
+          .feed-story-item {
+            width: 78px !important;
+          }
+          .feed-story-avatar,
+          .feed-story-avatar .feed-story-ring,
+          .feed-story-ring {
+            width: 78px !important;
+            height: 104px !important;
+          }
+          .feed-story-item button + div,
+          .feed-story-item > span,
+          .feed-story-item > button:not(.feed-story-avatar),
+          .feed-story-item > div:last-child {
+            width: 78px !important;
+            max-width: 78px !important;
+          }
+        }
       `}</style>
       {/* ── Header ── */}
       <div
-        className={`safe-area-top relative overflow-hidden shadow-[0_14px_38px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-transform duration-300 ease-in-out ${
-          isHeaderVisible ? "translate-y-0" : "-translate-y-full"
+        className={`feed-main-header safe-area-top relative overflow-hidden shadow-[0_14px_38px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-transform duration-300 ease-in-out ${
+          isHeaderVisible
+            ? "translate-y-0"
+            : "feed-main-header--hidden -translate-y-full"
         }`}
         style={{
-          position: "sticky",
+          position: "absolute",
           top: 0,
+          left: 0,
+          right: 0,
           zIndex: 50,
           /* ORIGINAL HEADER BG (green gradient):
              "radial-gradient(ellipse at 28% -42%, rgba(74,222,128,0.11), transparent 66%), radial-gradient(ellipse at 76% -34%, rgba(14,165,233,0.07), transparent 64%), linear-gradient(180deg, rgba(6,8,6,0.94) 0%, rgba(10,15,10,0.93) 54%, rgba(3,4,3,0.92) 100%)"
@@ -4522,21 +7100,51 @@ export function FeedScreen({
             <div className="z-10 flex items-center gap-2">
               <button
                 onClick={onNavigateToDares}
-                className="flex h-10 w-10 items-center justify-center text-[#94a3b8] transition-all duration-200 hover:text-[#4ade80]"
+                className="relative flex h-10 w-10 items-center justify-center text-[#94a3b8] transition-all duration-200 hover:text-[#4ade80]"
                 aria-label="Dares received"
               >
                 <Target size={18} />
+                {predictionMentionCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex min-w-[20px] items-center justify-center rounded-full border border-black bg-[#4ade80] px-1.5 py-0.5 text-[10px] font-bold leading-none text-black shadow-md">
+                    {predictionMentionCount > 99
+                      ? "99+"
+                      : predictionMentionCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setShowDareEventsScreen(true)}
                 className="flex h-10 w-10 items-center justify-center text-[#94a3b8] transition-all duration-200 hover:text-[#4ade80]"
-                aria-label="Open event rooms"
+                aria-label={
+                  hasLiveJail
+                    ? `${jailSession?.prisoner.name || "Someone"} is in jail. Open event rooms`
+                    : "Open event rooms"
+                }
               >
-                <Trophy size={18} />
+                <span className="relative flex h-[32px] w-[32px] items-center justify-center">
+                  <span
+                    className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ease-out ${
+                      hasLiveJail && showJailEventIcon
+                        ? "scale-75 opacity-0 blur-[1px]"
+                        : "scale-100 opacity-100 blur-0"
+                    }`}
+                  >
+                    <Trophy size={18} />
+                  </span>
+                  <span
+                    className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ease-out ${
+                      hasLiveJail && showJailEventIcon
+                        ? "scale-100 opacity-100 blur-0"
+                        : "scale-75 opacity-0 blur-[1px]"
+                    }`}
+                  >
+                    <FeedHeaderJailIcon />
+                  </span>
+                </span>
               </button>
             </div>
             <div
-              className="absolute left-1/2 -translate-x-1/2"
+              className="absolute left-1/2 flex min-w-[88px] -translate-x-1/2 items-center justify-center sm:min-w-[148px]"
               onPointerDown={handleDareLogoPointerDown}
               onPointerUp={handleDareLogoPointerUp}
               onPointerCancel={handleDareLogoPointerUp}
@@ -4547,19 +7155,30 @@ export function FeedScreen({
               }}
               aria-label="Long press Dare to open Dare Center"
             >
-              <GhostModeTimer onDareLongPress={openDareCenterPrompt} />
-            </div>
-            {/*
-            <div className="absolute left-12 top-1/2 -translate-y-1/2">
-              <button
-                type="button"
-                onClick={() => void handleGhostDebugCheck()}
-                className="rounded-full border border-[#4ade80]/30 bg-[#071109]/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#86efac] shadow-[0_8px_20px_rgba(0,0,0,0.28)] transition-all duration-200 hover:border-[#4ade80]/55 hover:bg-[#0b1a0d]"
+              <h1
+                className="absolute inset-0 flex items-center justify-center text-center text-[27px] font-extrabold tracking-[-0.04em] text-white"
+                style={{
+                  textShadow: "0 0 10px rgba(74, 222, 128, 0.22)",
+                  fontFamily: "var(--font-ui)",
+                  userSelect: "none",
+                  WebkitUserSelect: "none",
+                }}
               >
-                {ghostDebugLoading ? "Checking..." : "Ghost Check"}
-              </button>
+                <span>dare</span>
+                <span
+                  style={{
+                    display: "inline-block",
+                    marginLeft: "3px",
+                    verticalAlign: "sub",
+                    transform: "translateY(-5px)",
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "50%",
+                    backgroundColor: "#4ade80",
+                  }}
+                />
+              </h1>
             </div>
-            */}
             <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center space-x-1">
               <button
                 onClick={() => {
@@ -4568,12 +7187,12 @@ export function FeedScreen({
                   }
                   onNavigateToAlerts();
                 }}
-                className="relative flex h-11 w-11 items-center justify-center text-[#94a3b8] transition-all duration-200 hover:text-[#fb7185]"
+                className="relative flex h-11 w-11 items-center justify-center text-[#94a3b8] transition-all duration-200 hover:text-white"
                 aria-label="Notifications"
               >
                 <Heart size={18} />
                 {alertUnreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex min-w-[20px] items-center justify-center rounded-full border border-black bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-md">
+                  <span className="pointer-events-none absolute right-2 top-1.5 text-[10px] font-black leading-none text-[#cbd5e1]">
                     {alertUnreadCount > 99 ? "99+" : alertUnreadCount}
                   </span>
                 )}
@@ -4585,7 +7204,7 @@ export function FeedScreen({
               >
                 <MessageSquare size={18} />
                 {unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex min-w-[20px] items-center justify-center rounded-full border border-black bg-[#4ade80] px-1.5 py-0.5 text-[10px] font-bold leading-none text-black shadow-md">
+                  <span className="pointer-events-none absolute right-2 top-1.5 text-[10px] font-black leading-none text-[#4ade80]">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
@@ -4593,13 +7212,6 @@ export function FeedScreen({
             </div>
           </div>
         </div>
-        {ghostDebugText && (
-          <div className="px-4 pb-3">
-            <div className="rounded-full border border-[#4ade80]/20 bg-[#08110b]/90 px-3 py-2 text-center text-[11px] font-medium text-[#bbf7d0] shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
-              {ghostDebugText}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Scrollable content ── */}
@@ -4640,7 +7252,6 @@ export function FeedScreen({
               <div className="grid grid-cols-3 gap-2 pb-3">
                 {[
                   ["Proof", "real/fake"],
-                  ["Ghost", "15 min"],
                   ["Signals", "live alerts"],
                 ].map(([top, bottom]) => (
                   <div
@@ -4676,18 +7287,99 @@ export function FeedScreen({
       )}
 
       <div
-        className="flex-1 overflow-y-auto"
+        ref={scrollContainerRef}
+        className="feed-scroll-surface flex-1 overflow-y-auto"
         style={{
+          paddingTop: "calc(var(--safe-area-top) + 64px)",
           paddingBottom: "calc(var(--bottom-nav-total-height) + 24px)",
         }}
       >
         <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,rgba(74,222,128,0),rgba(74,222,128,0.78),rgba(74,222,128,0))]" />
         {/* ── Stories row ── */}
-        <div className="px-4 pt-2 pb-1">
-          <div className="flex space-x-4 overflow-x-auto px-3 py-2 scrollbar-hide">
+        <div className="feed-stickman-shell">
+          <div className="feed-stickman-row scrollbar-hide">
+            <button
+              type="button"
+              className="feed-stickman-item feed-stickman-item-top"
+              onPointerDown={handleYourStoryPressStart}
+              onPointerUp={handleYourStoryPressEnd}
+              onPointerCancel={handleYourStoryPressEnd}
+              onPointerLeave={handleYourStoryPressEnd}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                storyTypeLongPressTriggeredRef.current = true;
+                openStoryTypeSheet();
+              }}
+              onClick={handleYourStoryClick}
+              aria-label="Open your story"
+            >
+              <FeedStickman
+                label="Your story"
+                avatar={currentUser.avatar}
+                accent="#f5f5f5"
+                placement="top"
+              />
+              <span className="feed-stickman-plus" aria-hidden="true">
+                <Plus size={12} strokeWidth={3} />
+              </span>
+            </button>
+
+            {storiesLoading && stories.length === 0 &&
+              [1, 2, 3, 4].map((i) => (
+                <div key={`story-skel-${i}`} className="feed-stickman-item feed-stickman-skeleton">
+                  <div className="feed-stickman-skeleton-head animate-pulse" />
+                </div>
+              ))}
+
+            {storyGroups.map((storyGroup, index) => {
+              const story = storyGroup.displayStory;
+              if (!story) return null;
+              const placement = index % 2 === 0 ? "bottom" : "top";
+              return (
+                <div
+                  key={storyGroup.authorId}
+                  className={`feed-stickman-item feed-stickman-item-${placement} ${storyGroup.hasViewed ? "is-viewed" : "is-new"}`}
+                >
+                  <button
+                    type="button"
+                    className="feed-stickman-button"
+                    onClick={() => handleStoryClick(index)}
+                    aria-label={`Open ${story.author.displayName}'s story`}
+                  >
+                    <FeedStickman
+                      label={story.author.displayName}
+                      avatar={story.author.avatar}
+                      accent={storyGroup.hasViewed ? "#7d8790" : story.storyType === "dedication" ? "#facc15" : "#4ade80"}
+                      placement={placement}
+                    />
+                    <span className="feed-stickman-label">{story.author.displayName}</span>
+                  </button>
+                </div>
+              );
+            })}
+
+            {TEMP_FEED_STICKMEN.map((mock) => (
+              <div
+                key={mock.label}
+                className={`feed-stickman-item feed-stickman-item-${mock.placement} feed-stickman-mock`}
+                aria-hidden="true"
+              >
+                <FeedStickman
+                  label={mock.label}
+                  accent={mock.accent}
+                  placement={mock.placement}
+                  animate
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="feed-stories-shell hidden px-4 pt-2 pb-1">
+          <div className="feed-stories-row flex space-x-4 overflow-x-auto px-3 py-2 scrollbar-hide">
             {/* Your Story Circle */}
             <div
-              className="shrink-0 flex flex-col items-center cursor-pointer group"
+              className="feed-story-item shrink-0 flex flex-col items-center cursor-pointer group"
               onPointerDown={handleYourStoryPressStart}
               onPointerUp={handleYourStoryPressEnd}
               onPointerCancel={handleYourStoryPressEnd}
@@ -4703,18 +7395,18 @@ export function FeedScreen({
                 {storyPostedPulse && userStories.length > 0 && (
                   <div className="own-story-posted-ring pointer-events-none absolute -inset-[5px] rounded-full ring-2 ring-[#79d99a]/75" />
                 )}
-                <div className="absolute inset-0 h-[84px] w-[84px] rounded-full opacity-0 blur-sm group-hover:opacity-100 transition-opacity duration-300">
-                  <div className="w-full h-full rounded-full border-2 border-[#4ade80]/25" />
-                </div>
                 {userStories.length > 0 ? (
                   // User has active stories — show profile picture avatar with green ring
-                  <div className="relative h-[84px] w-[84px] rounded-full bg-gradient-to-br from-[#4ade80] via-[#34d399] to-[#facc15] p-[3px] shadow-[0_18px_40px_rgba(10,14,12,0.45)] transition-all duration-300 group-hover:scale-[1.04]">
+                  <div className="feed-story-avatar relative h-[84px] w-[84px] rounded-full bg-transparent p-[3px] shadow-[0_18px_40px_rgba(10,14,12,0.45)] transition-all duration-300 group-hover:scale-[1.04]">
                     <div className="w-full h-full rounded-full bg-[#050505] p-[3px]">
                       {currentUser.avatar ? (
-                        <img
+                        <Avatar
                           src={currentUser.avatar}
                           alt="Your story"
-                          className="w-full h-full rounded-full object-cover"
+                          userId={currentUser.userId}
+                          username={currentUser.username}
+                          fallbackText={currentUser.name || currentUser.username || "You"}
+                          className="!h-full !w-full"
                         />
                       ) : (
                         <div className="w-full h-full rounded-full bg-[#1a1a1a] flex items-center justify-center">
@@ -4729,7 +7421,7 @@ export function FeedScreen({
                   </div>
                 ) : (
                   // No stories — keep the avatar visible and let the corner badge act as the add affordance
-                  <div className="relative h-[84px] w-[84px] rounded-full border border-white/10 bg-[radial-gradient(circle_at_top,#1b2321_0%,#101513_58%,#070908_100%)] p-[3px] shadow-[0_18px_40px_rgba(0,0,0,0.45)] transition-all duration-300 group-hover:scale-[1.04] group-hover:border-[#4ade80]/60">
+                  <div className="feed-story-avatar relative h-[84px] w-[84px] rounded-full border border-white/10 bg-[radial-gradient(circle_at_top,#1b2321_0%,#101513_58%,#070908_100%)] p-[3px] shadow-[0_18px_40px_rgba(0,0,0,0.45)] transition-all duration-300 group-hover:scale-[1.04] group-hover:border-[#4ade80]/60">
                     <div className="h-full w-full rounded-full bg-[#050505] p-[3px]">
                       <Avatar
                         src={currentUser.avatar}
@@ -4756,9 +7448,6 @@ export function FeedScreen({
                   <Plus size={12} className="text-black" />
                 </button>
               </div>
-              <span className="text-sm text-[#94a3b8] mt-3 block w-[84px] truncate text-center font-medium transition-colors duration-300 group-hover:text-white">
-                Your Story
-              </span>
             </div>
 
             {/* Shimmer skeleton circles while stories are loading and no cached data */}
@@ -4774,7 +7463,7 @@ export function FeedScreen({
                 </div>
               ))}
 
-            {/* Friends' Stories — real-time from Firestore onSnapshot */}
+            {/* Friends' Stories — live through Supabase Realtime */}
             {storyGroups.map((storyGroup, index) => {
               const story = storyGroup.displayStory;
               const hasViewed = storyGroup.hasViewed;
@@ -4783,25 +7472,26 @@ export function FeedScreen({
               return (
                 <div
                   key={storyGroup.authorId}
-                  className="shrink-0 flex flex-col items-center group"
-                >
-                  <button
-                    type="button"
-                    className="relative h-[84px] w-[84px] cursor-pointer"
-                    onClick={() => handleStoryClick(index)}
+                  className={`feed-story-item shrink-0 flex flex-col items-center group ${
+                    hasViewed ? "is-viewed" : "is-new"
+                  } ${
+                    story.storyType === "dedication"
+                      ? "is-dedication"
+                      : "is-personal"
+                  }`}
                   >
-                    {!hasViewed && (
-                      <div className="absolute inset-0 h-[84px] w-[84px] rounded-full opacity-0 blur-sm group-hover:opacity-100 transition-opacity duration-300">
-                        <div className="w-full h-full rounded-full border-2 border-[#f59e0b]/35" />
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      className="feed-story-avatar relative h-[84px] w-[84px] cursor-pointer"
+                      onClick={() => handleStoryClick(index)}
+                    >
                     <div
-                      className={`relative h-[84px] w-[84px] rounded-full p-[3px] shadow-[0_18px_40px_rgba(0,0,0,0.45)] transition-all duration-300 group-hover:scale-[1.04] ${
+                      className={`feed-story-ring relative h-[84px] w-[84px] rounded-full p-[3px] shadow-[0_18px_40px_rgba(0,0,0,0.45)] transition-all duration-300 group-hover:scale-[1.04] ${
                         hasViewed
                           ? "bg-gradient-to-br from-[#2b2f35] via-[#353941] to-[#44474f]"
                           : story.storyType === "dedication"
-                            ? "bg-gradient-to-br from-[#bef264] via-[#f59e0b] to-[#fb7185]"
-                            : "bg-gradient-to-br from-[#84cc16] via-[#facc15] to-[#fb7185]"
+                            ? "bg-gradient-to-br from-[#5a5a5a] via-[#858585] to-[#303030]"
+                            : "bg-gradient-to-br from-[#454545] via-[#6e6e6e] to-[#262626]"
                       }`}
                     >
                       <div
@@ -4816,81 +7506,12 @@ export function FeedScreen({
                             size="2xl"
                             userId={story.author.id}
                             username={story.author.username}
-                            forceGhostMode={ghostModesByUserId[story.author.id]}
                             className="!h-full !w-full"
                           />
                         </div>
                       </div>
                     </div>
                   </button>
-                  {story.storyType === "dedication" && story.dedicatedTo ? (
-                    <div className="mt-3 flex w-[84px] items-center justify-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => onNavigateToProfile?.(story.author.id)}
-                        className="shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95"
-                        aria-label={`Open ${story.author.displayName}'s profile`}
-                      >
-                        <Avatar
-                          src={story.author.avatar}
-                          alt={story.author.displayName}
-                          size={17}
-                          userId={story.author.id}
-                          username={story.author.username}
-                          forceGhostMode={ghostModesByUserId[story.author.id]}
-                          className="ring-1 ring-white/20"
-                        />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleStoryClick(index)}
-                        className="flex h-4 w-3 shrink-0 items-center justify-center text-[#86efac] transition-transform hover:scale-110 active:scale-95"
-                        aria-label="Open dedicated story"
-                      >
-                        <Play size={9} fill="currentColor" strokeWidth={0} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onNavigateToProfile?.(story.dedicatedTo!.id)
-                        }
-                        className="shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95"
-                        aria-label={`Open ${story.dedicatedTo.displayName}'s profile`}
-                      >
-                        <Avatar
-                          src={story.dedicatedTo.avatar}
-                          alt={story.dedicatedTo.displayName}
-                          size={17}
-                          userId={story.dedicatedTo.id}
-                          username={story.dedicatedTo.username}
-                          forceGhostMode={
-                            ghostModesByUserId[story.dedicatedTo.id]
-                          }
-                          className="ring-1 ring-[#4ade80]/70"
-                        />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onNavigateToProfile && story.author.id) {
-                          onNavigateToProfile(story.author.id);
-                        }
-                      }}
-                      className={`mt-3 block w-[84px] truncate text-center text-sm font-medium transition-colors duration-300 ${
-                        hasViewed
-                          ? "text-[#6b7280]"
-                          : "text-[#d1d5db] group-hover:text-white"
-                      } ${
-                        onNavigateToProfile && story.author.id
-                          ? "cursor-pointer hover:text-[#4ade80]"
-                          : "cursor-default"
-                      }`}
-                    >
-                      {stripAtSymbol(story.author.username)}
-                    </button>
-                  )}
                 </div>
               );
             })}
@@ -4898,19 +7519,59 @@ export function FeedScreen({
         </div>
 
         {/* ── Posts ── show only the most recent post per user */}
+        {pendingUpload && (
+          <div className="mx-2 mt-8 mb-5 overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3">
+              {pendingUpload.previewUrl ? (
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[15px] border border-white/[0.14] bg-black">
+                  <img src={pendingUpload.previewUrl} alt="Your post preview" className="h-full w-full object-cover opacity-90" />
+                </div>
+              ) : (
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[15px] border border-white/[0.12] bg-black text-[10px] font-black tracking-[0.16em] text-white/45">POST</div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-[13px] font-bold tracking-[-0.01em] text-white">
+                    {pendingUpload.status === "error" ? "Post failed" : "Posting your update"}
+                  </p>
+                  <span className={`shrink-0 text-[11px] font-bold tabular-nums ${pendingUpload.status === "error" ? "text-white/55" : "text-white/65"}`}>
+                    {pendingUpload.status === "error" ? "Failed" : `${pendingUpload.progress}%`}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-[12px] text-white/42">{pendingUpload.caption}</p>
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.12]" role="progressbar" aria-valuenow={pendingUpload.progress} aria-valuemin={0} aria-valuemax={100}>
+                  <div className={`h-full rounded-full transition-[width] duration-300 ${pendingUpload.status === "error" ? "bg-white/35" : "bg-white"}`} style={{ width: `${pendingUpload.progress}%` }} />
+                </div>
+                {pendingUpload.error && <p className="mt-1 text-[11px] text-white/55">{pendingUpload.error}</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
         {isFeedBootstrapping ? (
-          <div className="px-2 pb-6 space-y-5">
+          <div className="feed-post-list px-2 pb-6 space-y-5">
             <PostSkeleton />
             <PostSkeleton />
             <PostSkeleton />
           </div>
         ) : (
-          <div className="px-2 pb-6 space-y-5">
+          <div className="feed-post-list px-2 pb-6 space-y-5">
             {sortedPosts.map((post: FeedPost, index) => {
               const liked = iLiked(post, currentUser.userId);
               const likeCount = totalLikes(post);
-              const likeSocialProof = buildLikeSocialProof(post);
-              const postBursts = bursts[post.id] ?? [];
+              const heartColor = feedHeartColor(Math.max(
+                post.likesByUser?.[currentUser.userId]?.tapCount ?? 0,
+                optimisticLikeProofRef.current[post.id]?.tapCount ?? 0,
+              ));
+              const likeMilestone = likeMilestonePosts[post.id];
+              const isLikeMilestoneCelebrating = Boolean(likeMilestone);
+              const topLikeTapper = getTopLikeTapper(
+                post,
+                optimisticLikeProofRef.current[post.id],
+              );
+              const sparkParts = getPostSparkParts(post);
+              const caption = getFeedPostCaption(post);
+              const isSparkExpanded = expandedSparkPostIds.has(post.id);
               const author = resolveAuthor(post.author);
               const showCommunityRail = shouldShowRailAfterPost(
                 index,
@@ -4923,13 +7584,17 @@ export function FeedScreen({
                 sortedPosts.length,
                 VERDICT_CARD_FIRST_INSERT_AFTER,
                 VERDICT_CARD_REPEAT_EVERY,
-              );
-              const verdictPoolIndex =
-                (Math.floor(
-                  (index - VERDICT_CARD_FIRST_INSERT_AFTER + 1) /
-                    VERDICT_CARD_REPEAT_EVERY,
-                ) + FEED_VERDICT_POOL.length) %
-                FEED_VERDICT_POOL.length;
+              ) && feedVerdicts.length > 0;
+              const feedVerdictIndex =
+                feedVerdicts.length > 0
+                  ? (Math.floor(
+                      (index - VERDICT_CARD_FIRST_INSERT_AFTER + 1) /
+                        VERDICT_CARD_REPEAT_EVERY,
+                    ) +
+                      feedVerdicts.length) %
+                    feedVerdicts.length
+                  : 0;
+              const feedVerdict = feedVerdicts[feedVerdictIndex];
               const showSocialDaresRail = shouldShowRailAfterPost(
                 index,
                 sortedPosts.length,
@@ -4947,28 +7612,39 @@ export function FeedScreen({
                 <Fragment key={post.id}>
                   <div
                     id={`feed-post-${post.id}`}
-                    className={`relative overflow-hidden rounded-[30px] ${
+                    className={`feed-post-card relative ${
                       animatingPosts.has(post.id) ? "premium-card-burst" : ""
                     }`}
                   >
                     <div className="premium-card-glow" />
                     <div className="premium-card-ring" />
+                    {isLikeMilestoneCelebrating && (
+                      <LikeMilestoneStickman
+                        key={`${post.id}-${likeMilestone}`}
+                        author={author}
+                        postId={post.id}
+                        heartColor={heartColor}
+                        milestone={likeMilestone}
+                      />
+                    )}
                     {/* Post header */}
-                    <div className="relative z-10 flex items-center justify-between gap-3 px-3 pt-3 pb-3">
+                    <div className="feed-post-header feed-post-glass-header relative z-10 flex items-center justify-between gap-3 px-3 py-3">
                       <div className="flex min-w-0 items-center gap-2.5">
-                        <Avatar
-                          src={author.avatar}
-                          alt={author.name}
-                          size={46}
-                          userId={author.id}
-                          username={author.username}
-                          forceGhostMode={
-                            author.id
-                              ? ghostModesByUserId[author.id]
-                              : undefined
-                          }
-                          style={{ border: "2px solid rgba(74,222,128,0.22)" }}
-                        />
+                        <div
+                          data-feed-author-avatar
+                          className={`shrink-0 ${
+                            isLikeMilestoneCelebrating ? "opacity-0" : "opacity-100"
+                          }`}
+                        >
+                          <Avatar
+                            src={author.avatar}
+                            alt={author.name}
+                            size={40}
+                            userId={author.id}
+                            username={author.username}
+                            style={{ border: "2px solid rgba(74,222,128,0.22)" }}
+                          />
+                        </div>
                         <button
                           type="button"
                           onClick={() => {
@@ -4982,12 +7658,9 @@ export function FeedScreen({
                               : "cursor-default"
                           }`}
                         >
-                          <h3 className="truncate text-[16px] font-black leading-tight text-white">
+                          <h3 className="truncate text-[14px] font-semibold leading-tight text-white">
                             {author.name}
                           </h3>
-                          <p className="mt-0.5 truncate text-[13px] font-semibold leading-tight text-[#94a3b8]">
-                            @{author.username}
-                          </p>
                         </button>
                       </div>
                       <button
@@ -4997,6 +7670,7 @@ export function FeedScreen({
                           setActiveMenuPostId(post.id);
                           setActiveMenuPost(post);
                           setActiveMenuAuthor(author);
+                          onPostOptionsOpenChange?.(true);
                         }}
                         className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/40 transition-colors active:bg-white/[0.09] active:text-white"
                         aria-label="Post options"
@@ -5005,98 +7679,103 @@ export function FeedScreen({
                       </button>
                     </div>
 
-                    {/* Media — carousel or single */}
-                    {post.media_urls && post.media_urls.length > 0 ? (
-                      <div className="px-1">
-                        <div id={`media-${post.id}`} className="relative">
-                          <CarouselMedia
-                            urls={post.media_urls}
-                            postId={post.id}
-                            onTap={handleMediaTap}
-                          />
-                          <HeartBurstLayer bursts={postBursts} />
-                        </div>
+                    {/* Media — carousel or single (self-contained burst layer) */}
+                    <PostMedia
+                      ref={(h) => {
+                        postMediaRefs.current[post.id] = h;
+                      }}
+                      post={post}
+                      onLike={addLike}
+                      heartColor={heartColor}
+                      topLikeTapper={topLikeTapper}
+                      topLikeBadgeSide={index % 2 === 0 ? "left" : "right"}
+                      onOpenLikes={() => {
+                        setSelectedPostId(post.id);
+                        setShowLikesModal(true);
+                      }}
+                    />
+
+                    {/* Caption — primary post copy */}
+                    {caption && (
+                      <div className="feed-post-caption relative z-10 px-4 pt-3">
+                        <p className="text-[15px] font-medium leading-relaxed text-white">
+                          <span className="font-semibold text-[#F4F6F4]">
+                            {author.name}
+                          </span>{" "}
+                          {caption}
+                        </p>
                       </div>
-                    ) : post.media && post.media.url ? (
-                      <div className="px-1">
-                        <div
-                          id={`media-${post.id}`}
-                          className="w-full relative cursor-pointer rounded-3xl overflow-hidden"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleMediaTap(
-                              post.id,
-                              event.clientX,
-                              event.clientY,
-                              event.currentTarget,
-                            );
+                    )}
+
+                    {sparkParts.length > 0 && (
+                      <div className="feed-spark-summary relative z-10 px-4 pt-3">
+                        <button
+                          type="button"
+                          className="feed-spark-pill app-pressable w-full justify-between text-left"
+                          aria-expanded={isSparkExpanded}
+                          aria-controls={`feed-spark-details-${post.id}`}
+                          onClick={() => {
+                            setExpandedSparkPostIds((current) => {
+                              const next = new Set(current);
+                              if (next.has(post.id)) next.delete(post.id);
+                              else next.add(post.id);
+                              return next;
+                            });
                           }}
                         >
-                          {post.media.type === "image" ? (
-                            <img
-                              src={post.media.url}
-                              alt="Post media"
-                              className="w-full object-cover"
-                              style={{ height: "500px" }}
-                              /* TEMPORARILY DISABLED FOR MOBILE DEBUGGING - draggable might block touch */
-                              /* DISABLED: draggable={false} */
-                              loading="lazy"
-                              decoding="async"
-                              onError={(e) => {
-                                e.currentTarget.src =
-                                  "https://picsum.photos/seed/fallback/800/600.jpg";
-                              }}
-                            />
-                          ) : post.media.type === "video" ? (
-                            <div
-                              className="w-full bg-[#2a2a2a] flex items-center justify-center rounded-3xl"
-                              style={{ height: "500px" }}
-                            >
-                              <span className="text-[#94a3b8] text-2xl">
-                                🎥 Video
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Zap size={15} className="shrink-0 text-[#7dd3fc]" />
+                            <span className="truncate text-[12px] font-bold text-white/60">
+                              This post started {sparkParts.map((item, sparkIndex) => (
+                                <Fragment key={item.label}>
+                                  {sparkIndex > 0 ? ", " : ""}
+                                  {formatNumber(item.count)} {item.count === 1 ? item.singular : item.label}
+                                </Fragment>
+                              ))}
+                            </span>
+                          </span>
+                          <ChevronDown
+                            size={16}
+                            className={`shrink-0 text-white/45 transition-transform duration-200 ${
+                              isSparkExpanded ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                        {isSparkExpanded && (
+                          <div
+                            id={`feed-spark-details-${post.id}`}
+                            className="mt-1 flex flex-wrap items-center gap-2 pb-1 pl-7"
+                          >
+                            {sparkParts.map((item) => (
+                              <span
+                                key={item.label}
+                                className={`rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-bold ${item.tone}`}
+                              >
+                                {formatNumber(item.count)} {item.count === 1 ? item.singular : item.label}
                               </span>
-                            </div>
-                          ) : (
-                            <div
-                              className="w-full bg-gradient-to-br from-[#4ade80]/10 via-[#22c55e]/10 to-[#16a34a]/10 flex items-center justify-center rounded-3xl"
-                              style={{ height: "500px" }}
-                            >
-                              <div className="text-center">
-                                <div className="w-16 h-16 bg-gradient-to-br from-[#4ade80] to-[#22c55e] rounded-2xl flex items-center justify-center mb-3 mx-auto">
-                                  <Music size={28} className="text-black" />
-                                </div>
-                                <p className="text-white font-medium">
-                                  Audio File
-                                </p>
-                                {post.media.duration && (
-                                  <p className="text-[#94a3b8] text-sm mt-1">
-                                    {post.media.duration}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          <HeartBurstLayer bursts={postBursts} />
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ) : null}
+                    )}
 
                     {/* Actions */}
-                    <div className="relative z-10 px-2 pt-3">
+                    <div className="feed-post-actions relative z-10 px-2 pt-3">
                       <div className="grid grid-cols-3 items-center gap-1 px-3 py-2.5">
                         <div className="flex min-w-0 items-center justify-center">
                           <button
                             onClick={(e) => handleHeartIconClick(post.id, e)}
                             className="group app-pressable flex min-w-0 items-center justify-center text-white transition-colors hover:text-[#4ade80]"
-                            aria-label={liked ? "Unlike post" : "Like post"}
+                            aria-label={liked ? "Add another like" : "Like post"}
                           >
                             <Heart
                               size={20}
-                              fill={liked ? "#ef4444" : "white"}
-                              strokeWidth={0}
+                              fill={liked ? "currentColor" : "none"}
+                              style={{ color: liked ? heartColor : undefined, transition: "color 650ms ease, transform 200ms ease" }}
+                              strokeWidth={liked ? 0 : 2}
                               className={`shrink-0 transition-all duration-200 ${
                                 liked
-                                  ? "scale-110 text-red-500 drop-shadow-[0_0_6px_rgba(239,68,68,0.7)]"
+                                  ? "scale-110 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.42)]"
                                   : "text-white group-hover:scale-110"
                               }`}
                             />
@@ -5124,8 +7803,8 @@ export function FeedScreen({
                           >
                             <MessageCircle
                               size={20}
-                              fill="white"
-                              strokeWidth={0}
+                              fill="none"
+                              strokeWidth={2}
                               className="shrink-0"
                             />
                             <span className="truncate text-sm font-bold">
@@ -5143,89 +7822,25 @@ export function FeedScreen({
                             className="app-pressable flex items-center justify-center text-white transition-colors hover:text-[#4ade80]"
                             aria-label="Share to DM"
                           >
-                            <Send size={18} fill="white" strokeWidth={0} />
+                            <Send size={18} fill="none" strokeWidth={2} />
                           </button>
                         </div>
                       </div>
                     </div>
 
-                    {likeSocialProof && (
-                      <div className="relative z-10 px-4 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedPostId(post.id);
-                            setShowLikesModal(true);
-                          }}
-                          className="group flex w-full items-center gap-3 rounded-2xl px-1 py-1.5 text-left transition-colors hover:bg-white/[0.025]"
-                        >
-                          {likeSocialProof.avatars.length > 0 ? (
-                            <div className="flex shrink-0 -space-x-2">
-                              {likeSocialProof.avatars.map((entry) => (
-                                <span
-                                  key={entry.userId}
-                                  className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-[#101713] bg-[#1b241e] text-[11px] font-black text-[#4ade80] shadow-[0_5px_14px_rgba(0,0,0,0.32)]"
-                                >
-                                  <span>{getLikeInitial(entry)}</span>
-                                  {entry.avatar ? (
-                                    <img
-                                      src={entry.avatar}
-                                      alt={getLikeEntryName(entry)}
-                                      className="absolute inset-0 h-full w-full object-cover"
-                                      loading="lazy"
-                                      decoding="async"
-                                      onError={(event) => {
-                                        event.currentTarget.style.display =
-                                          "none";
-                                      }}
-                                    />
-                                  ) : null}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#4ade80]/20 bg-[#132018] text-[#4ade80] shadow-[0_5px_14px_rgba(0,0,0,0.25)]">
-                              <Heart size={14} fill="currentColor" />
-                            </span>
-                          )}
-                          <p className="min-w-0 truncate text-[13px] font-semibold leading-tight text-[#9bb1a6]">
-                            <span className="font-black text-white">
-                              {likeSocialProof.lead}
-                            </span>{" "}
-                            <span>
-                              {likeSocialProof.rest
-                                .split(/([\d.]+k?\s+times?)/i)
-                                .map((part, i) =>
-                                  /^[\d.]+k?\s+times?$/i.test(part) ? (
-                                    <span
-                                      key={i}
-                                      className="font-black text-[#4ade80] drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]"
-                                    >
-                                      {part}
-                                    </span>
-                                  ) : (
-                                    part
-                                  ),
-                                )}
-                            </span>
-                          </p>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Caption */}
-                    <div className="relative z-10 px-4 pt-2 pb-5">
-                      <p className="text-[15px] font-black leading-relaxed text-white">
-                        {post.content}
-                      </p>
-                      <p className="mt-1.5 text-xs font-bold text-[#64748b]">
-                        {formatTimeAgo(post.timestamp)}
-                      </p>
-                    </div>
                   </div>
                   {showVerdictCard && (
                     <FeedVerdictCard
-                      data={FEED_VERDICT_POOL[verdictPoolIndex]!}
+                      data={toFeedVerdictPreview(feedVerdict!)}
+                      voting={Boolean(votingByVerdictId[feedVerdict!.id])}
+                      onVote={(choice) => {
+                        void voteVerdict(feedVerdict!.id, choice);
+                      }}
+                      onNavigate={
+                        onNavigateToVerdict
+                          ? () => onNavigateToVerdict(feedVerdict!.id)
+                          : undefined
+                      }
                     />
                   )}
                   {showSocialDaresRail && feedSocialDares.length > 0 && (
@@ -5235,9 +7850,9 @@ export function FeedScreen({
                       onOpenDare={onNavigateToSocialDares}
                     />
                   )}
-                  {showTruthsRail && feedTruths.length > 0 && (
-                    <TruthsFeedRail
-                      truths={feedTruths}
+                  {showTruthsRail && feedHotTakes.length > 0 && (
+                    <HotTakesFeedRail
+                      items={feedHotTakes}
                       onExploreAll={onNavigateToTruths}
                       onOpenTruth={onNavigateToTruths}
                     />
@@ -5411,11 +8026,6 @@ export function FeedScreen({
                         alt={entry.name}
                         size={52}
                         userId={entry.userId}
-                        forceGhostMode={
-                          entry.userId
-                            ? ghostModesByUserId[entry.userId]
-                            : undefined
-                        }
                       />
                       <div className="flex-1">
                         <p
@@ -5447,8 +8057,8 @@ export function FeedScreen({
                       <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/8 bg-[#101713] px-3 py-1.5">
                         <Heart
                           size={12}
-                          fill="#ef4444"
-                          className="text-red-500"
+                          fill="#f0f0f0"
+                          className="text-white"
                         />
                         <span className="text-[12px] font-bold text-white">
                           liked {entry.tapCount}{" "}
@@ -5577,11 +8187,6 @@ export function FeedScreen({
                         }
                         size="xl"
                         userId={friend.user_id}
-                        forceGhostMode={
-                          friend.user_id
-                            ? ghostModesByUserId[friend.user_id]
-                            : undefined
-                        }
                       />
                       <div className="flex-1">
                         <p
@@ -5618,7 +8223,7 @@ export function FeedScreen({
                       <button
                         onClick={() => void handleSendToDM(friend)}
                         disabled={!recipientId || sent || sending}
-                        className={`min-w-[104px] justify-center px-5 py-2 rounded-full text-base font-semibold transition-all duration-200 flex items-center space-x-2 ${sent ? "bg-[#101713] text-[#64748b] cursor-default" : sending ? "bg-[#d9fbe5] text-[#18532c] cursor-wait" : "bg-[#4ade80] text-black hover:bg-[#22c55e] active:scale-95"} disabled:bg-[#101713] disabled:text-[#64748b] disabled:cursor-default`}
+                        className={`min-h-9 min-w-9 justify-center rounded-full px-3 text-sm font-semibold transition-all duration-200 flex items-center space-x-1.5 ${sent ? "bg-[#101713] text-[#64748b] cursor-default" : sending ? "bg-[#d9fbe5] text-[#18532c] cursor-wait" : "bg-[#4ade80] text-black hover:bg-[#22c55e] active:scale-95"} disabled:bg-[#101713] disabled:text-[#64748b] disabled:cursor-default`}
                       >
                         {sent ? (
                           <span>Sent ✓</span>
@@ -5631,7 +8236,7 @@ export function FeedScreen({
                               fill="currentColor"
                               strokeWidth={0}
                             />
-                            <span>Send</span>
+                            <span className="sr-only">Send</span>
                           </>
                         )}
                       </button>
@@ -7168,6 +9773,10 @@ export function FeedScreen({
             setShowDareEventsScreen(false);
             setShowFriendshipCourtScreen(true);
           }}
+          onOpenJail={() => {
+            setShowDareEventsScreen(false);
+            setShowCircleJailScreen(true);
+          }}
         />
       )}
 
@@ -7178,6 +9787,19 @@ export function FeedScreen({
       {showFriendshipCourtScreen && (
         <FriendshipCourtScreen
           onClose={() => setShowFriendshipCourtScreen(false)}
+          onSentenced={() => {
+            setShowFriendshipCourtScreen(false);
+            setShowCircleJailScreen(true);
+          }}
+        />
+      )}
+
+      {showCircleJailScreen && (
+        <CircleJailScreen
+          onClose={() => {
+            setShowCircleJailScreen(false);
+            setShowDareEventsScreen(true);
+          }}
         />
       )}
 
@@ -7353,7 +9975,7 @@ export function FeedScreen({
               <button
                 type="button"
                 onClick={() => void handleDeleteCircle()}
-                className="flex min-h-12 w-full items-center justify-center rounded-full border border-rose-500/18 bg-rose-500/12 text-sm font-black text-rose-100"
+                className="flex min-h-12 w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.06] text-sm font-black text-white/78"
               >
                 Delete circle
               </button>
@@ -7405,9 +10027,25 @@ export function FeedScreen({
             setActiveMenuPostId(null);
             setActiveMenuPost(null);
             setActiveMenuAuthor(null);
+            onPostOptionsOpenChange?.(false);
           }}
           onDare={onDareUser}
           onTruth={onAskTruthUser}
+          onPrediction={onCreatePrediction}
+          onRumour={onCreateRumour}
+          onDelete={async () => {
+            if (!window.confirm("Delete this post? This cannot be undone.")) return;
+            const deleted = await storeDeletePost(activeMenuPost.id, currentUser.userId);
+            if (deleted) {
+              setLocallyDeletedPostIds((current) => {
+                const next = new Set(current);
+                next.add(activeMenuPost.id);
+                return next;
+              });
+            } else {
+              window.alert("Unable to delete this post.");
+            }
+          }}
           onNavigateToProfile={onNavigateToProfile}
         />
       )}

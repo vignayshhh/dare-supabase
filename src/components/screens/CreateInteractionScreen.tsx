@@ -1,5 +1,8 @@
 "use client";
 
+import { getChatSource } from "@/lib/chatContext";
+import { ChatSourceQuote } from "../circles/CircleChatScreen";
+
 import { useEffect, useState, type CSSProperties } from "react";
 import {
   ArrowLeft,
@@ -23,6 +26,7 @@ import { useAuthStore } from "@/stores/useAuthStore-v2";
 import { useDareStore } from "@/stores/useDareStore";
 import { useUserSearchStore } from "@/stores/useUserSearchStore";
 import { Avatar } from "@/components/ui/Avatar";
+import { DareSentCinematicScreen } from "./DareSentCinematicScreen";
 
 interface Friend {
   id: string;
@@ -34,6 +38,7 @@ interface Friend {
 interface CreateInteractionScreenProps {
   mode: "truth" | "dare";
   onBack: () => void;
+  initialRecipient?: Friend | null;
 }
 
 const TRUTH_PROMPTS = [
@@ -51,23 +56,47 @@ const DARE_PROMPTS = [
 export function CreateInteractionScreen({
   mode,
   onBack,
+  initialRecipient,
 }: CreateInteractionScreenProps) {
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(() => getChatSource()?.body.slice(0, 500) || "");
   const [showFriendPicker, setShowFriendPicker] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [friends, setFriends] = useState<Friend[]>([]);
   const [submitStatus, setSubmitStatus] = useState<
     "idle" | "sending" | "sent" | "error"
   >("idle");
+  const [showDareSentCinematic, setShowDareSentCinematic] = useState(false);
 
   const { user } = useAuthStore();
   const { creatingDare } = useDareStore();
   const { searchUsers, searchResults, isSearching } = useUserSearchStore();
 
   useEffect(() => {
+    if (!showDareSentCinematic) return;
+    const timeoutId = window.setTimeout(() => onBack(), 2800);
+    return () => window.clearTimeout(timeoutId);
+  }, [onBack, showDareSentCinematic]);
+
+  useEffect(() => {
     setFriends([]);
   }, []);
+
+  useEffect(() => {
+    if (!initialRecipient?.id) return;
+
+    setSelectedFriends((current) =>
+      current.includes(initialRecipient.id)
+        ? current
+        : [initialRecipient.id, ...current],
+    );
+    setFriends((current) => {
+      if (current.some((friend) => friend.id === initialRecipient.id)) {
+        return current;
+      }
+      return [initialRecipient, ...current];
+    });
+  }, [initialRecipient]);
 
   const isTruth = mode === "truth";
   const title = isTruth ? "Ask a Truth" : "Give a Dare";
@@ -82,9 +111,9 @@ export function CreateInteractionScreen({
   const privacyText = isTruth
     ? "Privacy rules decide visibility after they answer."
     : "Proof is required if the dare is accepted.";
-  const accent = isTruth ? "#60a5fa" : "#4ade80";
-  const accentDeep = isTruth ? "#2563eb" : "#22c55e";
-  const accentText = isTruth ? "#bfdbfe" : "#bbf7d0";
+  const accent = isTruth ? "#38bdf8" : "#fb7185";
+  const accentDeep = isTruth ? "#0ea5e9" : "#f43f5e";
+  const accentText = isTruth ? "#bae6fd" : "#fecdd3";
   const suggestions = isTruth ? TRUTH_PROMPTS : DARE_PROMPTS;
   const ModeIcon = isTruth ? MessageSquare : Target;
   const interactionStyle = {
@@ -300,10 +329,13 @@ export function CreateInteractionScreen({
         }
       }
 
-      console.log("Interaction created successfully, going back");
+      console.log("Interaction created successfully");
       setSubmitStatus("sent");
-      await new Promise((resolve) => setTimeout(resolve, 650));
-      onBack();
+      if (isTruth) {
+        onBack();
+      } else {
+        setShowDareSentCinematic(true);
+      }
     } catch (error) {
       console.error("Error creating interaction:", error);
       setSubmitStatus("error");
@@ -346,6 +378,17 @@ export function CreateInteractionScreen({
     },
   ];
 
+  if (showDareSentCinematic && !isTruth) {
+    return (
+      <DareSentCinematicScreen
+        recipientLabel={
+          selectedFriendsData[0]?.username ||
+          (selectedFriends[0] ? `@${selectedFriends[0]}` : undefined)
+        }
+      />
+    );
+  }
+
   return (
     <div
       className="screen-container create-interaction-screen text-white"
@@ -355,9 +398,9 @@ export function CreateInteractionScreen({
         .create-interaction-screen {
           background:
             radial-gradient(circle at 50% -12%, var(--interaction-accent-glow), transparent 34%),
-            radial-gradient(circle at 12% 18%, rgba(14,165,233,0.11), transparent 28%),
-            linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%);
-          font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            radial-gradient(circle at 10% 18%, rgba(192,132,252,0.1), transparent 28%),
+            linear-gradient(180deg, #12070d 0%, #09070d 48%, #050507 100%);
+          font-family: var(--font-ui);
         }
         @keyframes interactionFloatIn {
           from { opacity: 0; transform: translateY(18px) scale(0.98); filter: blur(8px); }
@@ -403,7 +446,8 @@ export function CreateInteractionScreen({
         <div className="absolute -right-24 top-28 h-64 w-64 rounded-full bg-sky-400/[0.07] blur-3xl" />
       </div>
 
-      <div className="relative z-30 border-b border-white/8 bg-[linear-gradient(180deg,rgba(5,7,5,0.98),rgba(5,7,5,0.84))] px-4 pb-4 pt-[calc(var(--safe-area-top)+12px)] backdrop-blur-xl">
+      {getChatSource() && <ChatSourceQuote source={getChatSource()!} />}
+      <header className="relative z-30 border-b border-white/8 bg-[linear-gradient(180deg,rgba(8,6,11,0.98),rgba(8,6,11,0.78))] px-4 pb-5 pt-[calc(var(--safe-area-top)+12px)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
           <button
             onClick={onBack}
@@ -416,7 +460,7 @@ export function CreateInteractionScreen({
             <p className="mb-1 text-[11px] font-black uppercase tracking-[0.2em] text-[#94a3b8]">
               {eyebrow}
             </p>
-            <h1 className="m-0 truncate text-[31px] font-black leading-none tracking-tight text-white">
+            <h1 className="m-0 truncate text-[34px] font-black leading-[0.92] tracking-[-0.055em] text-white">
               {title}
             </h1>
           </div>
@@ -424,7 +468,7 @@ export function CreateInteractionScreen({
             <ModeIcon size={24} />
           </div>
         </div>
-      </div>
+      </header>
 
       <div
         className="relative z-10 flex-1 overflow-y-auto px-4"
@@ -436,7 +480,7 @@ export function CreateInteractionScreen({
         }}
       >
         <div className="mx-auto max-w-2xl">
-        <div className="interaction-panel interaction-shine relative mb-5 overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(21,27,21,0.92),rgba(10,14,10,0.96))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.44),inset_0_1px_0_rgba(255,255,255,0.05)]">
+        <div className="interaction-panel interaction-shine relative mb-5 overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(145deg,rgba(34,20,31,0.96),rgba(17,12,20,0.96))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.44),inset_0_1px_0_rgba(255,255,255,0.05)]">
           <div className="relative z-10 flex items-center gap-4">
             <div
               className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border"
@@ -480,7 +524,7 @@ export function CreateInteractionScreen({
           </div>
         </div>
 
-        <div className="interaction-panel relative z-40 mb-5 overflow-visible rounded-[30px] border border-white/10 bg-[linear-gradient(145deg,rgba(22,27,22,0.98),rgba(8,10,8,0.99))] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.055)]">
+        <div className="interaction-panel relative z-40 mb-5 overflow-visible rounded-[30px] border border-white/10 bg-[linear-gradient(145deg,rgba(34,20,31,0.98),rgba(14,10,17,0.99))] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.055)]">
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{
@@ -535,7 +579,7 @@ export function CreateInteractionScreen({
             </div>
 
             {showFriendPicker && (
-              <div className="absolute left-0 right-0 top-full z-[90] mt-3 max-h-64 overflow-y-auto rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,22,18,0.99),rgba(9,11,9,0.99))] shadow-[0_24px_54px_rgba(0,0,0,0.42)]">
+              <div className="absolute left-0 right-0 top-full z-[90] mt-3 max-h-64 overflow-y-auto rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(29,18,28,0.99),rgba(10,8,13,0.99))] shadow-[0_24px_54px_rgba(0,0,0,0.42)]">
                 {isSearching ? (
                   <div className="p-4 text-center text-sm font-semibold text-white/42">
                     Searching users...
@@ -586,7 +630,7 @@ export function CreateInteractionScreen({
                     <div className="border-t border-white/8 p-2">
                       <button
                         onClick={handleManualUsernameSubmit}
-                        className="w-full rounded-2xl p-3 text-center text-sm font-bold transition-colors hover:bg-[#4ade80]/10"
+                        className="w-full rounded-2xl p-3 text-center text-sm font-bold transition-colors hover:bg-[#fb7185]/10"
                         style={{ color: accent }}
                       >
                         Use &quot;{tagInput.replace("@", "")}&quot;
@@ -681,7 +725,7 @@ export function CreateInteractionScreen({
           )}
         </div>
 
-        <div className="interaction-panel interaction-panel-delay relative z-0 overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(145deg,rgba(18,22,18,0.98),rgba(8,10,8,0.99))] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)]">
+        <div className="interaction-panel interaction-panel-delay relative z-0 overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(145deg,rgba(31,19,29,0.98),rgba(12,9,15,0.99))] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)]">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.18em] text-white/38">
@@ -738,7 +782,7 @@ export function CreateInteractionScreen({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/8 bg-[linear-gradient(180deg,rgba(5,7,5,0.82),rgba(5,7,5,0.98))] px-4 pb-[calc(16px+var(--safe-area-bottom))] pt-4 backdrop-blur-xl">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/8 bg-[linear-gradient(180deg,rgba(8,6,11,0.78),rgba(8,6,11,0.98))] px-4 pb-[calc(16px+var(--safe-area-bottom))] pt-4 backdrop-blur-xl">
         <div className="mx-auto max-w-2xl">
           <div className="mb-3 flex items-center justify-between gap-3 px-1">
             <p className="truncate text-xs font-bold text-white/42">
@@ -758,7 +802,7 @@ export function CreateInteractionScreen({
               background: canSubmit
                 ? `linear-gradient(135deg, ${accent}, ${accentDeep})`
                 : "rgba(255,255,255,0.12)",
-              color: canSubmit ? "#020402" : "rgba(255,255,255,0.4)",
+              color: canSubmit ? "#21070f" : "rgba(255,255,255,0.4)",
               boxShadow: canSubmit
                 ? `0 18px 42px ${accent}30`
                 : "none",

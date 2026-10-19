@@ -1,24 +1,9 @@
-import { db } from "@/backend/lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  increment,
-  collection,
-  query,
-  where,
-  getDocs,
-  deleteDoc,
-  orderBy,
-  onSnapshot,
-  Unsubscribe,
-  Timestamp,
-  documentId,
-  serverTimestamp,
-} from "firebase/firestore";
-import { aggregatedCounters } from "@/services/aggregatedCounters";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { scheduleRefresh } from "@/lib/realtime/scheduleRefresh";
+import type { Unsubscribe } from "@/types/realtime";
+import { createUuid } from "@/utils/uuid";
 import { requireAuthenticatedUser } from "@/security/appSecurity";
+import { useAvatarStore } from "@/stores/avatarStore";
 
 export interface PostComment {
   id: string;
@@ -49,15 +34,16 @@ export interface CreateCommentRequest {
 }
 
 class CommentService {
-  // Enable aggregated counters to reduce reads by ~90% for count queries
-  private readonly enableAggregatedCounters = true; // Set to true to enable
+  private get client() {
+    return getSupabaseBrowserClient();
+  }
   private authorCache = new Map<string, CommentWithAuthor["author"] | null>();
 
-  // SECURITY FIX (§1.6): Comment creation runs through the server API
-  // route. Firestore rules deny client writes to `post_comments` so
+  // SECURITY FIX (Â§1.6): Comment creation runs through the server API
+  // route. Postgres rules deny client writes to `post_comments` so
   // this is the only path. The Cloud Function trigger keeps
-  // `posts.comments_count` in sync, so the old manual increment is
-  // removed. Realtime listeners (`onSnapshot` elsewhere in this file)
+  // `posts.comments_count` in sync, so the old manual incrementValue is
+  // removed. Realtime listeners are scoped to the post.
   // pick the new comment up instantly.
   async createComment(request: CreateCommentRequest): Promise<PostComment> {
     try {
@@ -102,25 +88,26 @@ class CommentService {
   ): Promise<PostComment> {
     requireAuthenticatedUser(request.user_id);
     const now = new Date().toISOString();
-    const ref = doc(collection(db, "post_comments"));
+    const id = createUuid();
     const commentData: Record<string, any> = {
       post_id: request.post_id,
       user_id: request.user_id,
       content: request.text,
       text: request.text,
       likes: 0,
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
+      created_at: now,
+      updated_at: now,
     };
 
     if (request.parent_id) {
       commentData.parent_id = request.parent_id;
     }
 
-    await setDoc(ref, commentData);
+    const { error } = await this.client.from("post_comments").insert({ id, post_id: request.post_id, author_id: request.user_id, parent_id: request.parent_id ?? null, body: request.text, created_at: now, updated_at: now });
+    if (error) throw error;
 
     return {
-      id: ref.id,
+      id,
       post_id: request.post_id,
       user_id: request.user_id,
       text: request.text,
@@ -131,21 +118,20 @@ class CommentService {
     };
   }
 
+  async getCommentsPage(postId: string, page = 0, pageSize = 100): Promise<{ comments: CommentWithAuthor[]; hasMore: boolean }> {
+    const safePage = Math.max(0, Math.floor(page)); const safeSize = Math.min(100, Math.max(1, Math.floor(pageSize)));
+    const { data: rows, error } = await this.client.from("post_comments")
+      .select("id,post_id,author_id,body,parent_id,reaction_count,created_at,updated_at")
+      .eq("post_id", postId).order("created_at", { ascending: true }).order("id", { ascending: true })
+      .range(safePage * safeSize, (safePage + 1) * safeSize - 1);
+    if (error) throw error;
+    const comments = (rows ?? []).map((row) => ({ id: row.id, post_id: row.post_id, user_id: row.author_id, text: row.body, likes: row.reaction_count ?? 0, parent_id: row.parent_id, created_at: row.created_at, updated_at: row.updated_at }) as PostComment);
+    return { comments: await this.attachAuthors(comments), hasMore: (rows ?? []).length === safeSize };
+  }
+
   async getComments(postId: string): Promise<CommentWithAuthor[]> {
     try {
-      const commentsRef = collection(db, "post_comments");
-      const q = query(
-        commentsRef,
-        where("post_id", "==", postId),
-        orderBy("created_at", "asc"),
-      );
-      const querySnapshot = await getDocs(q);
-
-      const comments = querySnapshot.docs.map(
-        (docSnap) => ({ id: docSnap.id, ...docSnap.data() }) as PostComment,
-      );
-
-      return this.attachAuthors(comments);
+      const comments: CommentWithAuthor[] = []; for (let page = 0;; page += 1) { const result = await this.getCommentsPage(postId, page); comments.push(...result.comments); if (!result.hasMore) return comments; }
     } catch (error) {
       console.error("Error getting comments:", error);
       return [];
@@ -160,35 +146,32 @@ class CommentService {
         return this.authorCache.get(userId) ?? null;
       }
 
-      const userDocRef = doc(db, "users", userId);
-      const userDoc = await getDoc(userDocRef);
-
-      if (!userDoc.exists()) {
+      const { data: userData, error } = await this.client.from("profiles")
+        .select("id,username,display_name,avatar_url").eq("id", userId).maybeSingle();
+      if (error) throw error;
+      if (!userData) {
         this.authorCache.set(userId, null);
         return null;
       }
 
-      const userData = userDoc.data();
       let avatarUrl = userData.avatar_url || "";
 
       try {
-        const { useAvatarStore } = require("../../stores/avatarStore");
         const { getStoredAvatar } = useAvatarStore.getState();
         const storedAvatar = getStoredAvatar(userId);
 
         if (storedAvatar && storedAvatar !== avatarUrl) {
           avatarUrl = storedAvatar;
         }
-      } catch (error) {
+      } catch {
         console.log("Could not access avatar store for user:", userId);
       }
 
       const author = {
-        id: userDoc.id,
-        user_id: userData.user_id || userId,
+        id: userData.id,
+        user_id: userData.id,
         username: userData.username || `user_${userId.slice(0, 8)}`,
         display_name:
-          userData.displayName ||
           userData.display_name ||
           `User ${userId.slice(0, 8)}`,
         avatar_url: avatarUrl,
@@ -225,24 +208,21 @@ class CommentService {
 
     await Promise.all(
       chunks.map(async (chunk) => {
-        const usersRef = collection(db, "users");
-        const usersQuery = query(usersRef, where(documentId(), "in", chunk));
-        const usersSnapshot = await getDocs(usersQuery);
-
-        usersSnapshot.forEach((userDoc) => {
-          const userData = userDoc.data();
+        const { data: users, error } = await this.client.from("profiles")
+          .select("id,username,display_name,avatar_url").in("id", chunk);
+        if (error) throw error;
+        (users ?? []).forEach((userData) => {
           const author = {
-            id: userDoc.id,
-            user_id: userData.user_id || userDoc.id,
-            username: userData.username || `user_${userDoc.id.slice(0, 8)}`,
+            id: userData.id,
+            user_id: userData.id,
+            username: userData.username || `user_${userData.id.slice(0, 8)}`,
             display_name:
-              userData.displayName ||
               userData.display_name ||
-              `User ${userDoc.id.slice(0, 8)}`,
+              `User ${userData.id.slice(0, 8)}`,
             avatar_url: userData.avatar_url || "",
           };
-          this.authorCache.set(userDoc.id, author);
-          results.set(userDoc.id, author);
+          this.authorCache.set(userData.id, author);
+          results.set(userData.id, author);
         });
 
         chunk.forEach((userId) => {
@@ -279,37 +259,20 @@ class CommentService {
 
   async deleteComment(commentId: string, userId: string): Promise<boolean> {
     try {
-      const commentRef = doc(db, "post_comments", commentId);
-      const commentDoc = await getDoc(commentRef);
-
-      if (!commentDoc.exists()) {
+      const { data: commentRow, error: readError } = await this.client.from("post_comments")
+        .select("id,post_id,author_id,body,parent_id,reaction_count,created_at,updated_at")
+        .eq("id", commentId).maybeSingle();
+      if (readError) throw readError;
+      if (!commentRow) {
         throw new Error("Comment not found");
       }
-
-      const comment = commentDoc.data() as PostComment;
+      const comment = { ...commentRow, user_id: commentRow.author_id, text: commentRow.body } as PostComment;
       if (comment.user_id !== userId) {
         throw new Error("Unauthorized to delete this comment");
       }
 
-      await deleteDoc(commentRef);
-
-      // Keep denormalized count in sync on the post document
-      try {
-        if (comment.post_id) {
-          await updateDoc(doc(db, "posts", comment.post_id), {
-            comments_count: increment(-1),
-          });
-        }
-      } catch {
-        /* non-fatal */
-      }
-
-      // Also update aggregated counter if enabled
-      if (this.enableAggregatedCounters && comment.post_id) {
-        aggregatedCounters
-          .decrementCounter(comment.post_id, "comments")
-          .catch(() => {});
-      }
+      const { error } = await this.client.from("post_comments").delete().eq("id", commentId);
+      if (error) throw error;
 
       return true;
     } catch (error) {
@@ -320,10 +283,11 @@ class CommentService {
 
   async likeComment(commentId: string): Promise<void> {
     try {
-      const commentRef = doc(db, "post_comments", commentId);
-      await updateDoc(commentRef, {
-        likes: increment(1),
+      const { error } = await this.client.rpc("increment_comment_reaction", {
+        p_comment_id: commentId,
+        p_delta: 1,
       });
+      if (error) throw error;
     } catch (error) {
       console.error("Error liking comment:", error);
       throw error;
@@ -334,33 +298,26 @@ class CommentService {
     postId: string,
     callback: (comments: CommentWithAuthor[]) => void,
   ): Unsubscribe {
-    const commentsRef = collection(db, "post_comments");
-    const q = query(
-      commentsRef,
-      where("post_id", "==", postId),
-      orderBy("created_at", "asc"),
-    );
-
-    return onSnapshot(
-      q,
-      async (querySnapshot) => {
-        const comments = querySnapshot.docs.map(
-          (docSnap) => ({ id: docSnap.id, ...docSnap.data() }) as PostComment,
-        );
-        callback(await this.attachAuthors(comments));
-      },
-      (error) => {
-        console.error("Real-time comments subscription error:", error);
-      },
-    );
+    let active = true;
+    const load = async () => {
+      const { data, error } = await this.client.from("post_comments")
+        .select("id,post_id,author_id,body,parent_id,reaction_count,created_at,updated_at")
+        .eq("post_id", postId).order("created_at", { ascending: true }).order("id", { ascending: true }).limit(200);
+      if (!active) return;
+      if (error) throw error;
+      callback(await this.attachAuthors((data ?? []).map((row) => ({ id: row.id, post_id: row.post_id, user_id: row.author_id, text: row.body, parent_id: row.parent_id, likes: row.reaction_count ?? 0, created_at: row.created_at, updated_at: row.updated_at })) as PostComment[]));
+    };
+    void load().catch((error) => console.error("Real-time comments subscription error:", error));
+    const refresh = scheduleRefresh(() => { void load().catch((error) => console.error("Real-time comments subscription error:", error)); });
+    const channel = this.client.channel(`post-comments:${postId}`).on("postgres_changes", { event: "*", schema: "public", table: "post_comments", filter: `post_id=eq.${postId}` }, refresh.schedule).subscribe();
+    return () => { active = false; refresh.cancel(); void this.client.removeChannel(channel); };
   }
 
   async getCommentsCount(postId: string): Promise<number> {
     try {
-      const commentsRef = collection(db, "post_comments");
-      const q = query(commentsRef, where("post_id", "==", postId));
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.size;
+      const { count, error } = await this.client.from("post_comments").select("id", { count: "exact", head: true }).eq("post_id", postId);
+      if (error) throw error;
+      return count ?? 0;
     } catch (error) {
       console.error("Error getting comments count:", error);
       return 0;

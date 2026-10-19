@@ -154,7 +154,7 @@ export function CommunityJoinSuccessScreen({
               Batch joined
             </div>
             <div className="community-success-panel community-success-copy mt-3 max-w-[310px] text-[15px] font-semibold leading-relaxed text-[#94a3b8]">
-              Your spot is saved. The dare starts when 3 members join, then it
+              Your spot is saved. The dare starts when 2 members join, then it
               appears in your community dare hub.
             </div>
             <button

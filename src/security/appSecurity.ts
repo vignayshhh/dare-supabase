@@ -1,6 +1,7 @@
-import { auth } from "@/backend/lib/firebase";
-import { isFirestoreOfflineError } from "@/utils/firestoreErrors";
-export { firestoreRateLimiter, RATE_LIMITS } from "./firestoreRateLimit";
+import {
+  isBackendUnavailable,
+  isExpectedAbortError,
+} from "@/utils/backendErrors";
 
 export const SECURITY_LIMITS = {
   email: 320,
@@ -26,7 +27,11 @@ export class SecurityError extends Error {
 }
 
 export function getAuthenticatedUserId(): string | null {
-  return auth.currentUser?.uid ?? null;
+  if (typeof window === "undefined") return null;
+  try {
+    const cached = localStorage.getItem("dare_auth_user_cache");
+    return cached ? String((JSON.parse(cached) as { id?: string }).id || "") || null : null;
+  } catch { return null; }
 }
 
 export function requireAuthenticatedUser(
@@ -137,9 +142,8 @@ export function validateOptionalMediaUrl(
   }
 
   const allowedHosts = [
-    "firebasestorage.googleapis.com",
+    "supabase.co",
     "storage.googleapis.com",
-    "firebasestorage.app",
   ];
 
   const hostname = parsedUrl.hostname.toLowerCase();
@@ -252,7 +256,7 @@ export function validateOptionalText(
 }
 
 export function secureLogError(message: string, error: unknown) {
-  if (isFirestoreOfflineError(error)) {
+  if (isBackendUnavailable(error) || isExpectedAbortError(error)) {
     if (process.env.NODE_ENV !== "production") {
       console.warn(message);
     }
@@ -276,7 +280,7 @@ const rateLimitBuckets = new Map<string, RateLimitBucket>();
 /**
  * Client-side rate limiting (fallback)
  * Note: This can be bypassed by clearing browser data
- * Use Firestore-based rate limiting for production security
+ * Use Postgres-based rate limiting for production security
  */
 export function enforceRateLimit(
   key: string,

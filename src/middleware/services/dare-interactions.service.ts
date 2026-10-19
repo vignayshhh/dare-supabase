@@ -1,28 +1,14 @@
 // Dare Interactions Service
 // Handles views tracking, comments CRUD, and share-to-DM functionality
-// All Firebase calls are encapsulated here per ARCHITECTURE_CONTRACT.md
+// All Supabase calls are encapsulated here per ARCHITECTURE_CONTRACT.md
 
-import { db } from "@/backend/lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  addDoc,
-  deleteDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  Unsubscribe,
-} from "firebase/firestore";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { Unsubscribe } from "@/types/realtime";
 import { messagingService } from "./messaging.service";
-import { logFirestoreError } from "@/utils/firestoreErrors";
+import { logBackendError } from "@/utils/backendErrors";
+import { scheduleRefresh } from "@/lib/realtime/scheduleRefresh";
 
-// ─── DTOs ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ DTOs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface DareView {
   id: string;
@@ -67,6 +53,7 @@ export interface DareVoteData {
   fakeCount: number;
   total: number;
   userVote: "REAL" | "FAKE" | null;
+  revision?: number;
 }
 
 export interface DareMediaLike {
@@ -76,41 +63,50 @@ export interface DareMediaLike {
   createdAt: string;
 }
 
-// ─── Service ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class DareInteractionsService {
-  // ── Views ───────────────────────────────────────────────────────────────
+  private get client() {
+    return getSupabaseBrowserClient();
+  }
 
-  /** Record that a user viewed a dare. Idempotent — only one view per user per dare. */
+  private subscribeCount(tableName: string, filterColumn: string, filterValue: string, callback: (count: number) => void): Unsubscribe {
+    let active = true;
+    const load = async () => {
+      const { count, error } = await this.client.from(tableName).select("*", { count: "exact", head: true }).eq(filterColumn, filterValue);
+      if (active && !error) callback(count ?? 0);
+    };
+    const refresh = scheduleRefresh(() => { void load(); });
+    void load();
+    const channel = this.client.channel(`dare-interactions:${tableName}:${filterValue}`).on("postgres_changes", { event: "*", schema: "public", table: tableName, filter: `${filterColumn}=eq.${filterValue}` }, refresh.schedule).subscribe();
+    return () => { active = false; refresh.cancel(); void this.client.removeChannel(channel); };
+  }
+  // â”€â”€ Views â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  /** Record that a user viewed a dare. Idempotent â€” only one view per user per dare. */
   async recordView(dareId: string, userId: string): Promise<void> {
     try {
-      // Use a deterministic doc ID so duplicate writes are no-ops
-      const viewDocId = `${dareId}_${userId}`;
-      const viewRef = doc(db, "dare_views", viewDocId);
-      const existing = await getDoc(viewRef);
-      if (existing.exists()) return; // already recorded
-
-      await setDoc(viewRef, {
+      // The relational composite key makes duplicate views no-ops.
+      const { error } = await this.client.from("dare_views").upsert({
         dare_id: dareId,
         user_id: userId,
-        created_at: serverTimestamp(),
-      });
+        created_at: new Date().toISOString(),
+      }, { onConflict: "dare_id,user_id", ignoreDuplicates: true });
+      if (error) throw error;
     } catch (error) {
-      console.error("❌ recordView:", error);
+      console.error("âŒ recordView:", error);
     }
   }
 
   /** Get the number of unique viewers for a dare. */
   async getViewCount(dareId: string): Promise<number> {
     try {
-      const q = query(
-        collection(db, "dare_views"),
-        where("dare_id", "==", dareId),
-      );
-      const snap = await getDocs(q);
-      return snap.size;
+      const { count, error } = await this.client.from("dare_views")
+        .select("*", { count: "exact", head: true }).eq("dare_id", dareId);
+      if (error) throw error;
+      return count ?? 0;
     } catch (error) {
-      console.error("❌ getViewCount:", error);
+      console.error("âŒ getViewCount:", error);
       return 0;
     }
   }
@@ -121,23 +117,12 @@ class DareInteractionsService {
     if (dareIds.length === 0) return counts;
 
     try {
-      // Firestore 'in' queries support max 30 items
-      const batches: string[][] = [];
-      for (let i = 0; i < dareIds.length; i += 30) {
-        batches.push(dareIds.slice(i, i + 30));
-      }
-
-      for (const batch of batches) {
-        const q = query(
-          collection(db, "dare_views"),
-          where("dare_id", "in", batch),
-        );
-        const snap = await getDocs(q);
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          const did = data.dare_id;
-          counts[did] = (counts[did] || 0) + 1;
-        });
+      const { data: rows, error } = await this.client.rpc("get_dare_interaction_counts", { p_dare_ids: dareIds });
+      if (!error) (rows ?? []).forEach((row) => { counts[String(row.dare_id)] = Number(row.view_count) || 0; });
+      else {
+        const fallback = await this.client.from("dare_views").select("dare_id").in("dare_id", dareIds);
+        if (fallback.error) throw fallback.error;
+        (fallback.data ?? []).forEach((row) => { counts[String(row.dare_id)] = (counts[String(row.dare_id)] || 0) + 1; });
       }
 
       // Fill in zeros for dares with no views
@@ -145,7 +130,7 @@ class DareInteractionsService {
         if (!(id in counts)) counts[id] = 0;
       }
     } catch (error) {
-      console.error("❌ getViewCounts:", error);
+      console.error("âŒ getViewCounts:", error);
     }
     return counts;
   }
@@ -155,31 +140,22 @@ class DareInteractionsService {
     dareId: string,
     callback: (count: number) => void,
   ): Unsubscribe {
-    const q = query(
-      collection(db, "dare_views"),
-      where("dare_id", "==", dareId),
-    );
-    return onSnapshot(q, (snap) => {
-      callback(snap.size);
-    });
+    return this.subscribeCount("dare_views", "dare_id", dareId, callback);
   }
 
-  // ── Comments ────────────────────────────────────────────────────────────
+  // â”€â”€ Comments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /** Like a dare media item. Idempotent: one like doc per user per dare. */
   async likeMedia(dareId: string, userId: string): Promise<void> {
     try {
-      const likeRef = doc(db, "dare_media_likes", `${dareId}_${userId}`);
-      const existing = await getDoc(likeRef);
-      if (existing.exists()) return;
-
-      await setDoc(likeRef, {
+      const { error } = await this.client.from("dare_media_likes").upsert({
         dare_id: dareId,
         user_id: userId,
-        created_at: serverTimestamp(),
-      });
+        created_at: new Date().toISOString(),
+      }, { onConflict: "dare_id,user_id", ignoreDuplicates: true });
+      if (error) throw error;
     } catch (error) {
-      console.error("❌ likeMedia:", error);
+      console.error("âŒ likeMedia:", error);
       throw error;
     }
   }
@@ -189,13 +165,7 @@ class DareInteractionsService {
     dareId: string,
     callback: (count: number) => void,
   ): Unsubscribe {
-    const q = query(
-      collection(db, "dare_media_likes"),
-      where("dare_id", "==", dareId),
-    );
-    return onSnapshot(q, (snap) => {
-      callback(snap.size);
-    });
+    return this.subscribeCount("dare_media_likes", "dare_id", dareId, callback);
   }
 
   /** Subscribe to whether the current user already liked this dare media. */
@@ -204,10 +174,10 @@ class DareInteractionsService {
     userId: string,
     callback: (liked: boolean) => void,
   ): Unsubscribe {
-    const likeRef = doc(db, "dare_media_likes", `${dareId}_${userId}`);
-    return onSnapshot(likeRef, (snap) => {
-      callback(snap.exists());
-    });
+    let active = true;
+    const load = async () => { const { data, error } = await this.client.from("dare_media_likes").select("dare_id").eq("dare_id", dareId).eq("user_id", userId).maybeSingle(); if (active && !error) callback(Boolean(data)); };
+    const refresh = scheduleRefresh(() => { void load(); });
+    void load(); const channel = this.client.channel(`dare-media-like:${dareId}:${userId}`).on("postgres_changes", { event: "*", schema: "public", table: "dare_media_likes", filter: `dare_id=eq.${dareId}` }, refresh.schedule).subscribe(); return () => { active = false; refresh.cancel(); void this.client.removeChannel(channel); };
   }
 
   /** Add a comment to a dare. */
@@ -229,16 +199,15 @@ class DareInteractionsService {
         avatar_url: avatarUrl,
         text,
         likes: 0,
-        created_at: serverTimestamp(),
+        created_at: new Date().toISOString(),
       };
       if (parentId) {
         commentData.parent_id = parentId;
       }
 
-      const commentRef = await addDoc(
-        collection(db, "dare_comments"),
-        commentData,
-      );
+      const { data: commentRef, error } = await this.client.from("dare_comments")
+        .insert(commentData).select("id").single();
+      if (error) throw error;
 
       return {
         id: commentRef.id,
@@ -253,7 +222,7 @@ class DareInteractionsService {
         createdAt: new Date().toISOString(),
       };
     } catch (error) {
-      console.error("❌ addComment:", error);
+      console.error("âŒ addComment:", error);
       throw error;
     }
   }
@@ -261,25 +230,28 @@ class DareInteractionsService {
   /** Delete a comment (only by author). */
   async deleteComment(commentId: string): Promise<void> {
     try {
-      await deleteDoc(doc(db, "dare_comments", commentId));
+      const { error } = await this.client.from("dare_comments").delete().eq("id", commentId);
+      if (error) throw error;
     } catch (error) {
-      console.error("❌ deleteComment:", error);
+      console.error("âŒ deleteComment:", error);
       throw error;
     }
   }
 
-  /** Get all comments for a dare. */
+  /** Bounded page contract; callers needing the complete legacy list use getComments(), which drains pages. */
+  async getCommentsPage(dareId: string, page = 0, pageSize = 100): Promise<{ comments: DareComment[]; hasMore: boolean }> {
+    const safePage = Math.max(0, Math.floor(page)); const safeSize = Math.min(100, Math.max(1, Math.floor(pageSize)));
+    const { data: rows, error } = await this.client.from("dare_comments").select("id,dare_id,user_id,username,display_name,avatar_url,text,likes,parent_id,created_at").eq("dare_id", dareId).order("created_at", { ascending: true }).order("id", { ascending: true }).range(safePage * safeSize, (safePage + 1) * safeSize - 1);
+    if (error) throw error;
+    return { comments: (rows ?? []).map((row) => this.mapComment(row.id, row)), hasMore: (rows ?? []).length === safeSize };
+  }
+
+  /** Get all comments for a dare through bounded pages. */
   async getComments(dareId: string): Promise<DareComment[]> {
     try {
-      const q = query(
-        collection(db, "dare_comments"),
-        where("dare_id", "==", dareId),
-        orderBy("created_at", "asc"),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => this.mapComment(d.id, d.data()));
+      const comments: DareComment[] = []; for (let page = 0;; page += 1) { const result = await this.getCommentsPage(dareId, page); comments.push(...result.comments); if (!result.hasMore) return comments; }
     } catch (error) {
-      console.error("❌ getComments:", error);
+      console.error("âŒ getComments:", error);
       return [];
     }
   }
@@ -287,14 +259,12 @@ class DareInteractionsService {
   /** Get comment count for a dare. */
   async getCommentCount(dareId: string): Promise<number> {
     try {
-      const q = query(
-        collection(db, "dare_comments"),
-        where("dare_id", "==", dareId),
-      );
-      const snap = await getDocs(q);
-      return snap.size;
+      const { count, error } = await this.client.from("dare_comments")
+        .select("id", { count: "exact", head: true }).eq("dare_id", dareId);
+      if (error) throw error;
+      return count ?? 0;
     } catch (error) {
-      console.error("❌ getCommentCount:", error);
+      console.error("âŒ getCommentCount:", error);
       return 0;
     }
   }
@@ -305,29 +275,19 @@ class DareInteractionsService {
     if (dareIds.length === 0) return counts;
 
     try {
-      const batches: string[][] = [];
-      for (let i = 0; i < dareIds.length; i += 30) {
-        batches.push(dareIds.slice(i, i + 30));
-      }
-
-      for (const batch of batches) {
-        const q = query(
-          collection(db, "dare_comments"),
-          where("dare_id", "in", batch),
-        );
-        const snap = await getDocs(q);
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          const did = data.dare_id;
-          counts[did] = (counts[did] || 0) + 1;
-        });
+      const { data: rows, error } = await this.client.rpc("get_dare_interaction_counts", { p_dare_ids: dareIds });
+      if (!error) (rows ?? []).forEach((row) => { counts[String(row.dare_id)] = Number(row.comment_count) || 0; });
+      else {
+        const fallback = await this.client.from("dare_comments").select("dare_id").in("dare_id", dareIds);
+        if (fallback.error) throw fallback.error;
+        (fallback.data ?? []).forEach((row) => { counts[String(row.dare_id)] = (counts[String(row.dare_id)] || 0) + 1; });
       }
 
       for (const id of dareIds) {
         if (!(id in counts)) counts[id] = 0;
       }
     } catch (error) {
-      console.error("❌ getCommentCounts:", error);
+      console.error("âŒ getCommentCounts:", error);
     }
     return counts;
   }
@@ -337,15 +297,7 @@ class DareInteractionsService {
     dareId: string,
     callback: (comments: DareComment[]) => void,
   ): Unsubscribe {
-    const q = query(
-      collection(db, "dare_comments"),
-      where("dare_id", "==", dareId),
-      orderBy("created_at", "asc"),
-    );
-    return onSnapshot(q, (snap) => {
-      const comments = snap.docs.map((d) => this.mapComment(d.id, d.data()));
-      callback(comments);
-    });
+    let active = true; const load = async () => { const { data, error } = await this.client.from("dare_comments").select("id,dare_id,user_id,username,display_name,avatar_url,text,likes,parent_id,created_at").eq("dare_id", dareId).order("created_at", { ascending: true }).order("id", { ascending: true }).limit(100); if (active && !error) callback((data ?? []).map((row) => this.mapComment(row.id, row))); }; const refresh = scheduleRefresh(() => void load()); void load(); const channel = this.client.channel(`dare-comments:${dareId}`).on("postgres_changes", { event: "*", schema: "public", table: "dare_comments", filter: `dare_id=eq.${dareId}` }, () => { refresh.schedule(); }).subscribe(); return () => { active = false; refresh.cancel(); void this.client.removeChannel(channel); };
   }
 
   /** Subscribe to real-time comment count for a dare. */
@@ -353,29 +305,20 @@ class DareInteractionsService {
     dareId: string,
     callback: (count: number) => void,
   ): Unsubscribe {
-    const q = query(
-      collection(db, "dare_comments"),
-      where("dare_id", "==", dareId),
-    );
-    return onSnapshot(q, (snap) => {
-      callback(snap.size);
-    });
+    return this.subscribeCount("dare_comments", "dare_id", dareId, callback);
   }
 
   /** Like a comment. Idempotent: one like doc per user per comment. */
   async likeComment(commentId: string, userId: string): Promise<void> {
     try {
-      const likeRef = doc(db, "dare_comment_likes", `${commentId}_${userId}`);
-      const existing = await getDoc(likeRef);
-      if (existing.exists()) return;
-
-      await setDoc(likeRef, {
+      const { error } = await this.client.from("dare_comment_likes").upsert({
         comment_id: commentId,
         user_id: userId,
-        created_at: serverTimestamp(),
-      });
+        created_at: new Date().toISOString(),
+      }, { onConflict: "comment_id,user_id", ignoreDuplicates: true });
+      if (error) throw error;
     } catch (error) {
-      console.error("❌ likeComment:", error);
+      console.error("âŒ likeComment:", error);
       throw error;
     }
   }
@@ -385,13 +328,7 @@ class DareInteractionsService {
     commentId: string,
     callback: (count: number) => void,
   ): Unsubscribe {
-    const q = query(
-      collection(db, "dare_comment_likes"),
-      where("comment_id", "==", commentId),
-    );
-    return onSnapshot(q, (snap) => {
-      callback(snap.size);
-    });
+    return this.subscribeCount("dare_comment_likes", "comment_id", commentId, callback);
   }
 
   /** Subscribe to whether the current user already liked this comment. */
@@ -400,13 +337,10 @@ class DareInteractionsService {
     userId: string,
     callback: (liked: boolean) => void,
   ): Unsubscribe {
-    const likeRef = doc(db, "dare_comment_likes", `${commentId}_${userId}`);
-    return onSnapshot(likeRef, (snap) => {
-      callback(snap.exists());
-    });
+    let active = true; const load = async () => { const { data, error } = await this.client.from("dare_comment_likes").select("comment_id").eq("comment_id", commentId).eq("user_id", userId).maybeSingle(); if (active && !error) callback(Boolean(data)); }; const refresh = scheduleRefresh(() => { void load(); }); void load(); const channel = this.client.channel(`dare-comment-like:${commentId}:${userId}`).on("postgres_changes", { event: "*", schema: "public", table: "dare_comment_likes", filter: `comment_id=eq.${commentId}` }, refresh.schedule).subscribe(); return () => { active = false; refresh.cancel(); void this.client.removeChannel(channel); };
   }
 
-  // ── Share to DM ─────────────────────────────────────────────────────────
+  // â”€â”€ Share to DM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /** Send a dare to a friend via DM. Creates or gets conversation, then sends a message. */
   async shareDareToDM(
@@ -434,14 +368,14 @@ class DareInteractionsService {
 
       return true;
     } catch (error) {
-      console.error("❌ shareDareToDM:", error);
+      console.error("âŒ shareDareToDM:", error);
       return false;
     }
   }
 
-  // ── Votes (Real / Fake) ─────────────────────────────────────────────────
+  // â”€â”€ Votes (Real / Fake) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  /** Record a user's vote on a dare. Idempotent — updates if already voted. */
+  /** Record a user's vote on a dare. Idempotent â€” updates if already voted. */
   async recordVote(
     dareId: string,
     voterId: string,
@@ -449,28 +383,15 @@ class DareInteractionsService {
   ): Promise<void> {
     try {
       // Check for existing vote
-      const q = query(
-        collection(db, "dare_votes"),
-        where("dare_id", "==", dareId),
-        where("voter_id", "==", voterId),
-      );
-      const existing = await getDocs(q);
-
-      if (!existing.empty) {
-        // Update existing vote
-        const existingDoc = existing.docs[0];
-        await updateDoc(existingDoc.ref, { vote });
-      } else {
-        // Create new vote
-        await addDoc(collection(db, "dare_votes"), {
-          dare_id: dareId,
-          voter_id: voterId,
-          vote,
-          created_at: serverTimestamp(),
-        });
-      }
+      const { error } = await this.client.from("dare_votes").upsert({
+        dare_id: dareId,
+        voter_id: voterId,
+        vote: vote === "REAL" ? "APPROVE" : "REJECT",
+        created_at: new Date().toISOString(),
+      }, { onConflict: "dare_id,voter_id" });
+      if (error) throw error;
     } catch (error) {
-      console.error("❌ recordVote:", error);
+      console.error("âŒ recordVote:", error);
       throw error;
     }
   }
@@ -481,39 +402,22 @@ class DareInteractionsService {
     currentUserId: string,
     callback: (data: DareVoteData) => void,
   ): Unsubscribe {
-    const q = query(
-      collection(db, "dare_votes"),
-      where("dare_id", "==", dareId),
-      orderBy("created_at", "desc"),
-    );
-
-    return onSnapshot(q, async (snap) => {
+    let active = true;
+    const load = async () => {
+      const { data, error } = await this.client.rpc("get_dare_vote_snapshot", { p_dare_id: dareId });
+      if (!active || error || !data || typeof data !== "object") return;
+      const snapshot = data as { voters?: any[]; realCount?: number; fakeCount?: number; total?: number; userVote?: "REAL" | "FAKE" | null; revision?: number };
       const realVoters: DareVoter[] = [];
       const fakeVoters: DareVoter[] = [];
-      let userVote: "REAL" | "FAKE" | null = null;
+      const voters = Array.isArray(snapshot.voters) ? snapshot.voters : [];
+      const profileMap = await this.getUserProfiles(voters.map((row) => String(row.voter_id || "")));
 
-      // Collect voter IDs for batch profile fetch
-      const voterEntries: { docId: string; data: any }[] = [];
-      snap.forEach((d) => {
-        voterEntries.push({ docId: d.id, data: d.data() });
-      });
-
-      // Fetch all voter profiles
-      const profilePromises = voterEntries.map((entry) =>
-        this.getUserProfile(entry.data.voter_id),
-      );
-      const profiles = await Promise.all(profilePromises);
-
-      for (let i = 0; i < voterEntries.length; i++) {
-        const entry = voterEntries[i];
-        const profile = profiles[i];
-        const voter = this.mapVoter(entry.docId, entry.data, profile);
-
-        if (entry.data.voter_id === currentUserId) {
-          userVote = entry.data.vote;
-        }
-
-        if (entry.data.vote === "REAL") {
+      for (const row of voters) {
+        const profile = profileMap.get(String(row.voter_id)) ?? row;
+        const voter = this.mapVoter(String(row.id || `${row.dare_id}_${row.voter_id}`), row, profile);
+        const normalizedVote = row.vote === "REAL" || row.vote === "APPROVE" ? "REAL" : "FAKE";
+        voter.vote = normalizedVote;
+        if (normalizedVote === "REAL") {
           realVoters.push(voter);
         } else {
           fakeVoters.push(voter);
@@ -523,17 +427,22 @@ class DareInteractionsService {
       callback({
         realVoters,
         fakeVoters,
-        realCount: realVoters.length,
-        fakeCount: fakeVoters.length,
-        total: realVoters.length + fakeVoters.length,
-        userVote,
+        realCount: Number(snapshot.realCount ?? realVoters.length),
+        fakeCount: Number(snapshot.fakeCount ?? fakeVoters.length),
+        total: Number(snapshot.total ?? (snapshot.realCount ?? realVoters.length) + (snapshot.fakeCount ?? fakeVoters.length)),
+        userVote: snapshot.userVote ?? null,
+        revision: Number(snapshot.revision ?? 0),
       });
-    });
+    };
+    const refresh = scheduleRefresh(() => { void load(); });
+    void load();
+    const channel = this.client.channel(`dare-votes:${dareId}`).on("postgres_changes", { event: "*", schema: "public", table: "dare_votes", filter: `dare_id=eq.${dareId}` }, refresh.schedule).subscribe();
+    return () => { active = false; refresh.cancel(); void this.client.removeChannel(channel); };
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
+  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  /** Fetch a user profile from Firestore. Cached in-memory for 5 minutes. */
+  /** Fetch a user profile from Postgres. Cached in-memory for 5 minutes. */
   private profileCache = new Map<string, { data: any; ts: number }>();
 
   private async getUserProfile(userId: string): Promise<any> {
@@ -542,18 +451,33 @@ class DareInteractionsService {
       return cached.data;
     }
     try {
-      const userDoc = await getDoc(doc(db, "users", userId));
-      const data = userDoc.exists()
-        ? { id: userDoc.id, ...userDoc.data() }
-        : null;
+      const { data, error } = await this.client.from("profiles")
+        .select("id,username,display_name,avatar_url").eq("id", userId).maybeSingle();
+      if (error) throw error;
       if (data) {
         this.profileCache.set(userId, { data, ts: Date.now() });
       }
       return data;
     } catch (error) {
-      logFirestoreError("getUserProfile failed:", error);
+      logBackendError("getUserProfile failed:", error);
       return null;
     }
+  }
+
+  private async getUserProfiles(userIds: string[]): Promise<Map<string, any>> {
+    const unique = [...new Set(userIds.filter(Boolean))];
+    const result = new Map<string, any>();
+    const missing: string[] = [];
+    unique.forEach((id) => { const cached = this.profileCache.get(id); if (cached && Date.now() - cached.ts < 5 * 60 * 1000) result.set(id, cached.data); else missing.push(id); });
+    for (let i = 0; i < missing.length; i += 100) {
+      const batch = missing.slice(i, i + 100);
+      try {
+        const { data, error } = await this.client.from("profiles").select("id,username,display_name,avatar_url").in("id", batch);
+        if (error) throw error;
+        (data ?? []).forEach((profile: any) => { result.set(profile.id, profile); this.profileCache.set(profile.id, { data: profile, ts: Date.now() }); });
+      } catch (error) { logBackendError("getUserProfiles failed:", error); }
+    }
+    return result;
   }
 
   private mapVoter(docId: string, data: any, profile: any): DareVoter {

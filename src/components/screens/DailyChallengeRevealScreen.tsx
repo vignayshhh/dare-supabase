@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -9,8 +9,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { db } from "@/backend/lib/firebase";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   alertService,
 } from "@/middleware/services/service-factory";
@@ -144,13 +143,9 @@ export function DailyChallengeRevealScreen({
       );
 
       if (challenge.persisted !== false) {
-        await updateDoc(doc(db, "dailyChallenges", challenge.id), {
-          status: "accepted",
-          question: questionToSend,
-          conversationId: conversation.id,
-          acceptedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }).catch((updateError) => {
+        await getSupabaseBrowserClient().from("daily_challenge_matches").update({
+          status: "accepted", question: questionToSend, conversation_id: conversation.id, accepted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }).eq("id", challenge.id).then(({ error: updateError }) => { if (updateError) throw updateError; }).catch((updateError) => {
           if (!isPermissionError(updateError)) {
             throw updateError;
           }
@@ -193,11 +188,9 @@ export function DailyChallengeRevealScreen({
       const rejectionMessage = `${actorName} rejected their daily challenge with you`;
 
       if (challenge.persisted !== false) {
-        await updateDoc(doc(db, "dailyChallenges", challenge.id), {
-          status: "rejected",
-          rejectedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }).catch((updateError) => {
+        await getSupabaseBrowserClient().from("daily_challenge_matches").update({
+          status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }).eq("id", challenge.id).then(({ error: updateError }) => { if (updateError) throw updateError; }).catch((updateError) => {
           if (!isPermissionError(updateError)) {
             throw updateError;
           }
@@ -206,28 +199,6 @@ export function DailyChallengeRevealScreen({
             updateError,
           );
         });
-      }
-
-      const alertResponse = await alertService.createAlert({
-        userId: matchedFriend.id,
-        type: "SUS_CLOSE_FRIEND_ACTIVITY",
-        entityId: challenge.id,
-        actorId: user.id,
-        message: rejectionMessage,
-        actorName,
-        actorUsername,
-        actorAvatar: user.avatar || "",
-        metadata: {
-          challengeType: "daily_friend_match",
-          susActivityType: "daily_challenge_rejected",
-          localDate: challenge.localDate,
-          matchedFriendId: matchedFriend.id,
-          matchedFriendUsername: matchedFriend.username,
-        },
-      });
-
-      if (!alertResponse.success) {
-        throw new Error(alertResponse.error || "Daily challenge alert failed");
       }
 
       setChallenge({ ...challenge, status: "rejected" });
@@ -247,7 +218,7 @@ export function DailyChallengeRevealScreen({
             radial-gradient(circle at 50% -12%, rgba(74,222,128,0.18), transparent 34%),
             radial-gradient(circle at 12% 18%, rgba(14,165,233,0.12), transparent 28%),
             linear-gradient(180deg, #060806 0%, #0a0f0a 48%, #030403 100%);
-          font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+          font-family: var(--font-ui);
         }
         @keyframes revealFadeUp {
           from { opacity: 0; transform: translateY(18px) scale(0.98); filter: blur(8px); }

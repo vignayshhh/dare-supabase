@@ -12,7 +12,7 @@
  * sensitive endpoints (signup, post create, report, message).
  */
 import "server-only";
-import { redis } from "./redis";
+import { redis, requireRedisAvailable } from "./redis";
 
 const STRICT = process.env.BOT_CHECK_STRICT === "true";
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET_KEY;
@@ -50,10 +50,19 @@ export async function cheapBotCheck(req: Request, ip: string | null): Promise<Bo
     return { ok: false, reason: "missing accept-language" };
   }
   // Per-IP burst: > 30 distinct state-changing requests in 5s is scripted.
-  if (ip) {
+  // Do not spend Redis commands on normal feed/profile GETs; those are already
+  // protected by endpoint rate limits.
+  const isStateChanging =
+    req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS";
+  if (ip && isStateChanging) {
+    requireRedisAvailable("bot burst detection");
     const key = `bot:burst:${ip}`;
-    const n = await redis.incr(key);
-    if (n === 1) await redis.pexpire(key, 5_000);
+    const { value: n } = await redis.incrementWithExpiry(
+      key,
+      1,
+      5_000,
+      false,
+    );
     if (n > 30) return { ok: false, reason: "burst" };
   }
   return { ok: true };

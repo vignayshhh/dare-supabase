@@ -19,11 +19,6 @@ updates:
       prefix: "deps"
       prefix-development: "deps(dev)"
     groups:
-      # Group Firebase updates together
-      firebase-dependencies:
-        patterns:
-          - "firebase*"
-          - "@firebase/*"
       # Group React updates together
       react-dependencies:
         patterns:

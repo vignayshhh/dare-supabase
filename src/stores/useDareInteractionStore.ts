@@ -1,6 +1,6 @@
-// Dare Interaction Store
+﻿// Dare Interaction Store
 // Manages real-time view counts, comment counts, and comments for dare cards
-// UI components interact with this store only — never directly with Firebase
+// UI components interact with this store only â€” never directly with Supabase
 
 import { create } from "zustand";
 import { authService } from "@/middleware/services/auth-v2.service";
@@ -9,7 +9,7 @@ import {
   type DareComment,
   type DareVoteData,
 } from "@/middleware/services/dare-interactions.service";
-import { Unsubscribe } from "firebase/firestore";
+import type { Unsubscribe } from "@/types/realtime";
 import { votePersistence, type DareVote } from "@/utils/votePersistence";
 import { commentLikePersistence } from "@/utils/commentLikePersistence";
 
@@ -346,7 +346,7 @@ export const useDareInteractionStore = create<DareInteractionState>(
       try {
         await dareInteractionsService.recordVote(dareId, voterId, vote);
       } catch (error) {
-        console.error("❌ recordVote error:", error);
+        console.error("âŒ recordVote error:", error);
       }
     },
 
@@ -404,6 +404,16 @@ export const useDareInteractionStore = create<DareInteractionState>(
         );
 
         if (comment) {
+          set((state) => {
+            const existing = state.comments[dareId] || [];
+            const next = existing.some((item) => item.id === comment.id)
+              ? existing
+              : [...existing, comment];
+            return {
+              comments: { ...state.comments, [dareId]: next },
+              commentCounts: { ...state.commentCounts, [dareId]: next.length },
+            };
+          });
           try {
             const comments = get().comments[dareId] || [];
             const parentComment = parentId
@@ -476,7 +486,7 @@ export const useDareInteractionStore = create<DareInteractionState>(
 
         return comment;
       } catch (error) {
-        console.error("❌ addComment error:", error);
+        console.error("âŒ addComment error:", error);
         return null;
       }
     },
@@ -499,7 +509,7 @@ export const useDareInteractionStore = create<DareInteractionState>(
       try {
         await dareInteractionsService.likeComment(commentId, userId);
       } catch (error) {
-        console.error("❌ likeComment error:", error);
+        console.error("âŒ likeComment error:", error);
         set((state) => ({
           commentLikedByUser: {
             ...state.commentLikedByUser,
@@ -602,7 +612,7 @@ export const useDareInteractionStore = create<DareInteractionState>(
       try {
         await dareInteractionsService.likeMedia(dareId, userId);
       } catch (error) {
-        console.error("❌ likeMedia error:", error);
+        console.error("âŒ likeMedia error:", error);
         set((state) => ({
           mediaLikedByUser: {
             ...state.mediaLikedByUser,
