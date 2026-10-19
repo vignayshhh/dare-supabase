@@ -32,7 +32,7 @@
     "security:audit:production": "npm audit --production"
   },
   "dependencies": {
-    "@capacitor/android": "^6.2.1",
+    "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^6.2.1",
     "@capacitor/ios": "^6.2.1",
     "@supabase/ssr": "^0.12.7",
