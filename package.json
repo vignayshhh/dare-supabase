@@ -36,7 +36,7 @@
     "@capacitor/core": "^6.2.1",
     "@capacitor/ios": "^6.2.1",
     "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.117.3",
+    "@supabase/supabase-js": "^2.118.0",
     "@types/dompurify": "^3.0.5",
     "dompurify": "^3.4.1",
     "lucide-react": "^0.575.0",
